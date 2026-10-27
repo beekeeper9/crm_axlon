@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
     agentFeedback: true,
   },
   cacheComponents: true,
+  async redirects() {
+    // Корень приложения — главная страница CRM
+    return [{ source: "/", destination: "/dashboard", permanent: false }];
+  },
   partialPrefetching: true,
   turbopack: {
     rules: {
