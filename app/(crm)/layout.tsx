@@ -1,21 +1,17 @@
-import { AppHeader } from "@/components/layout/app-header"
-import { AppSidebar } from "@/components/layout/app-sidebar"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { isMockDataSource } from "@/config/env"
-import { getCurrentUser } from "@/lib/session/current-user"
+import { Suspense } from "react"
 
-export default async function CrmLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser()
+import { AppHeader, AppHeaderSkeleton } from "@/components/layout/app-header"
 
+export default function CrmLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-      <AppSidebar user={user} />
-      <SidebarInset>
-        <AppHeader isDemoData={isMockDataSource} />
-        <div className="flex-1 px-4 py-6 md:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex min-h-svh flex-col">
+      {/* Пользователь определяется на каждый запрос, поэтому шапка подгружается отдельно */}
+      <Suspense fallback={<AppHeaderSkeleton />}>
+        <AppHeader />
+      </Suspense>
+      <main className="flex-1 px-4 py-6 md:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
+      </main>
+    </div>
   )
 }

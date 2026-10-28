@@ -2,7 +2,7 @@ import type { WorkspaceLayout } from "@/features/workspace/schemas"
 import type { Role } from "@/lib/permissions/roles"
 
 /**
- * Шаблоны главной страницы по умолчанию (уровень платформы).
+ * Шаблоны «Мой день» по умолчанию (уровень платформы).
  * Позже РОП сможет менять раскладку для отдела, а эти шаблоны останутся отправной точкой.
  */
 const managementLayout: WorkspaceLayout = {
@@ -22,10 +22,13 @@ const managerLayout: WorkspaceLayout = {
   id: "default-manager",
   name: "Менеджер",
   widgets: [
-    { id: "kpis", type: "sales-kpis", size: "full" },
-    { id: "tasks", type: "tasks-today", size: "third" },
-    { id: "plan", type: "plan-trend", size: "two-thirds" },
-    { id: "funnel", type: "sales-funnel", size: "full" },
+    { id: "now", type: "now-strip", size: "full" },
+    { id: "turnover", type: "personal-turnover", size: "two-thirds" },
+    { id: "earnings", type: "earnings", size: "third" },
+    { id: "kpis", type: "personal-kpis", size: "full" },
+    { id: "month", type: "meetings-funnel", size: "half" },
+    { id: "daily", type: "daily-dynamics", size: "half" },
+    { id: "segments", type: "sales-segments", size: "full" },
   ],
 }
 

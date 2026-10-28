@@ -4,6 +4,10 @@ const { locale, currencyLabel, timeZone } = localeConfig
 
 const numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
 const decimalFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
+const signedIntegerFormat = new Intl.NumberFormat(locale, {
+  maximumFractionDigits: 0,
+  signDisplay: "exceptZero",
+})
 const compactFormat = new Intl.NumberFormat(locale, {
   notation: "compact",
   maximumFractionDigits: 1,
@@ -44,6 +48,11 @@ export function formatInitials(fullName: string): string {
 
 export function formatNumber(value: number): string {
   return numberFormat.format(value)
+}
+
+/** «+340 000» / «−12 000» */
+export function formatSignedNumber(value: number): string {
+  return signedIntegerFormat.format(value)
 }
 
 /** 7,4 — один знак после запятой */

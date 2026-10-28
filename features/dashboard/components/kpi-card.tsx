@@ -1,3 +1,5 @@
+import { cn } from "cn"
+
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -5,18 +7,20 @@ type KpiCardProps = {
   label: string
   value: string
   trend?: React.ReactNode
+  /** Цвет значения, когда оно само несёт статус (например, ниже порога) */
+  valueClassName?: string
   /** Пояснение или дополнительная шкала под значением */
   children?: React.ReactNode
 }
 
-export function KpiCard({ label, value, trend, children }: KpiCardProps) {
+export function KpiCard({ label, value, trend, valueClassName, children }: KpiCardProps) {
   return (
     <Card className="gap-3 px-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">{label}</p>
         {trend}
       </div>
-      <p className="text-2xl font-semibold tracking-tight">{value}</p>
+      <p className={cn("text-2xl font-semibold tracking-tight", valueClassName)}>{value}</p>
       {children && <div className="text-xs text-muted-foreground">{children}</div>}
     </Card>
   )

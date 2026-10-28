@@ -13,6 +13,14 @@ export const widgetTypeSchema = z.enum([
   "team-performance",
   "tasks-today",
   "sales-funnel",
+  // «Мой день» менеджера
+  "now-strip",
+  "personal-turnover",
+  "earnings",
+  "personal-kpis",
+  "meetings-funnel",
+  "daily-dynamics",
+  "sales-segments",
 ])
 
 /** Ширина виджета на большом экране; на узких экранах все виджеты во всю ширину */

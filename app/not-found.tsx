@@ -13,8 +13,8 @@ export default function NotFound() {
         title="Страница не найдена"
         description="Возможно, ссылка устарела или страница была перемещена."
         action={
-          <Link href={routes.dashboard} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            На главную
+          <Link href={routes.myDay} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            В «Мой день»
           </Link>
         }
       />

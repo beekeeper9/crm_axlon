@@ -24,10 +24,14 @@ export function paceStatus(
   plan: number,
   period: ReportingPeriod
 ): PaceStatus {
-  const expected = expectedProgress(period)
-  if (plan === 0 || expected === 0) return "on_track"
+  if (plan === 0) return "on_track"
+  return paceStatusByRatio(actual / plan, expectedProgress(period))
+}
 
-  const paceRatio = actual / plan / expected
+/** Статус по выполненной и ожидаемой доле плана — когда ожидаемую долю считает backend. */
+export function paceStatusByRatio(actualRatio: number, expectedRatio: number): PaceStatus {
+  if (expectedRatio === 0) return "on_track"
+  const paceRatio = actualRatio / expectedRatio
   if (paceRatio >= ON_TRACK_TOLERANCE) return "on_track"
   if (paceRatio >= AT_RISK_THRESHOLD) return "at_risk"
   return "behind"
