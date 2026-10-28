@@ -37,4 +37,5 @@ export const defaultDashboardLayouts: Record<Role, WorkspaceLayout> = {
   director: managementLayout,
   head_of_sales: managementLayout,
   manager: managerLayout,
+  viewer: managementLayout,
 }

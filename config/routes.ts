@@ -14,6 +14,8 @@ export const routes = {
   materials: "/materials",
   assistant: "/assistant",
   workspace: "/workspace",
+  login: "/login",
+  selectCompany: "/select-company",
 } as const
 
 export type AppRoute = (typeof routes)[keyof typeof routes]

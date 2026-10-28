@@ -15,4 +15,5 @@ export const demoUsers: Record<Role, CurrentUser> = {
   director: { id: "u-director", fullName: "Эрмек Жумабаев", role: "director", ...company },
   head_of_sales: { id: "u-rop", fullName: "Алина Ким", role: "head_of_sales", ...company },
   manager: { id: "m-1", fullName: "Айбек Садыков", role: "manager", ...company },
+  viewer: { id: "u-viewer", fullName: "Света Пак", role: "viewer", ...company },
 }

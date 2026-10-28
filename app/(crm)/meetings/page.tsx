@@ -1,20 +1,27 @@
+import { Suspense } from "react"
 import type { Metadata } from "next"
 
-import { UpcomingSection } from "@/components/shared/upcoming-section"
-import { routes } from "@/config/routes"
+import { PageHeader } from "@/components/shared/page-header"
+import { leadsRepository } from "@/features/leads"
+import { MeetingsView, MeetingsViewSkeleton } from "@/features/meetings"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "Встречи" }
 
-export default function MeetingsPage() {
+type MeetingsPageProps = PageProps<"/meetings">
+
+async function MeetingsContent({ searchParams }: Pick<MeetingsPageProps, "searchParams">) {
+  const [user, params, leadOptions] = await Promise.all([getCurrentUser(), searchParams, leadsRepository.listOptions()])
+  return <MeetingsView user={user} params={params} leadOptions={leadOptions} />
+}
+
+export default function MeetingsPage({ searchParams }: MeetingsPageProps) {
   return (
-    <UpcomingSection
-      href={routes.meetings}
-      description="Встречи с клиентами по дням"
-      plannedFeatures={[
-        "Встречи за вчера, сегодня, завтра, неделю и выбранный период",
-        "Статус встречи, ответственный, напоминания и примечания",
-        "Фильтр «Проводит» и «Назначил(а)»",
-      ]}
-    />
+    <div className="mx-auto max-w-5xl space-y-5">
+      <PageHeader title="Встречи" description="Расписание встреч с клиентами, подтверждения и итоги" />
+      <Suspense fallback={<MeetingsViewSkeleton />}>
+        <MeetingsContent searchParams={searchParams} />
+      </Suspense>
+    </div>
   )
 }

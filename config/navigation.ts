@@ -41,7 +41,7 @@ const item = {
   tasks: { title: "Задачи", href: routes.tasks, icon: ListChecks },
   calls: { title: "Звонки", href: routes.calls, icon: Phone },
   dailyReports: { title: "Отчёты дня", href: routes.dailyReports, icon: FileBarChart },
-  review: { title: "Разбор", href: routes.review, icon: MessageSquareWarning },
+  review: { title: "Работа над ошибками", href: routes.review, icon: MessageSquareWarning },
   leads: { title: "Список", href: routes.leads, icon: ClipboardList },
   clientBase: { title: "База клиентов", href: routes.clientBase, icon: Database },
   materials: { title: "Материалы", href: routes.materials, icon: BookOpen },

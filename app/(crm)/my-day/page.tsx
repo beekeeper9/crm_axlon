@@ -29,11 +29,9 @@ async function MyDayContent() {
     <>
       <PageHeader
         title={TITLE}
-        description={
-          isTeamView
-            ? `${user.fullName} · ${user.departmentName}, текущий месяц`
-            : `${user.fullName} · текущий месяц`
-        }
+        description={[user.fullName, isTeamView ? user.departmentName : null, "текущий месяц"]
+          .filter(Boolean)
+          .join(" · ")}
         actions={
           !isTeamView && (
             // «В работу» ведёт к приоритетным лидам — с них начинается день менеджера

@@ -63,13 +63,13 @@ export async function TasksTodayWidget() {
             return (
               <li key={task.id} className="flex gap-3 py-2.5">
                 <time
-                  dateTime={task.dueAt}
+                  dateTime={task.dueAt ?? undefined}
                   className={cn(
                     "w-10 shrink-0 pt-px text-xs font-medium",
                     task.isOverdue && !isDone ? "text-destructive" : "text-muted-foreground"
                   )}
                 >
-                  {formatTime(task.dueAt)}
+                  {task.dueAt ? formatTime(task.dueAt) : "—"}
                 </time>
                 <Icon
                   className={cn(
@@ -87,9 +87,9 @@ export async function TasksTodayWidget() {
                   >
                     {task.title}
                   </p>
-                  {(task.relatedTo || (task.isOverdue && !isDone)) && (
+                  {(task.lead || (task.isOverdue && !isDone)) && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      {task.relatedTo && <span className="truncate">{task.relatedTo.name}</span>}
+                      {task.lead && <span className="truncate">{task.lead.name}</span>}
                       {task.isOverdue && !isDone && (
                         <span className="font-medium text-destructive">Просрочена</span>
                       )}

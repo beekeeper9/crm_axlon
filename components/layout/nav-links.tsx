@@ -27,10 +27,12 @@ export function PrimaryNav({ role }: { role: Role }) {
             key={navItem.href}
             href={navItem.href}
             aria-current={isActive ? "page" : undefined}
+            title={navItem.title}
             className={cn(LINK_CLASSES, isActive && "bg-accent text-foreground")}
           >
             <navItem.icon className="size-4" aria-hidden />
-            {navItem.title}
+            {/* На ноутбуках 1024–1279 px — только иконки, чтобы панель помещалась */}
+            <span className="max-xl:sr-only">{navItem.title}</span>
           </Link>
         )
       })}

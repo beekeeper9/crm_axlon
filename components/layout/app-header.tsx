@@ -44,7 +44,7 @@ export async function AppHeader() {
       <div className="ml-auto flex items-center gap-2">
         {isMockDataSource && (
           <span
-            className="hidden h-6 items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 text-xs font-medium text-warning sm:inline-flex"
+            className="hidden h-6 items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 text-xs font-medium whitespace-nowrap text-warning sm:inline-flex"
             title="Интерфейс работает на демонстрационных данных. Backend ещё не подключён."
           >
             <FlaskConical className="size-3.5" aria-hidden />

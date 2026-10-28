@@ -11,6 +11,7 @@ export const ROLES = [
   "director",
   "head_of_sales",
   "manager",
+  "viewer",
 ] as const
 
 export type Role = (typeof ROLES)[number]
@@ -20,6 +21,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   director: "Директор",
   head_of_sales: "Руководитель отдела продаж",
   manager: "Менеджер",
+  viewer: "Наблюдатель",
 }
 
 export type Permission =
@@ -29,12 +31,26 @@ export type Permission =
   | "analytics.view"
   /** Настраивать рабочие пространства отдела */
   | "workspace.configure"
+  /** Менять сделки, задачи и встречи (этап, итог, создание) */
+  | "records.edit"
+  /** Ставить задачи и встречи другим сотрудникам */
+  | "records.assign"
+
+const MANAGEMENT: readonly Permission[] = [
+  "team.view",
+  "analytics.view",
+  "workspace.configure",
+  "records.edit",
+  "records.assign",
+]
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  platform_admin: ["team.view", "analytics.view", "workspace.configure"],
-  director: ["team.view", "analytics.view", "workspace.configure"],
-  head_of_sales: ["team.view", "analytics.view", "workspace.configure"],
-  manager: [],
+  platform_admin: MANAGEMENT,
+  director: MANAGEMENT,
+  head_of_sales: MANAGEMENT,
+  manager: ["records.edit"],
+  /** Только просмотр показателей команды (роль backend `viewer`) */
+  viewer: ["team.view", "analytics.view"],
 }
 
 export function hasPermission(role: Role, permission: Permission): boolean {

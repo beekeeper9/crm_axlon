@@ -1,21 +1,26 @@
+import { Suspense } from "react"
 import type { Metadata } from "next"
 
-import { UpcomingSection } from "@/components/shared/upcoming-section"
-import { routes } from "@/config/routes"
+import { PageHeader } from "@/components/shared/page-header"
+import { SalesView, SalesViewSkeleton } from "@/features/sales"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "Продажи" }
 
-export default function SalesPage() {
+type SalesPageProps = PageProps<"/sales">
+
+async function SalesContent({ searchParams }: Pick<SalesPageProps, "searchParams">) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams])
+  return <SalesView user={user} params={params} />
+}
+
+export default function SalesPage({ searchParams }: SalesPageProps) {
   return (
-    <UpcomingSection
-      href={routes.sales}
-      description="Воронки продаж и сделки"
-      plannedFeatures={[
-        "Переключение между воронками, например «Новые заявки» и «Продажи»",
-        "Этапы воронки с карточками сделок, поиском и фильтром по менеджерам",
-        "Перенос сделки между этапами в пределах прав",
-        "Настройка воронок и этапов для компании",
-      ]}
-    />
+    <div className="space-y-5">
+      <PageHeader title="Продажи" description="Сделки по воронкам и этапам" />
+      <Suspense fallback={<SalesViewSkeleton />}>
+        <SalesContent searchParams={searchParams} />
+      </Suspense>
+    </div>
   )
 }

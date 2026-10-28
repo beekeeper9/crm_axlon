@@ -1,86 +1,125 @@
 # Взаимодействие с Python backend
 
-> **Статус: ни один endpoint не согласован.**
-> Всё, что ниже описано как «предложение», — это форма данных, которую ожидает frontend. Её нужно обсудить с backend-разработчиком. Пути endpoints не выдуманы: они будут добавлены после согласования.
+Документ разделён на две части:
+- **Согласовано** — правила, которые подтвердил backend-разработчик (28.10.2026). Frontend уже им следует.
+- **Предложения** — формы данных, которые нужны интерфейсу. Они **не согласованы**: пути не придуманы, HTTP-реализации выбрасывают `contract_pending`, экраны работают на демо-данных.
 
-## Общие правила (frontend)
+---
 
-- Все запросы идут через `lib/api/client.ts` (`apiRequest`). Прямых `fetch` в компонентах нет.
-- Базовый URL — `NEXT_PUBLIC_API_BASE_URL`. Режим данных — `NEXT_PUBLIC_DATA_SOURCE=mock|api`.
-- Каждый ответ проверяется Zod-схемой из `features/*/schemas.ts`. Если ответ не совпал со схемой, возникает ошибка `invalid_response`.
-- Ошибки HTTP-статусов: 401 → `unauthorized`, 403 → `forbidden`, 404 → `not_found`, 400 и 422 → `validation`, остальные → `server`. Сбой сети → `network`.
-- Пока метод не согласован, HTTP-реализация выбрасывает `contract_pending`.
-- Секреты не попадают в переменные `NEXT_PUBLIC_*`: такие переменные видны в браузере. Сейчас frontend не хранит ни одного секрета.
-- Права проверяет backend. Скрытие разделов и кнопок во frontend — только удобство, а не защита. Пример: оценку звонка менеджер не должен получать от API вообще.
+## Часть 1. Согласовано
 
-## Вопросы к backend (нужно согласовать)
+### Транспорт — `lib/api/client.ts`
 
-1. **Фреймворк и формат**: JSON, стиль имён полей (`camelCase` или `snake_case`). Если `snake_case` — преобразование делаем в одном месте, в API-клиенте.
-2. **Авторизация**: cookie-сессия или bearer-токен, обновление токена, endpoint текущего пользователя.
-3. **Как браузер обращается к API**: напрямую (нужен CORS) или через `rewrites` Next.js (тот же домен, без собственного API на Next).
-4. **Формат ошибок**: единое тело ошибки, например `{ code, message, fields? }`, и формат ошибок валидации по полям.
-5. **Пагинация, сортировка, фильтры** для списков: offset/limit или курсор.
-6. **Мультиарендность**: как передаётся компания и отдел (из сессии или в пути).
-7. **Деньги и даты**: суммы — числа в валюте компании или в минимальных единицах; даты — ISO 8601 с часовым поясом.
-8. **Права**: backend возвращает список прав пользователя или только роль.
+| Правило | Как реализовано |
+|---------|-----------------|
+| JSON, поля в `snake_case` | `lib/api/case.ts`: ответ → `camelCase`, тело и параметры запроса → `snake_case`. Только в API-клиенте, компоненты работают с `camelCase` |
+| Базовый URL | `NEXT_PUBLIC_API_BASE_URL` (проверяется в `config/env.ts`) |
+| Режим данных | `NEXT_PUBLIC_DATA_SOURCE=mock\|api`; репозитории модулей выбирают реализацию один раз |
+| Авторизация JWT Bearer | Заголовок `Authorization: Bearer <access>`; без cookie-сессий и без `credentials: "include"` |
+| Компания | Заголовок `X-Tenant: <slug>` для бизнес-запросов; slug из `GET /api/v1/me/` → `memberships[].tenant`. Tenant в путь не добавляется |
+| Обновление токена | При 401 — один запрос `POST /api/v1/auth/token/refresh/` с `{ refresh }`, новый refresh из ответа сохраняется, старый больше не используется. Параллельные запросы ждут одно общее обновление (иначе второй отправил бы уже ротированный токен). Если обновление не удалось — токены удаляются, ошибка `unauthorized` |
+| Проверка ответов | Каждый ответ проверяется Zod-схемой модуля; несовпадение → `invalid_response` |
 
-## Предложения форм данных
+### Авторизация — `lib/api/auth-api.ts`
 
-### Текущий пользователь — `lib/session/current-user.ts`
+| Endpoint | Назначение |
+|----------|-----------|
+| `POST /api/v1/auth/token/` | Логин → `{ access, refresh }` |
+| `POST /api/v1/auth/token/refresh/` | `{ refresh }` → новая пара (refresh ротируется) |
+| `GET /api/v1/me/` | `{ id, username, memberships: [{ tenant, role }] }` |
+| `POST /api/v1/auth/logout/` | Завершить текущую сессию (один refresh) |
+| `POST /api/v1/auth/logout-all/` | Завершить все сессии |
 
-```ts
-{ id: string; fullName: string; role: "platform_admin" | "director" | "head_of_sales" | "manager";
-  companyName: string; departmentName: string }
-```
+Подключено: страницы `/login`, `/select-company`, выход в меню профиля, обновление токена в `proxy.ts`. Токены хранит сервер Next.js в httpOnly-cookie (см. `DECISIONS.md`). В режиме `mock` вход не нужен и не имитируется.
 
-### «Мой день» менеджера — `features/dashboard/schemas.ts`
+Проверено 28.10.2026 на локальной заглушке, повторяющей согласованные ответы (не на реальном backend): вход и ошибка входа с `request_id`, выбор компании, три параллельных запроса с истёкшим access → один обмен refresh-токена без повторного использования, отклонённый refresh → очистка cookie и переход на вход, выход.
 
-| Данные | Схема | Что показывает |
-|--------|-------|----------------|
-| Плитки «Сейчас» | `nowSummarySchema` | Ждут ответа, встречи сегодня (состоялось / всего), встречи без итога, переносы без даты, задачи просрочено / на сегодня |
-| Оборот месяца | `personalTurnoverSchema` | Оборот, ориентир, **план к сегодня и прогноз (считает backend)**, прирост к той же дате прошлого месяца, предоплаты, доплаты, точки по дням |
-| Заработок | `earningsSchema` | Итог, строки расчёта и примечания. **Правила мотивации — на backend**, frontend только показывает |
-| Личные показатели | `personalKpisSchema` | Продажи, продажи / встречи и порог премии, средний чек, встречи и доходимость, показатели месяца (назначено / прошли / состоялись / продажи) |
-| Направления | `salesSegmentsSchema` | Продажи, оборот, предоплаты, доплаты, средний чек и доля по направлениям компании |
+### Ошибки — `lib/api/errors.ts`
 
-Вопросы: как считается «план к сегодня» (рабочие дни, выходные), что такое «ориентир» и кто его задаёт, нужен ли переход к прошлым месяцам.
+Тело: `{ "error": { "code", "message", "details"?, "request_id" } }`.
 
-### «Фокус» — `features/focus/schemas.ts`
+- `code = validation_error` → `ApiError.kind = "validation"`, `details` (формат DRF `{ field: ["…"] }`) → `ApiError.fieldErrors` с именами полей в `camelCase`.
+- Остальные коды: вид ошибки по HTTP-статусу (401, 403, 404, 400/422, прочие → server). 404 без `X-Tenant` — тоже `not_found`.
+- `request_id` сохраняется в `ApiError.requestId` для логов и обращения в поддержку. Пользователю показываются только понятные тексты из `API_ERROR_MESSAGES`, без технических подробностей.
 
-`{ awaitingReply, managers: [{ id, name, count }], groups: [{ id, title, description, tone, items }] }`.
-Элемент: лид (id, имя), воронка и этап, приоритет, **причина попадания** (например «тёплый» с даты), последнее касание (канал, время, кратко), следующий шаг, **рекомендация ИИ** (текст или null), ответственный.
-Параметр: `managerId` — для руководителя (фильтр), для менеджера backend сам ограничивает своими лидами.
-**Правила отбора лидов и приоритетов задаёт backend / ИИ.** Frontend их не вычисляет.
-Нужны действия (не реализованы): «Отложить» (до какой даты?) и «Убрать из фокуса» (снять метку). Оба — изменения на backend.
+### Пагинация — `lib/api/pagination.ts`
+
+`limit` 1–200 (по умолчанию 50), `offset` от 0. Ответ `{ count, results }`, без `next`/`previous`. Страницы считаются из `count`, `limit`, `offset` (`pageInfo`). Фильтры и сортировка — свои у каждого endpoint, универсального формата нет.
+
+### Деньги и даты — `lib/api/money.ts`, `lib/format.ts`, `lib/datetime.ts`
+
+- Деньги — десятичная строка (`"1500.00"`) и отдельное поле `currency` (ISO). Во frontend сумма остаётся строкой; форматирование — `formatDecimalMoney` (Intl форматирует строку без перевода во float). Там, где интерфейс сам пересчитывает итог (демо-перенос сделки), — точная арифметика `lib/decimal.ts`.
+- `*_at` — UTC ISO 8601; показываются в часовом поясе компании. `*_date` — `YYYY-MM-DD`.
+- Поля ввода даты переводятся в ISO с учётом часового пояса компании (`companyWallTimeToIso`), а не браузера.
+
+### Роли — `lib/permissions/backend-roles.ts`
+
+Backend: `owner`, `admin`, `manager`, `sales_rep`, `viewer`. Перевод в роли интерфейса — только в `uiRoleFromBackend`:
+
+| Backend | Интерфейс | Статус |
+|---------|-----------|--------|
+| `owner` | Директор | предложение |
+| `admin` | Директор | **уточнить**: это администратор компании? |
+| `manager` | Руководитель отдела продаж | предложение (backend `manager` = руководитель) |
+| `sales_rep` | Менеджер | предложение |
+| `viewer` | Наблюдатель (только просмотр) | предложение |
+
+«Администратор платформы» — не роль компании; как он определяется, нужно согласовать. Скрытие кнопок — только удобство: backend проверяет RBAC и область `own/team/all` на каждой операции и не отдаёт закрытые данные (пример — оценка звонка).
+
+---
+
+## Часть 2. Предложения (не согласовано)
+
+Все схемы — в `features/*/schemas.ts`, имена полей ниже в `camelCase` (в API — `snake_case`).
+
+### Вопросы к backend
+
+1. **Capabilities.** Нужен ли список прав пользователя (`can_move_deal`, `can_assign_tasks`, `can_see_call_rating`…) в `GET /me/` или отдельным endpoint? Сейчас интерфейс выводит права из роли.
+2. **Имя пользователя и компании.** `/me/` возвращает `username`; для шапки нужны ФИО, название компании и отдела.
+3. **Хранение токенов** — выбрано: сервер Next.js держит токены в httpOnly-cookie, в backend уходят только Bearer-заголовки. Все запросы идут с сервера Next.js, CORS для браузера не нужен. Подтвердить у backend и уточнить:
+   - поля тела логина (`username`, `password`?) и код ответа при неверном пароле;
+   - срок жизни access и refresh, есть ли `exp` в токенах;
+   - есть ли короткое окно, в котором старый refresh ещё принимается после ротации (нужно, если серверов Next.js будет несколько);
+   - что backend делает при повторном использовании старого refresh (отзывает все сессии?).
+4. **Поиск по клиентам** для форм (выбор лида при назначении встречи): endpoint с `search` и `limit`.
+5. **Часовой пояс компании** — в данных компании или фиксированный.
+
+### Сотрудники — `features/team`
+
+`[{ id, name }]` — сотрудники в области видимости пользователя, для фильтров и выбора исполнителя.
+
+### Продажи — `features/sales/schemas.ts`
+
+- **Настройки воронок** `salesConfigSchema`: `pipelines: [{ id, name, stages: [{ id, name, kind: open|won|lost }] }]`, `lossReasons: [{ id, label }]`. Этапы и порядок задаёт компания; интерфейс не знает названий этапов.
+- **Доска** `boardSchema`: `{ pipelineId, columns: [{ stageId, count, totalAmount, currency, deals[] }] }` — только рабочие этапы. `count` и `totalAmount` считает backend с учётом фильтров. Нужна ли подгрузка карточек колонки по `limit/offset` — уточнить.
+- **Сделка** `dealSchema`: `id, title, client { name, phone }, pipelineId, stageId, amount, currency, manager { id, name }, nextAction { title, dueAt, isOverdue } | null, stageEnteredAt, updatedAt, tags[]`. Сделка = лид в воронке, открывается карточкой лида.
+- **Таблица**: тот же объект, `{ count, results }`; фильтры `pipeline_id`, `stage_id`, `manager_id`, `search`; сортировка по `updated_at` (уточнить).
+- **Смена этапа** (нужен endpoint): `stage_id`; при закрытии — `loss_reason_id` (обязателен для lost) и `comment`. Backend проверяет правила компании (успех только с оплатой) и возвращает обновлённую сделку или `validation_error`.
 
 ### Карточка лида — `features/leads/schemas.ts`
 
-Сейчас используется только сводка: `{ id, name, pipelineName, stageName, manager }`.
-Полная модель лида должна быть согласована: контакты, расширяемые поля компании, сделка (стоимость, оплачено, предоплата), встречи, задачи, заметки, события, звонки, переписка, AI-контекст («Что по сделке?»).
+`leadDetailSchema`: `id, title, client { name, phones[], email, city }, pipeline { id, name, stages[] }, stageId, manager, amount, currency, source, createdAt, stageEnteredAt, tags[], nextAction, aiContext { summary, nextSteps[], generatedAt } | null, payment { total, paid, remaining, currency, items[{ id, kind: prepayment|additional|full, amount, paidDate }] } | null, customFields [{ id, label, value }], related [{ id, title, pipelineName, stageName }]`.
 
-### Результаты отдела (руководитель) — `features/dashboard/schemas.ts`
+Отдельные запросы (каждая вкладка загружается независимо):
+- **История** `[{ id, at, kind: call|chat|note|stage|task|meeting|payment, title, body, author }]`, новые сверху.
+- **Звонки** `[{ id, at, direction, durationSec, manager, summary, transcript[{ speaker, text }] | null, rating { score 1–5, comment } | null }]`. **`rating` backend отдаёт только руководителям**; демо-слой повторяет это правило.
+- Задачи и встречи лида — списки модулей «Задачи» и «Встречи» с фильтром `lead_id`.
 
-Все данные — за текущий отчётный период; область видимости (вся команда или «мои») определяет backend по роли.
-
-| Данные | Схема | Назначение |
-|--------|-------|-----------|
-| Сводка продаж | `salesSummarySchema` | Выручка (факт, план, прошлый период), выигранные сделки, конверсия, средний чек |
-| Динамика выручки | `revenueTrendSchema` | Накопительная выручка по дням и линия плана |
-| Показатели менеджеров | `teamPerformanceSchema` | План, факт, сделки, конверсия, просрочки по каждому менеджеру |
-| Воронка | `salesFunnelSchema` | Этапы: количество, сумма, конверсия в следующий, средний срок |
-| Требует внимания | `attentionListSchema` | Управленческие сигналы: тип, важность, заголовок, описание |
-
-Отчётный период: `{ label, start, end, daysTotal, daysElapsed }`. Доли — числа от 0 до 1.
-
-Вопрос: кто формирует список «Требует внимания» — backend по правилам или frontend из других данных. Предложение — backend.
+Не хватает полей (нужно решение): **документы** (файлы, договоры), **переписка** (мессенджеры), **запись звонка** (ссылка на аудио и права на прослушивание), **редактирование полей** и схема настраиваемых полей компании (типы, обязательность), **история изменений этапов** с автором, **связанные контакты** (несколько людей у одной сделки).
 
 ### Задачи — `features/tasks/schemas.ts`
 
-Задачи пользователя на сегодня: `{ date, tasks: Task[], overdueFromPreviousDays }`.
-`Task`: `id, title, type (call|meeting|email|todo), dueAt (ISO со смещением), status (open|done), isOverdue, priority (high|normal), relatedTo ({ kind: deal|contact, name } | null)`.
-Просрочку (`isOverdue`) считает backend, чтобы не зависеть от часов браузера.
+`taskSchema`: `id, title, description, type (call|meeting|email|todo), priority (high|normal), status (open|done), dueAt | null, isOverdue, dueGroup (overdue|today|tomorrow|this_week|next_week|later|no_due) | null, assignee | null, createdBy, lead { id, name } | null, completedAt, result`.
+**Просрочку и группу срока считает backend** в часовом поясе компании. Список: `{ count, results }`, фильтры `status` (open|done|all), `assignee_id` (или «без исполнителя»), `lead_id`, `search`. «Мой день» использует `{ date, tasks, overdueFromPreviousDays }`.
 
-### Рабочее пространство — `features/workspace/schemas.ts`
+Нужны операции: создать, изменить, выполнить с результатом, взять задачу без исполнителя. Правило «не больше 2 открытых задач на сделку» проверяет backend (`validation_error`).
 
-Раскладка главной: `{ id, name, widgets: [{ id, type, size }] }`. Типы виджетов — фиксированный список.
-Нужно согласовать: где хранятся раскладки (компания → отдел → пользователь), кто может их менять, как работает запрос менеджера на изменение.
+### Встречи — `features/meetings/schemas.ts`
+
+`meetingSchema`: `id, startsAt, endsAt | null, lead { id, name }, format (office|online|visit), location, host (проводит), bookedBy (назначил), status (scheduled|confirmed|held|no_show|rescheduled|cancelled), clientConfirmation (confirmed|not_confirmed|not_sent), outcomeRequired, notes, outcomeComment`.
+Фильтры: `period` (yesterday|today|tomorrow|week — границы дней на backend) или произвольный интервал (уточнить формат), `status`, `host_id`, `lead_id`, `search`, `outcome_required`.
+Нужны операции: назначить, записать итог (`held|no_show|rescheduled` + новая дата и комментарий), отменить. `outcomeRequired`, напоминания (за 24 ч и 2 ч) и списание через 14 дней — на backend.
+
+### «Мой день», «Фокус», результаты отдела, рабочее пространство
+
+Без изменений с прошлого этапа: `nowSummarySchema`, `personalTurnoverSchema`, `earningsSchema`, `personalKpisSchema`, `salesSegmentsSchema`, `focusListSchema`, `salesSummarySchema`, `revenueTrendSchema`, `teamPerformanceSchema`, `salesFunnelSchema`, `attentionListSchema`, раскладка `{ id, name, widgets: [{ id, type, size }] }`. Денежные поля этих схем пока числа — при согласовании перейдут на десятичные строки с `currency`.

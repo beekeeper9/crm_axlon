@@ -1,11 +1,12 @@
 "use client"
 
 import { useTransition } from "react"
-import { Check, ChevronDown, FlaskConical } from "lucide-react"
+import { Check, ChevronDown, FlaskConical, LogOut } from "lucide-react"
 import { cn } from "cn"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { signOut } from "@/lib/auth/actions"
 import { formatInitials } from "@/lib/format"
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/permissions/roles"
 import { setDemoRole } from "@/lib/session/demo-role-actions"
@@ -41,7 +42,7 @@ export function UserMenu({ user, isDemoData }: UserMenuProps) {
         <div className="px-1">
           <p className="text-sm font-medium">{user.fullName}</p>
           <p className="text-xs text-muted-foreground">
-            {ROLE_LABELS[user.role]} · {user.companyName}
+            {[ROLE_LABELS[user.role], user.companyName].filter(Boolean).join(" · ")}
           </p>
         </div>
 
@@ -71,6 +72,18 @@ export function UserMenu({ user, isDemoData }: UserMenuProps) {
               ))}
             </ul>
           </div>
+        )}
+
+        {!isDemoData && (
+          <form action={signOut} className="border-t pt-2">
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+            >
+              <LogOut className="size-4 text-muted-foreground" aria-hidden />
+              Выйти
+            </button>
+          </form>
         )}
       </PopoverContent>
     </Popover>

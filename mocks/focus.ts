@@ -4,15 +4,7 @@
  * Используются только в режиме NEXT_PUBLIC_DATA_SOURCE=mock.
  */
 import type { FocusGroup, FocusItem, FocusList } from "@/features/focus/schemas"
-
-export const demoManagers = [
-  { id: "m-1", name: "Айбек Садыков" },
-  { id: "m-2", name: "Нурлан Абдыкадыров" },
-  { id: "m-3", name: "Мария Орлова" },
-  { id: "m-4", name: "Бакыт Токтогулов" },
-  { id: "m-5", name: "Динара Асанова" },
-  { id: "m-6", name: "Тимур Ли" },
-] as const
+import { demoManagers } from "@/mocks/team"
 
 type ManagerIndex = 0 | 1 | 2 | 3 | 4 | 5
 
@@ -127,11 +119,3 @@ export function filterDemoFocusList(managerId: string | null): FocusList {
     groups: groupsForManager,
   }
 }
-
-export const demoFocusLeads = allItems.map((item) => ({
-  id: item.lead.id,
-  name: item.lead.name,
-  pipelineName: item.pipelineName,
-  stageName: item.stageName,
-  manager: item.manager,
-}))

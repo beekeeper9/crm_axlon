@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { UpcomingSection } from "@/components/shared/upcoming-section"
 import { routes } from "@/config/routes"
 
-export const metadata: Metadata = { title: "Разбор" }
+export const metadata: Metadata = { title: "Работа над ошибками" }
 
 export default function ReviewPage() {
   return (

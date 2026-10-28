@@ -14,9 +14,12 @@ app/                         Только маршруты и сборка ст�
     loading.tsx, error.tsx   Загрузка и ошибка страницы внутри каркаса
     my-day/                  «Мой день» — стартовая страница, виджеты по роли
     focus/                   «Фокус» — приоритетные лиды
-    leads/[leadId]/          Карточка лида (пока заголовок + план разделов)
-    sales/ after-meeting/ meetings/ tasks/ calls/ daily-reports/
-    review/ leads/ client-base/ materials/ assistant/ workspace/
+    sales/                   «Продажи» — доска и таблица сделок по воронкам
+    leads/[leadId]/          Карточка лида — рабочее пространство по клиенту
+    tasks/                   «Задачи» — список с группами по сроку
+    meetings/                «Встречи» — расписание, подтверждения, итоги
+    after-meeting/ calls/ daily-reports/ review/ leads/ client-base/
+    materials/ assistant/ workspace/
                              Разделы «в разработке» (UpcomingSection)
 
 features/                    Бизнес-модули
@@ -25,27 +28,40 @@ features/                    Бизнес-модули
     components/my-day/       Виджеты менеджера: «Сейчас», оборот, заработок, KPI,
                              показатели месяца, по дням, направления
   focus/                     «Фокус»: схема, репозиторий, фильтр по менеджерам, строки лидов
-  leads/                     Сводка по лиду для карточки
-  tasks/                     Задачи: схема, репозиторий, виджет «Задачи на сегодня»
+  sales/                     Воронки, доска (перетаскивание + меню), таблица, закрытие сделки
+  leads/                     Карточка лида: этапы, «Что по сделке?», вкладки, история, звонки, оплата
+  tasks/                     Задачи: список, панель задачи, форма, виджет «Задачи на сегодня»
+  meetings/                  Встречи: список по дням, итог встречи, форма новой встречи
+  team/                      Сотрудники для фильтров и выбора исполнителя
   workspace/                 Схема раскладки, шаблоны по ролям, репозиторий раскладок
 
 components/
   ui/                        shadcn-примитивы (генерируются CLI, без бизнес-логики)
   layout/                    Каркас: AppHeader, PrimaryNav, AllSectionsMenu, MobileNav, UserMenu
   shared/                    PageHeader, WidgetCard, EmptyState, ErrorState, StatusBadge,
-                             TrendIndicator, WidgetErrorBoundary, UpcomingSection
+                             TrendIndicator, WidgetErrorBoundary, UpcomingSection,
+                             SearchInput, FilterSelect, SegmentedLinks, PaginationNav,
+                             DemoNotice, PersonAvatar
 
 config/                      env (проверка zod), site, locale, routes, navigation
 lib/
-  api/                       client.ts — единственная точка HTTP; errors.ts — типы ошибок
-  permissions/roles.ts       Роли, права, hasPermission (только для отображения)
+  api/                       client.ts — единственная точка HTTP (Bearer, X-Tenant, ротация refresh);
+                             case.ts — snake_case ↔ camelCase; errors.ts — формат ошибок и request_id;
+                             pagination.ts — limit/offset; money.ts — десятичные суммы;
+                             auth-session.ts — интерфейс хранилища токенов; auth-api.ts — endpoint входа
+  permissions/               roles.ts — роли и права интерфейса; backend-roles.ts — перевод ролей backend;
+                             edit-mode.ts — режим изменений (демо / не подключено / только чтение)
+  search-params.ts           Фильтры в адресе страницы
+  decimal.ts, datetime.ts    Точные суммы; время в часовом поясе компании
   session/                   Текущий пользователь; демо-роль (cookie + server action)
   format.ts                  Деньги, проценты, даты в локали компании
 mocks/                       ДЕМО-ДАННЫЕ. Импортируются только из mock-репозиториев
 docs/                        Документация проекта
 ```
 
-Модули для остальных разделов (sales, meetings, calls, daily-reports, review, client-base, materials, assistant) получат папки в `features/`, когда в них появится код.
+hooks/use-search-param-patch.ts — смена параметров адреса без перезагрузки (поиск и фильтры).
+
+Модули для остальных разделов (calls, daily-reports, review, client-base, materials, assistant) получат папки в `features/`, когда в них появится код.
 
 ## Навигация
 
@@ -64,6 +80,7 @@ docs/                        Документация проекта
 - Модуль импортирует другой модуль только через его `index.ts`. Исключение — `dashboard`: это модуль-агрегатор «Моего дня», и он берёт виджеты из публичного API других модулей.
 - В `components/ui` нет бизнес-логики.
 - `mocks/` импортируют только mock-реализации репозиториев.
+- Модули не зависят друг от друга по кругу: карточка лида использует «Задачи» и «Встречи», а список клиентов для формы встречи передаёт страница `meetings/page.tsx`.
 - Переменные окружения читаются только в `config/env.ts`.
 
 ## Данные и backend
@@ -74,10 +91,36 @@ docs/                        Документация проекта
 
 Реализацию выбирает `NEXT_PUBLIC_DATA_SOURCE` (`mock` или `api`). Бизнес-расчёты, которые принадлежат компании (план к сегодня с учётом рабочих дней, прогноз, заработок, отбор лидов в «Фокус», рекомендации ИИ), frontend не изобретает: он показывает значения из ответа.
 
+## Изменения данных
+
+Ни одна операция изменения ещё не согласована с backend. Поэтому `editModeFor(role)` даёт один из трёх режимов:
+- `demo` (данные mock) — изменение живёт только в состоянии браузера, подписано «демо · не сохранено» и пропадает после обновления; есть «Отменить»;
+- `unavailable` (данные api) — кнопки выключены с подсказкой «Станет доступно после согласования API»;
+- `read-only` — у роли нет права `records.edit` (например, наблюдатель), кнопок нет.
+
+Когда контракт появится, демо-изменение заменяется вызовом репозитория (server action → `apiRequest`) без переписывания экранов. Оптимистичных обновлений без отката не будет.
+
+## Фильтры и списки
+
+Фильтры, вкладки и страница хранятся в адресе (`?pipeline=&view=&q=&manager=&page=`). Серверный компонент читает параметры и запрашивает данные; клиентские `SearchInput` и `FilterSelect` меняют адрес (`router.replace` в `startTransition`), пока сервер отвечает, на экране остаётся прежний список. Ссылкой на отфильтрованный список можно поделиться.
+
+## Вход и токены (режим api)
+
+```
+Браузер ──cookie (httpOnly)──▶ Next.js: proxy.ts ─▶ страница / server action ──Bearer + X-Tenant──▶ Python API
+```
+
+- `/login` — форма; server action `login` получает пару токенов (`POST /auth/token/`), кладёт её в httpOnly-cookie, читает `/me/`. Одна компания — сразу в приложение, несколько — `/select-company`.
+- `proxy.ts` на каждый запрос страницы: нет refresh-токена → `/login?next=…`; access истекает (меньше минуты) → обмен с ротацией и запись новой пары в ответ и в текущий запрос; компания не выбрана → `/select-company`. В режиме mock proxy ничего не делает.
+- `lib/auth/token-store.ts`: `getRenderAuth()` (только чтение — для серверных компонентов) и `getActionAuth()` (с обновлением — для server actions). Бизнес-репозитории в режиме api будут брать авторизацию отсюда.
+- Выбранная компания — cookie `crm_tenant`; её проверяют по списку членств из `/me/`, а не верят на слово.
+- Выход — server action `signOut`: `POST /auth/logout/` и удаление cookie в любом случае.
+- Это не второй backend: Next.js не проверяет пароли и права, а только хранит токены пользователя и передаёт их Python API.
+
 ## Текущий пользователь и демо-роль
 
-`getCurrentUser()`:
-- в режиме `api` ждёт согласования авторизации (`contract_pending`);
+`getCurrentUser()` (один раз на запрос, `React.cache`):
+- в режиме `api` — `GET /api/v1/me/` и роль в выбранной компании через `uiRoleFromBackend`; при 401 — на вход;
 - в режиме `mock` возвращает демо-пользователя. Роль берётся из cookie `demo_role`, а если её нет — из `NEXT_PUBLIC_DEMO_ROLE`.
 
 Cookie выставляет server action `setDemoRole` из меню профиля. Это не авторизация и не backend: меняется только то, каким демо-пользователем показан интерфейс. В режиме `api` action ничего не делает.

@@ -99,3 +99,65 @@ export function formatDayMonth(isoDate: string): string {
 export function formatTime(isoDateTime: string): string {
   return timeFormat.format(new Date(isoDateTime))
 }
+
+const CURRENCY_LABELS: Record<string, string> = { KGS: "сом", RUB: "₽", KZT: "₸", USD: "$", EUR: "€" }
+const decimalMoneyFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 })
+const dateTimeFormat = new Intl.DateTimeFormat(locale, {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone,
+})
+const weekdayDateFormat = new Intl.DateTimeFormat(locale, {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone,
+})
+const fullDateFormat = new Intl.DateTimeFormat(locale, {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone,
+})
+
+/**
+ * Сумма из API: десятичная строка и ISO-код валюты («1500.00», "KGS» → «1 500 сом»).
+ * Intl форматирует строку как точное десятичное число — без перевода во float.
+ */
+export function formatDecimalMoney(amount: string, currency: string): string {
+  // Intl.NumberFormat принимает десятичную строку (ES2023), типы TS этого пока не знают
+  const formatted = decimalMoneyFormat.format(amount as unknown as number)
+  return `${formatted} ${CURRENCY_LABELS[currency] ?? currency}`
+}
+
+/** «27 окт., 14:30» */
+export function formatDateTime(isoDateTime: string): string {
+  return dateTimeFormat.format(new Date(isoDateTime))
+}
+
+/** «вторник, 27 октября» — заголовки дней в списках */
+export function formatWeekdayDate(isoDate: string): string {
+  return weekdayDateFormat.format(new Date(isoDate))
+}
+
+/** «27 октября 2026 г.» */
+export function formatFullDate(isoDate: string): string {
+  return fullDateFormat.format(new Date(isoDate))
+}
+
+/** Длительность звонка: 185 → «3:05» */
+export function formatDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = Math.round(totalSeconds % 60)
+  return `${minutes}:${String(seconds).padStart(2, "0")}`
+}
+
+const pluralRules = new Intl.PluralRules(locale)
+
+/** Склонение по числу: pluralize(3, ["встреча", "встречи", "встреч"]) → «встречи» */
+export function pluralize(count: number, [one, few, many]: readonly [string, string, string]): string {
+  const rule = pluralRules.select(count)
+  return rule === "one" ? one : rule === "few" ? few : many
+}
