@@ -2,24 +2,22 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { ExternalLink, Mail, MapPin, Phone } from "lucide-react"
 
-import { PageHeader } from "@/components/shared/page-header"
 import { PersonAvatar } from "@/components/shared/person-avatar"
+import { StatusBadge } from "@/components/shared/status-badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { leadRoute } from "@/config/routes"
 import { LeadStageControl } from "@/features/leads/components/lead-stage-control"
 import {
-  LeadAiContext,
-  LeadCalls,
   LeadFields,
-  LeadNextStep,
+  LeadNowPanel,
   LeadPayment,
   LeadTimeline,
 } from "@/features/leads/components/lead-sections"
 import { LeadTabs } from "@/features/leads/components/lead-tabs"
 import type { LeadDetail } from "@/features/leads/schemas"
+import { LeadCallsList } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
 import { TasksList, tasksRepository } from "@/features/tasks"
 import { teamRepository } from "@/features/team"
@@ -43,21 +41,28 @@ export function LeadView({ lead, user }: LeadViewProps) {
   const primaryPhone = lead.client.phones[0]
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title={lead.title}
-        description={[stage?.name, lead.amount && lead.currency ? formatDecimalMoney(lead.amount, lead.currency) : null]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          primaryPhone && (
-            <a href={telHref(primaryPhone)} className={buttonVariants({ variant: "outline" })}>
-              <Phone data-icon="inline-start" aria-hidden />
-              Позвонить
-            </a>
-          )
-        }
-      />
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1.5">
+          <h1 className="text-xl font-semibold tracking-tight">{lead.title}</h1>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted-foreground">
+            {stage && <StatusBadge tone={stage.kind === "won" ? "success" : stage.kind === "lost" ? "danger" : "info"}>{stage.name}</StatusBadge>}
+            <span className="font-semibold text-foreground tabular-nums">
+              {lead.amount && lead.currency ? formatDecimalMoney(lead.amount, lead.currency) : "Сумма не указана"}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <PersonAvatar name={lead.manager.name} />
+              {lead.manager.name}
+            </span>
+          </p>
+        </div>
+        {primaryPhone && (
+          <a href={telHref(primaryPhone)} className={buttonVariants({ variant: "outline" })}>
+            <Phone data-icon="inline-start" aria-hidden />
+            Позвонить
+          </a>
+        )}
+      </header>
 
       <LeadStageControl
         pipelineName={lead.pipeline.name}
@@ -66,21 +71,22 @@ export function LeadView({ lead, user }: LeadViewProps) {
         editMode={editModeFor(user.role)}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="min-w-0 space-y-4">
-          <LeadNextStep lead={lead} />
-          <LeadAiContext lead={lead} isDemoData={isMockDataSource} />
+      {/* Порядок в разметке — порядок на телефоне: сейчас → клиент → вкладки.
+          На широком экране «Клиент и сделка» уходит в правую колонку на всю высоту. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_19rem] lg:grid-rows-[auto_1fr] lg:gap-x-6">
+        <LeadNowPanel lead={lead} isDemoData={isMockDataSource} />
+        <LeadAside lead={lead} />
+        <div className="min-w-0">
           <LeadTabs
             tabs={[
               { value: "work", label: "Работа", content: <Deferred><LeadWork lead={lead} user={user} /></Deferred> },
               { value: "history", label: "История", content: <Deferred><LeadTimeline leadId={lead.id} /></Deferred> },
-              { value: "calls", label: "Звонки", content: <Deferred><LeadCalls leadId={lead.id} isDemoData={isMockDataSource} /></Deferred> },
+              { value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> },
               { value: "payment", label: "Оплата", content: <LeadPayment lead={lead} /> },
               { value: "data", label: "Данные", content: <LeadFields lead={lead} /> },
             ]}
           />
         </div>
-        <LeadAside lead={lead} />
       </div>
     </div>
   )
@@ -113,56 +119,61 @@ async function LeadWork({ lead, user }: LeadViewProps) {
 
   return (
     <div className="space-y-6">
-      <section aria-labelledby="lead-tasks" className="space-y-2">
-        <h2 id="lead-tasks" className="text-sm font-semibold">Задачи</h2>
-        <TasksList
-          initialTasks={tasks.results}
-          members={members}
-          currentUser={currentUser}
-          canAssign={hasPermission(user.role, "records.assign")}
-          editMode={editMode}
-          showAssignee={isTeamView}
-          lead={leadRef}
-          emptyTitle="Задач по лиду нет"
-          emptyDescription="Поставьте задачу — так следующий шаг не потеряется."
-        />
-      </section>
-      <section aria-labelledby="lead-meetings" className="space-y-2">
-        <h2 id="lead-meetings" className="text-sm font-semibold">Встречи</h2>
-        <MeetingsList
-          initialMeetings={meetings.results}
-          editMode={editMode}
-          showPeople
-          lead={leadRef}
-          leadOptions={[]}
-          hosts={members}
-          currentUser={currentUser}
-          emptyTitle="Встреч не было"
-          emptyDescription="Назначьте встречу, когда клиент будет готов."
-        />
-      </section>
+      <TasksList
+        heading="Задачи"
+        initialTasks={tasks.results}
+        members={members}
+        currentUser={currentUser}
+        canAssign={hasPermission(user.role, "records.assign")}
+        editMode={editMode}
+        showAssignee={isTeamView}
+        lead={leadRef}
+        emptyTitle="Задач по лиду нет"
+        emptyDescription="Поставьте задачу — так следующий шаг не потеряется."
+      />
+      <MeetingsList
+        heading="Встречи"
+        initialMeetings={meetings.results}
+        editMode={editMode}
+        showPeople
+        lead={leadRef}
+        leadOptions={[]}
+        hosts={members}
+        currentUser={currentUser}
+        emptyTitle="Встреч не было"
+        emptyDescription="Назначьте встречу, когда клиент будет готов."
+      />
     </div>
   )
 }
 
 function AsideRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-2 text-sm">
+    <div className="flex items-baseline justify-between gap-3 py-1.5 text-meta">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-right">{children}</dd>
     </div>
   )
 }
 
+function AsideSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-1.5 border-t px-4 py-3 first:border-t-0">
+      <h2 className="text-xs font-medium text-muted-foreground">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
+/** «Клиент и сделка»: справочные данные одной спокойной колонкой, без отдельных карточек */
 function LeadAside({ lead }: { lead: LeadDetail }) {
   return (
-    <aside className="space-y-4">
-      <Card className="gap-3 px-4 py-4">
-        <h2 className="text-sm font-semibold">Клиент</h2>
-        <ul className="space-y-2 text-sm">
+    <aside className="self-start rounded-xl bg-card ring-1 ring-border lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <AsideSection title="Клиент">
+        <ul className="space-y-1.5 text-sm">
           {lead.client.phones.map((phone) => (
             <li key={phone}>
-              <a href={telHref(phone)} className="flex items-center gap-2 hover:text-primary">
+              <a href={telHref(phone)} className="flex items-center gap-2 tabular-nums hover:text-primary">
                 <Phone className="size-3.5 text-muted-foreground" aria-hidden />
                 {phone}
               </a>
@@ -182,40 +193,32 @@ function LeadAside({ lead }: { lead: LeadDetail }) {
               {lead.client.city}
             </li>
           )}
-          {lead.client.phones.length === 0 && !lead.client.email && <li className="text-muted-foreground">Контакты не указаны</li>}
+          {lead.client.phones.length === 0 && !lead.client.email && (
+            <li className="text-meta text-muted-foreground">Контакты не указаны</li>
+          )}
         </ul>
-      </Card>
+      </AsideSection>
 
-      <Card className="gap-1 px-4 py-4">
-        <h2 className="mb-1 text-sm font-semibold">Сделка</h2>
-        <dl className="divide-y">
-          <AsideRow label="Ответственный">
-            <span className="inline-flex items-center gap-1.5">
-              <PersonAvatar name={lead.manager.name} />
-              {lead.manager.name}
-            </span>
-          </AsideRow>
-          <AsideRow label="Сумма">
-            {lead.amount && lead.currency ? formatDecimalMoney(lead.amount, lead.currency) : <span className="text-muted-foreground">не указана</span>}
-          </AsideRow>
+      <AsideSection title="Сделка">
+        <dl>
+          <AsideRow label="Воронка">{lead.pipeline.name}</AsideRow>
           <AsideRow label="На этапе с">{formatDayMonth(lead.stageEnteredAt)}</AsideRow>
           <AsideRow label="Источник">{lead.source ?? <span className="text-muted-foreground">—</span>}</AsideRow>
           <AsideRow label="Создан">{formatFullDate(lead.createdAt)}</AsideRow>
         </dl>
         {lead.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-2">
+          <div className="flex flex-wrap gap-1 pt-1">
             {lead.tags.map((tag) => (
-              <span key={tag} className="rounded bg-muted px-1.5 py-px text-xs text-muted-foreground">
+              <span key={tag} className="rounded bg-muted px-1.5 text-xs leading-5 text-muted-foreground">
                 {tag}
               </span>
             ))}
           </div>
         )}
-      </Card>
+      </AsideSection>
 
       {lead.related.length > 0 && (
-        <Card className="gap-2 px-4 py-4">
-          <h2 className="text-sm font-semibold">Другие сделки клиента</h2>
+        <AsideSection title="Другие сделки клиента">
           <ul className="space-y-1.5 text-sm">
             {lead.related.map((item) => (
               <li key={item.id}>
@@ -229,7 +232,7 @@ function LeadAside({ lead }: { lead: LeadDetail }) {
               </li>
             ))}
           </ul>
-        </Card>
+        </AsideSection>
       )}
     </aside>
   )

@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ChevronDown, LayoutGrid } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { allSections, isNavItemActive, visibleFor, type NavGroup } from "@/config/navigation"

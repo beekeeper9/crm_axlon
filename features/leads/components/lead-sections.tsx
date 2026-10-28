@@ -1,90 +1,95 @@
 import {
   ArrowRight,
+  CalendarClock,
   CircleDollarSign,
   ListChecks,
   MessageSquare,
   NotebookPen,
   Phone,
-  PhoneIncoming,
-  PhoneOutgoing,
   Sparkles,
-  Star,
   Users,
   Workflow,
   type LucideIcon,
 } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { Card } from "@/components/ui/card"
 import { leadsRepository } from "@/features/leads/api/leads-repository"
 import type { ActivityKind, LeadDetail } from "@/features/leads/schemas"
-import { formatDateTime, formatDayMonth, formatDecimalMoney, formatDuration } from "@/lib/format"
+import { formatDateTime, formatDayMonth, formatDecimalMoney } from "@/lib/format"
 
-/** Контекст ИИ «Что по сделке?» — первое, что видит менеджер, открыв карточку */
-export function LeadAiContext({ lead, isDemoData }: { lead: LeadDetail; isDemoData: boolean }) {
+/**
+ * «Сейчас по сделке»: следующий шаг и контекст ИИ в одной панели — первое, что видит менеджер.
+ * Следующий шаг — главный ориентир; сводка ИИ помогает понять, почему он такой.
+ */
+export function LeadNowPanel({ lead, isDemoData }: { lead: LeadDetail; isDemoData: boolean }) {
+  const next = lead.nextAction
   const ai = lead.aiContext
   return (
-    <Card className="gap-3 border-primary/20 bg-primary/5 px-4 py-4 ring-primary/15">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <Sparkles className="size-4 text-primary" aria-hidden />
-          Что по сделке?
-        </h2>
-        {ai && (
-          <span className="text-xs text-muted-foreground">
-            {isDemoData ? "пример текста · демо" : `обновлено ${formatDateTime(ai.generatedAt)}`}
-          </span>
+    <section aria-labelledby="lead-now" className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+      <h2 id="lead-now" className="sr-only">Сейчас по сделке</h2>
+      <div
+        className={cn(
+          "flex items-start gap-3 px-4 py-3",
+          !next ? "bg-warning/8" : next.isOverdue ? "bg-destructive/8" : undefined
         )}
-      </div>
-      {ai ? (
-        <>
-          <p className="text-sm leading-relaxed">{ai.summary}</p>
-          {ai.nextSteps.length > 0 && (
-            <ul className="space-y-1">
-              {ai.nextSteps.map((step) => (
-                <li key={step} className="flex items-start gap-2 text-sm text-foreground/90">
-                  <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-                  {step}
-                </li>
-              ))}
-            </ul>
+      >
+        <CalendarClock
+          className={cn("mt-0.5 size-4 shrink-0", next?.isOverdue ? "text-destructive" : next ? "text-primary" : "text-warning")}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground">Следующий шаг</p>
+          {next ? (
+            <p className="font-medium">
+              {next.title}
+              {next.dueAt && (
+                <span className={cn("ml-2 text-meta font-normal tabular-nums", next.isOverdue ? "text-destructive" : "text-muted-foreground")}>
+                  {next.isOverdue && "просрочен · "}
+                  {formatDateTime(next.dueAt)}
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="font-medium text-warning">Не назначен — поставьте задачу или встречу во вкладке «Работа»</p>
           )}
-        </>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Сводка появится, когда по лиду накопятся звонки, переписка или встречи и будет подключён ИИ-сервис.
-        </p>
-      )}
-    </Card>
-  )
-}
+        </div>
+      </div>
 
-/** Следующий шаг по сделке: главный ориентир «что сделать дальше» */
-export function LeadNextStep({ lead }: { lead: LeadDetail }) {
-  const next = lead.nextAction
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-3 rounded-xl border px-4 py-3",
-        !next ? "border-warning/30 bg-warning/6" : next.isOverdue ? "border-destructive/30 bg-destructive/6" : "bg-card"
-      )}
-    >
-      <ArrowRight className={cn("mt-0.5 size-4 shrink-0", next?.isOverdue ? "text-destructive" : next ? "text-primary" : "text-warning")} aria-hidden />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-muted-foreground">Следующий шаг</p>
-        {next ? (
-          <p className="text-sm font-medium">
-            {next.title}
-            {next.dueAt && <span className={cn("font-normal", next.isOverdue ? "text-destructive" : "text-muted-foreground")}> · {formatDateTime(next.dueAt)}</span>}
-            {next.isOverdue && <span className="font-normal text-destructive"> · просрочен</span>}
+      <div className="border-t px-4 py-3">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+            <Sparkles className="size-3.5" aria-hidden />
+            Что по сделке?
           </p>
+          {ai && (
+            <span className="text-xs text-muted-foreground">
+              {isDemoData ? "пример текста · демо" : `обновлено ${formatDateTime(ai.generatedAt)}`}
+            </span>
+          )}
+        </div>
+        {ai ? (
+          <div className="space-y-2">
+            <p className="text-sm leading-relaxed text-foreground/90">{ai.summary}</p>
+            {ai.nextSteps.length > 0 && (
+              <ul className="space-y-1">
+                {ai.nextSteps.map((step) => (
+                  <li key={step} className="flex items-start gap-2 text-meta text-muted-foreground">
+                    <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-primary/80" aria-hidden />
+                    {step}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         ) : (
-          <p className="text-sm font-medium text-warning">Не назначен — поставьте задачу или встречу, чтобы лид не потерялся</p>
+          <p className="text-meta text-muted-foreground">
+            Сводка появится, когда по лиду накопятся звонки, переписка или встречи и будет подключён ИИ-сервис.
+          </p>
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -126,70 +131,6 @@ export async function LeadTimeline({ leadId }: { leadId: string }) {
         )
       })}
     </ol>
-  )
-}
-
-function RatingStars({ score }: { score: number }) {
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-label={`Оценка ${score} из 5`}>
-      {Array.from({ length: 5 }, (_, index) => (
-        <Star key={index} className={cn("size-3.5", index < score ? "fill-warning text-warning" : "text-muted-foreground/40")} aria-hidden />
-      ))}
-    </span>
-  )
-}
-
-export async function LeadCalls({ leadId, isDemoData }: { leadId: string; isDemoData: boolean }) {
-  const calls = await leadsRepository.getCalls(leadId)
-  if (calls.length === 0) {
-    return <EmptyState icon={Phone} title="Звонков пока нет" description="Звонки появятся после подключения телефонии; разговоры от 30 секунд разбираются автоматически." />
-  }
-  return (
-    <ul className="space-y-3">
-      {calls.map((call) => {
-        const DirectionIcon = call.direction === "incoming" ? PhoneIncoming : PhoneOutgoing
-        return (
-          <li key={call.id}>
-            <Card className="gap-3 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <DirectionIcon className="size-4 text-muted-foreground" aria-hidden />
-                  {call.direction === "incoming" ? "Входящий" : "Исходящий"} · {formatDuration(call.durationSec)}
-                  <span className="font-normal text-muted-foreground">· {formatDateTime(call.at)} · {call.manager.name}</span>
-                </p>
-                {/* rating приходит только руководителю — у менеджера блока просто нет */}
-                {call.rating && (
-                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                    Оценка разговора <RatingStars score={call.rating.score} />
-                  </span>
-                )}
-              </div>
-              {call.summary && (
-                <p className="text-sm">
-                  <span className="font-medium text-primary">Итог{isDemoData && " · демо"}:</span> {call.summary}
-                </p>
-              )}
-              {call.rating?.comment && <p className="text-sm text-muted-foreground">Комментарий руководителя: {call.rating.comment}</p>}
-              {call.transcript && (
-                <details className="group/transcript rounded-lg bg-muted/40 px-3 py-2 text-sm">
-                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground">
-                    Транскрипция
-                  </summary>
-                  <dl className="mt-2 space-y-1.5">
-                    {call.transcript.map((line, index) => (
-                      <div key={index} className="grid grid-cols-[5.5rem_1fr] gap-2">
-                        <dt className="text-xs text-muted-foreground">{line.speaker === "manager" ? "Менеджер" : "Клиент"}</dt>
-                        <dd>{line.text}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </details>
-              )}
-            </Card>
-          </li>
-        )
-      })}
-    </ul>
   )
 }
 

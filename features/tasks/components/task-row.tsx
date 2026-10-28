@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Circle, CircleCheck, Flag } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { PersonAvatar } from "@/components/shared/person-avatar"
 import { leadRoute } from "@/config/routes"
@@ -50,7 +50,7 @@ export function TaskRow({ task, showAssignee, showLead, isDemoChanged, canComple
         >
           {task.title}
         </button>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-meta text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <type.icon className="size-3" aria-hidden />
             {type.label}
@@ -71,7 +71,7 @@ export function TaskRow({ task, showAssignee, showLead, isDemoChanged, canComple
       <time
         dateTime={task.dueAt ?? undefined}
         className={cn(
-          "w-28 shrink-0 pt-px text-right text-xs tabular-nums",
+          "w-28 shrink-0 pt-px text-right text-meta tabular-nums",
           task.isOverdue && !isDone ? "font-medium text-destructive" : "text-muted-foreground"
         )}
       >

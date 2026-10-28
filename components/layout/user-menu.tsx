@@ -2,7 +2,7 @@
 
 import { useTransition } from "react"
 import { Check, ChevronDown, FlaskConical, LogOut } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"

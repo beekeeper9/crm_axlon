@@ -1,21 +1,30 @@
 import { Columns3, Rows3, Workflow } from "lucide-react"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { EmptyState } from "@/components/shared/empty-state"
 import { FilterSelect } from "@/components/shared/filter-select"
 import { SearchInput } from "@/components/shared/search-input"
+import { ListPanel } from "@/components/shared/list-panel"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
-import { Card } from "@/components/ui/card"
+import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
-import { salesRepository, type DealsFilter } from "@/features/sales/api/sales-repository"
+import {
+  DEAL_SORTS,
+  salesRepository,
+  type DealSort,
+  type DealsFilter,
+  type DealsListQuery,
+} from "@/features/sales/api/sales-repository"
 import { DealsTable } from "@/features/sales/components/deals-table"
 import { PipelineBoard } from "@/features/sales/components/pipeline-board"
 import type { Pipeline } from "@/features/sales/schemas"
 import { teamRepository } from "@/features/team"
+import { tryLoad } from "@/lib/api/load"
 import { pageInfo, pageParams } from "@/lib/api/pagination"
 import { editModeFor } from "@/lib/permissions/edit-mode"
 import { hasPermission } from "@/lib/permissions/roles"
-import { getPageParam, getParam, hrefWithParams, type SearchParamsRecord } from "@/lib/search-params"
+import { getPageParam, getParam, hrefWithParams, type ParamPatch, type SearchParamsRecord } from "@/lib/search-params"
 import type { CurrentUser } from "@/lib/session/current-user"
 
 /** Размер страницы таблицы (backend допускает limit от 1 до 200) */
@@ -28,20 +37,21 @@ type SalesViewProps = {
 
 export async function SalesView({ user, params }: SalesViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
-  const [config, members] = await Promise.all([
-    salesRepository.getConfig(),
-    isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-  ])
+  const loaded = await tryLoad(() =>
+    Promise.all([salesRepository.getConfig(), isTeamView ? teamRepository.listMembers() : Promise.resolve([])])
+  )
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const [config, members] = loaded.data
 
   if (config.pipelines.length === 0) {
     return (
-      <Card>
+      <ListPanel>
         <EmptyState
           icon={Workflow}
           title="Воронки ещё не настроены"
           description="Воронки и этапы задаёт руководитель в настройках компании."
         />
-      </Card>
+      </ListPanel>
     )
   }
 
@@ -50,34 +60,36 @@ export async function SalesView({ user, params }: SalesViewProps) {
   // Менеджер работает со своими сделками; фильтр по сотрудникам — у руководителя
   const managerId = isTeamView ? getParam(params, "manager") : user.id
   const filter = { pipelineId: pipeline.id, managerId, search: getParam(params, "q") }
-  const href = (patch: Record<string, string | null>) => hrefWithParams(routes.sales, params, patch)
+  const href = (patch: ParamPatch) => hrefWithParams(routes.sales, params, patch)
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b">
-        <SegmentedLinks
-          label="Воронки"
-          items={config.pipelines.map((item) => ({
-            key: item.id,
-            label: item.name,
-            href: href({ pipeline: item.id, stage: null }),
-            isActive: item.id === pipeline.id,
-          }))}
-        />
-        <SegmentedLinks
-          label="Вид"
-          variant="pill"
-          iconOnly
-          className="mb-1.5"
-          items={[
-            { key: "board", label: "Доска", icon: Columns3, href: href({ view: null }), isActive: view === "board" },
-            { key: "table", label: "Таблица", icon: Rows3, href: href({ view: "table" }), isActive: view === "table" },
-          ]}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput label="Поиск сделок" placeholder="Имя, телефон или метка" className="w-full sm:w-72" />
+    <div className="space-y-3">
+      <Toolbar
+        end={
+          <SegmentedLinks
+            label="Вид"
+            variant="pill"
+            iconOnly
+            items={[
+              { key: "board", label: "Доска", icon: Columns3, href: href({ view: null, sort: null }), isActive: view === "board" },
+              { key: "table", label: "Таблица", icon: Rows3, href: href({ view: "table" }), isActive: view === "table" },
+            ]}
+          />
+        }
+      >
+        {config.pipelines.length > 1 && (
+          <SegmentedLinks
+            label="Воронки"
+            variant="pill"
+            items={config.pipelines.map((item) => ({
+              key: item.id,
+              label: item.name,
+              href: href({ pipeline: item.id, stage: null }),
+              isActive: item.id === pipeline.id,
+            }))}
+          />
+        )}
+        <SearchInput label="Поиск сделок" placeholder="Имя, телефон или метка" className="w-full sm:w-64" />
         {isTeamView && (
           <FilterSelect
             label="Ответственный"
@@ -94,7 +106,7 @@ export async function SalesView({ user, params }: SalesViewProps) {
             options={pipeline.stages.map((stage) => ({ value: stage.id, label: stage.name }))}
           />
         )}
-      </div>
+      </Toolbar>
 
       {view === "board" ? (
         <BoardSection
@@ -106,12 +118,16 @@ export async function SalesView({ user, params }: SalesViewProps) {
         />
       ) : (
         <TableSection
-          filter={filter}
-          stageId={getParam(params, "stage")}
-          page={getPageParam(params)}
-          pipeline={pipeline}
+          query={{
+            ...filter,
+            stageId: getParam(params, "stage"),
+            attention: null,
+            sort: parseDealSort(getParam(params, "sort")),
+            ...pageParams(getPageParam(params), TABLE_PAGE_SIZE),
+          }}
+          pipelines={[pipeline]}
           showManager={isTeamView}
-          hrefForPage={(page) => href({ page: page > 1 ? String(page) : null })}
+          hrefFor={href}
         />
       )}
     </div>
@@ -122,46 +138,53 @@ async function BoardSection({
   filter,
   ...props
 }: { filter: DealsFilter } & Omit<React.ComponentProps<typeof PipelineBoard>, "board">) {
-  const board = await salesRepository.getBoard(filter)
+  const result = await tryLoad(() => salesRepository.getBoard(filter))
+  if (!result.ok) return <ApiErrorState error={result.error} />
   // key: при смене фильтров локальное состояние доски начинается с новых данных
-  return <PipelineBoard key={JSON.stringify(filter)} board={board} {...props} />
+  return <PipelineBoard key={JSON.stringify(filter)} board={result.data} {...props} />
 }
 
 type TableSectionProps = {
-  filter: DealsFilter
-  stageId: string | null
-  page: number
-  pipeline: Pipeline
+  query: DealsListQuery
+  pipelines: readonly Pipeline[]
   showManager: boolean
-  hrefForPage: (page: number) => string
+  hrefFor: (patch: ParamPatch) => string
 }
 
-async function TableSection({ filter, stageId, page, pipeline, showManager, hrefForPage }: TableSectionProps) {
-  const paging = pageParams(page, TABLE_PAGE_SIZE)
-  const result = await salesRepository.listDeals({ ...filter, stageId, ...paging })
+/** Таблица сделок — общая для «Продаж» и «Списка» */
+export async function TableSection({ query, pipelines, showManager, hrefFor }: TableSectionProps) {
+  const result = await tryLoad(() => salesRepository.listDeals(query))
+  if (!result.ok) return <ApiErrorState error={result.error} />
   return (
     <DealsTable
-      deals={result.results}
-      pipeline={pipeline}
+      deals={result.data.results}
+      pipelines={pipelines}
+      showPipeline={query.pipelineId === null}
       showManager={showManager}
-      pageInfo={pageInfo(result.count, paging)}
-      hrefForPage={hrefForPage}
+      pageInfo={pageInfo(result.data.count, query)}
+      sort={query.sort}
+      hrefFor={hrefFor}
+      emptyDescription="Измените поиск или фильтры — например, выберите другой этап или сотрудника."
     />
   )
 }
 
+export function parseDealSort(value: string | null): DealSort {
+  return DEAL_SORTS.find((sort) => sort === value) ?? "-updated"
+}
+
 export function SalesViewSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true">
-      <div className="flex gap-2 border-b pb-2">
-        {[96, 120, 128].map((width) => (
-          <Skeleton key={width} className="h-7" style={{ width }} />
-        ))}
+    <div className="space-y-3" aria-busy="true">
+      <div className="flex gap-2">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="ml-auto h-8 w-16" />
       </div>
-      <Skeleton className="h-8 w-72" />
-      <div className="flex gap-3 overflow-hidden">
+      <Skeleton className="h-4 w-56" />
+      <div className="flex gap-2.5 overflow-hidden">
         {Array.from({ length: 5 }, (_, index) => (
-          <Skeleton key={index} className="h-96 w-72 shrink-0 rounded-xl" />
+          <Skeleton key={index} className="h-96 w-[17rem] shrink-0 rounded-xl" />
         ))}
       </div>
     </div>

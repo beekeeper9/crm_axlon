@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { WidgetErrorBoundary } from "@/components/shared/widget-error-boundary"
 import { widgetRegistry } from "@/features/dashboard/widget-registry"

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { CalendarClock, CircleCheckBig, UserX, type LucideIcon } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button } from "@/components/ui/button"

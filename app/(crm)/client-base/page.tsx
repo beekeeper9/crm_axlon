@@ -1,20 +1,26 @@
+import { Suspense } from "react"
 import type { Metadata } from "next"
 
-import { UpcomingSection } from "@/components/shared/upcoming-section"
-import { routes } from "@/config/routes"
+import { PageHeader } from "@/components/shared/page-header"
+import { ClientsView, ClientsViewSkeleton } from "@/features/clients"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "База клиентов" }
 
-export default function ClientBasePage() {
+type ClientBasePageProps = PageProps<"/client-base">
+
+async function ClientBaseContent({ searchParams }: Pick<ClientBasePageProps, "searchParams">) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams])
+  return <ClientsView user={user} params={params} />
+}
+
+export default function ClientBasePage({ searchParams }: ClientBasePageProps) {
   return (
-    <UpcomingSection
-      href={routes.clientBase}
-      description="Поиск по всей истории клиентов"
-      plannedFeatures={[
-        "Поиск по имени или телефону",
-        "Закрытые и архивные сделки клиента",
-        "Переход к открытым сделкам того же человека",
-      ]}
-    />
+    <div className="space-y-5">
+      <PageHeader title="База клиентов" description="Все клиенты за всю историю: найдите по имени или телефону и откройте нужную сделку" />
+      <Suspense fallback={<ClientsViewSkeleton />}>
+        <ClientBaseContent searchParams={searchParams} />
+      </Suspense>
+    </div>
   )
 }

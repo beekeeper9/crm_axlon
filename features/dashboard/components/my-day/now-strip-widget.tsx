@@ -7,7 +7,7 @@ import {
   MessageSquare,
   type LucideIcon,
 } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"

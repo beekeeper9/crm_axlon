@@ -1,20 +1,26 @@
+import { Suspense } from "react"
 import type { Metadata } from "next"
 
-import { UpcomingSection } from "@/components/shared/upcoming-section"
-import { routes } from "@/config/routes"
+import { PageHeader } from "@/components/shared/page-header"
+import { AfterMeetingView, AfterMeetingViewSkeleton } from "@/features/after-meeting"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "После встречи" }
 
-export default function AfterMeetingPage() {
+type AfterMeetingPageProps = PageProps<"/after-meeting">
+
+async function AfterMeetingContent({ searchParams }: Pick<AfterMeetingPageProps, "searchParams">) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams])
+  return <AfterMeetingView user={user} params={params} />
+}
+
+export default function AfterMeetingPage({ searchParams }: AfterMeetingPageProps) {
   return (
-    <UpcomingSection
-      href={routes.afterMeeting}
-      description="Лиды после консультации — до оплаты, отказа или отложенного решения"
-      plannedFeatures={[
-        "Группы: требуют действия, ждут ответа, без шага, просрочено, запланировано",
-        "Контекст лида, собранный ИИ, и следующий шаг",
-        "Переход в карточку лида и к переписке",
-      ]}
-    />
+    <div className="space-y-5">
+      <PageHeader title="После встречи" description="Запишите итог, договорённости и следующий шаг, пока детали свежие" />
+      <Suspense fallback={<AfterMeetingViewSkeleton />}>
+        <AfterMeetingContent searchParams={searchParams} />
+      </Suspense>
+    </div>
   )
 }

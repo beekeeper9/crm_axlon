@@ -55,6 +55,9 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Вторичный текст строк: дата, клиент, ответственный. Крупнее подписи, мельче данных */
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.125rem;
 }
 
 :root {
@@ -105,42 +108,48 @@
   --sidebar-ring: oklch(0.5 0.19 265);
 }
 
-/* Тёмная тема подготовлена в токенах, но в интерфейсе пока не включается */
+/*
+ * Тёмная тема — основная. Слои поверхностей от тёмного к светлому:
+ * background (приложение) → card (рабочие панели) → popover (меню, диалоги).
+ * Фон не чёрный: при 6–8 часах работы мягкий графит меньше утомляет глаза.
+ */
 .dark {
-  --background: oklch(0.16 0.012 262);
-  --foreground: oklch(0.96 0.005 260);
-  --card: oklch(0.2 0.014 262);
-  --card-foreground: oklch(0.96 0.005 260);
-  --popover: oklch(0.2 0.014 262);
-  --popover-foreground: oklch(0.96 0.005 260);
-  --primary: oklch(0.66 0.16 265);
-  --primary-foreground: oklch(0.16 0.012 262);
-  --secondary: oklch(0.26 0.014 262);
-  --secondary-foreground: oklch(0.96 0.005 260);
-  --muted: oklch(0.26 0.014 262);
-  --muted-foreground: oklch(0.7 0.015 260);
-  --accent: oklch(0.28 0.04 265);
-  --accent-foreground: oklch(0.9 0.04 265);
-  --success: oklch(0.7 0.14 158);
-  --warning: oklch(0.78 0.14 70);
-  --destructive: oklch(0.68 0.19 24);
-  --info: oklch(0.66 0.16 265);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.66 0.16 265);
-  --chart-1: oklch(0.66 0.16 265);
-  --chart-2: oklch(0.72 0.11 205);
-  --chart-3: oklch(0.78 0.13 72);
-  --chart-4: oklch(0.68 0.15 305);
-  --chart-5: oklch(0.55 0.015 260);
-  --sidebar: oklch(0.18 0.013 262);
+  --background: oklch(0.185 0.009 260);
+  --foreground: oklch(0.94 0.004 260);
+  --card: oklch(0.215 0.01 260);
+  --card-foreground: oklch(0.94 0.004 260);
+  --popover: oklch(0.245 0.011 260);
+  --popover-foreground: oklch(0.94 0.004 260);
+  /* Акцент — только для действий, выбора и фокуса */
+  --primary: oklch(0.68 0.14 262);
+  --primary-foreground: oklch(0.17 0.02 262);
+  --secondary: oklch(0.255 0.01 260);
+  --secondary-foreground: oklch(0.94 0.004 260);
+  --muted: oklch(0.255 0.01 260);
+  --muted-foreground: oklch(0.7 0.012 260);
+  /* Подложка наведения и выбранной строки — почти нейтральная */
+  --accent: oklch(0.27 0.022 262);
+  --accent-foreground: oklch(0.95 0.01 262);
+  --success: oklch(0.72 0.13 160);
+  --warning: oklch(0.79 0.13 75);
+  --destructive: oklch(0.68 0.17 24);
+  --info: oklch(0.68 0.14 262);
+  --border: oklch(1 0 0 / 7.5%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.68 0.14 262);
+  --chart-1: oklch(0.68 0.14 262);
+  --chart-2: oklch(0.72 0.1 205);
+  --chart-3: oklch(0.78 0.12 72);
+  --chart-4: oklch(0.68 0.13 305);
+  --chart-5: oklch(0.56 0.013 260);
+  --sidebar: oklch(0.2 0.01 260);
   --sidebar-foreground: oklch(0.88 0.008 260);
-  --sidebar-primary: oklch(0.66 0.16 265);
-  --sidebar-primary-foreground: oklch(0.16 0.012 262);
-  --sidebar-accent: oklch(0.26 0.02 262);
-  --sidebar-accent-foreground: oklch(0.96 0.005 260);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.66 0.16 265);
+  --sidebar-primary: oklch(0.68 0.14 262);
+  --sidebar-primary-foreground: oklch(0.17 0.02 262);
+  --sidebar-accent: oklch(0.27 0.022 262);
+  --sidebar-accent-foreground: oklch(0.95 0.01 262);
+  --sidebar-border: oklch(1 0 0 / 7.5%);
+  --sidebar-ring: oklch(0.68 0.14 262);
 }
 
 @layer base {
@@ -149,10 +158,16 @@
   }
   body {
     @apply bg-background text-foreground;
+    line-height: 1.45;
     /* Inter: одноэтажная «a» и цифры одинаковой ширины по умолчанию */
     font-feature-settings: "cv11", "tnum";
   }
   html {
     @apply font-sans;
+    color-scheme: dark;
+  }
+  /* Видимый фокус для всего, что получает фокус с клавиатуры */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
   }
 }

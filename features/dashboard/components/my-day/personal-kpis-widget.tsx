@@ -1,4 +1,4 @@
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { TrendIndicator } from "@/components/shared/trend-indicator"
 import { dashboardRepository } from "@/features/dashboard/api/dashboard-repository"

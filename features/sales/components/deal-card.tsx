@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, CircleCheckBig, ExternalLink, GripVertical, MoreHorizontal } from "lucide-react"
-import { cn } from "cn"
+import { CalendarClock, CircleCheckBig, CircleDashed, ExternalLink, MoreHorizontal } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 import { PersonAvatar } from "@/components/shared/person-avatar"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { leadRoute } from "@/config/routes"
 import type { Deal, PipelineStage } from "@/features/sales/schemas"
-import { formatDateTime, formatDayMonth, formatDecimalMoney } from "@/lib/format"
+import { formatDateTime, formatDecimalMoney } from "@/lib/format"
 
 type DealCardProps = {
   deal: Deal
@@ -47,6 +47,7 @@ export function DealCard({
   onMove,
   onClose,
 }: DealCardProps) {
+  const tag = deal.tags[0]
   return (
     <li
       draggable={canEdit}
@@ -57,53 +58,31 @@ export function DealCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group/deal relative space-y-2 rounded-lg border bg-card p-3 transition-[opacity,border-color] hover:border-foreground/20",
+        "group/deal relative space-y-1.5 rounded-lg bg-card px-3 py-2.5 ring-1 ring-border transition-[box-shadow,opacity] hover:ring-foreground/20 focus-within:ring-ring/60",
         canEdit && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-40"
       )}
     >
       <div className="flex items-start gap-1">
-        {canEdit && (
-          <GripVertical
-            className="mt-0.5 -ml-1 size-4 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover/deal:opacity-100 max-md:hidden"
-            aria-hidden
-          />
-        )}
+        {/* Ссылка растянута на всю карточку; меню лежит поверх неё */}
         <Link
           href={leadRoute(deal.id)}
           draggable={false}
-          className="min-w-0 flex-1 text-sm leading-snug font-medium hover:text-primary focus-visible:text-primary focus-visible:outline-none"
+          className="line-clamp-2 min-w-0 flex-1 text-sm leading-snug font-medium after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none"
         >
           {deal.title}
         </Link>
         <DealMenu deal={deal} openStages={openStages} canEdit={canEdit} onMove={onMove} onClose={onClose} />
       </div>
 
-      {(deal.amount || deal.tags.length > 0) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {deal.amount && deal.currency && (
-            <span className="text-sm font-semibold tabular-nums">{formatDecimalMoney(deal.amount, deal.currency)}</span>
-          )}
-          {deal.tags.map((tag) => (
-            <span key={tag} className="rounded bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
       <NextAction deal={deal} />
 
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        {showManager ? (
-          <span className="flex min-w-0 items-center gap-1.5">
-            <PersonAvatar name={deal.manager.name} />
-            <span className="truncate">{deal.manager.name}</span>
-          </span>
-        ) : (
-          <span />
-        )}
-        <span className="shrink-0">на этапе с {formatDayMonth(deal.stageEnteredAt)}</span>
+      <div className="flex items-center gap-2">
+        <span className={cn("text-meta tabular-nums", deal.amount ? "font-semibold" : "text-muted-foreground")}>
+          {deal.amount && deal.currency ? formatDecimalMoney(deal.amount, deal.currency) : "Без суммы"}
+        </span>
+        {tag && <span className="truncate rounded bg-muted px-1.5 text-[11px] leading-4 text-muted-foreground">{tag}</span>}
+        {showManager && <PersonAvatar name={deal.manager.name} className="ml-auto" />}
       </div>
     </li>
   )
@@ -112,16 +91,23 @@ export function DealCard({
 function NextAction({ deal }: { deal: Deal }) {
   const next = deal.nextAction
   if (!next) {
-    return <p className="text-xs font-medium text-warning">Нет следующего шага</p>
+    return (
+      <p className="flex items-center gap-1.5 text-meta text-warning">
+        <CircleDashed className="size-3.5 shrink-0" aria-hidden />
+        Нет следующего шага
+      </p>
+    )
   }
   return (
-    <p className={cn("flex items-start gap-1.5 text-xs", next.isOverdue ? "text-destructive" : "text-muted-foreground")}>
-      <ArrowRight className="mt-px size-3 shrink-0" aria-hidden />
-      <span>
-        <span className={cn(!next.isOverdue && "text-foreground/90")}>{next.title}</span>
-        {next.dueAt && ` · ${formatDateTime(next.dueAt)}`}
-        {next.isOverdue && <span className="font-medium"> · просрочено</span>}
-      </span>
+    <p className={cn("flex min-w-0 items-center gap-1.5 text-meta", next.isOverdue ? "text-destructive" : "text-muted-foreground")}>
+      <CalendarClock className="size-3.5 shrink-0" aria-hidden />
+      {next.dueAt && (
+        <span className="shrink-0 tabular-nums">
+          {next.isOverdue && <span className="sr-only">Просрочено: </span>}
+          {formatDateTime(next.dueAt)}
+        </span>
+      )}
+      <span className={cn("truncate", !next.isOverdue && "text-foreground/85")}>{next.title}</span>
     </p>
   )
 }
@@ -137,7 +123,7 @@ function DealMenu({ deal, openStages, canEdit, onMove, onClose }: DealMenuProps)
           <Button
             variant="ghost"
             size="icon-xs"
-            className="-mt-0.5 -mr-1 shrink-0 text-muted-foreground"
+            className="relative z-10 -mt-0.5 -mr-1.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/deal:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 pointer-coarse:opacity-100"
             aria-label={`Действия: ${deal.title}`}
           />
         }

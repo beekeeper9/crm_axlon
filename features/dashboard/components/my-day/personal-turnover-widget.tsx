@@ -3,7 +3,7 @@ import { Wallet } from "lucide-react"
 import { WidgetCard } from "@/components/shared/widget-card"
 import { dashboardRepository } from "@/features/dashboard/api/dashboard-repository"
 import { PlanProgressBar } from "@/features/dashboard/components/plan-progress-bar"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { expectedProgress, paceStatusByRatio } from "@/features/dashboard/lib/plan-pace"
 import {

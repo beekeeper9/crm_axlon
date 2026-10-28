@@ -93,7 +93,8 @@ Backend: `owner`, `admin`, `manager`, `sales_rep`, `viewer`. Перевод в �
 - **Настройки воронок** `salesConfigSchema`: `pipelines: [{ id, name, stages: [{ id, name, kind: open|won|lost }] }]`, `lossReasons: [{ id, label }]`. Этапы и порядок задаёт компания; интерфейс не знает названий этапов.
 - **Доска** `boardSchema`: `{ pipelineId, columns: [{ stageId, count, totalAmount, currency, deals[] }] }` — только рабочие этапы. `count` и `totalAmount` считает backend с учётом фильтров. Нужна ли подгрузка карточек колонки по `limit/offset` — уточнить.
 - **Сделка** `dealSchema`: `id, title, client { name, phone }, pipelineId, stageId, amount, currency, manager { id, name }, nextAction { title, dueAt, isOverdue } | null, stageEnteredAt, updatedAt, tags[]`. Сделка = лид в воронке, открывается карточкой лида.
-- **Таблица**: тот же объект, `{ count, results }`; фильтры `pipeline_id`, `stage_id`, `manager_id`, `search`; сортировка по `updated_at` (уточнить).
+- **Таблица и «Список»**: тот же объект, `{ count, results }`; фильтры `pipeline_id` (необязателен — в «Списке» все воронки), `stage_id`, `manager_id`, `search`, «требует внимания» (`overdue` — следующий шаг просрочен, `no_next_step` — шага нет); сортировка `-updated` (по умолчанию), `updated`, `amount`, `-amount`, `next_action`, `title`. Имена параметров и полей сортировки — предложение.
+- **Дата последней активности.** Сейчас «Обновлено» = `updatedAt`. Нужно ли отдельное поле `last_activity_at` (последний звонок, сообщение, встреча) — вопрос.
 - **Смена этапа** (нужен endpoint): `stage_id`; при закрытии — `loss_reason_id` (обязателен для lost) и `comment`. Backend проверяет правила компании (успех только с оплатой) и возвращает обновлённую сделку или `validation_error`.
 
 ### Карточка лида — `features/leads/schemas.ts`
@@ -119,6 +120,23 @@ Backend: `owner`, `admin`, `manager`, `sales_rep`, `viewer`. Перевод в �
 `meetingSchema`: `id, startsAt, endsAt | null, lead { id, name }, format (office|online|visit), location, host (проводит), bookedBy (назначил), status (scheduled|confirmed|held|no_show|rescheduled|cancelled), clientConfirmation (confirmed|not_confirmed|not_sent), outcomeRequired, notes, outcomeComment`.
 Фильтры: `period` (yesterday|today|tomorrow|week — границы дней на backend) или произвольный интервал (уточнить формат), `status`, `host_id`, `lead_id`, `search`, `outcome_required`.
 Нужны операции: назначить, записать итог (`held|no_show|rescheduled` + новая дата и комментарий), отменить. `outcomeRequired`, напоминания (за 24 ч и 2 ч) и списание через 14 дней — на backend.
+
+### После встречи — `features/after-meeting/schemas.ts`
+
+Очередь: `{ groups: [{ id: outcome_required|no_next_step|awaiting_decision, title, description, items }] }`. Элемент: встреча (`id, startsAt, format, host, outcomeComment`), лид (`id, name, phone`), воронка, этап, сумма, текущий следующий шаг, `aiHint`. **Группы раскладывает backend.**
+Нужна операция «обработать после встречи»: итог (если не записан: `held|no_show|rescheduled` + новая дата), краткий итог, договорённости, следующий шаг (создаёт задачу). Один запрос или два (итог встречи + задача) — решить с backend.
+
+### База клиентов — `features/clients/schemas.ts`
+
+Клиент — человек или компания с одной или несколькими сделками (в том числе закрытыми). Отдельной сущности в контракте пока нет.
+Список: `{ id, name, phones[], email, city, manager, openDealsCount, dealsCount, currentDeal { id, stageName } | null, lastInteractionAt }`; фильтры `search` (имя и телефон по всей истории, включая архив; телефон — по цифрам), `status` (`active` — есть открытая сделка, `archive`), `manager_id`. Детали: + `deals[]` (`id, title, pipelineName, stageName, stageKind, amount, currency, updatedAt`) и `recentActivity[]`.
+Вопросы: как backend склеивает дубли (один телефон — разные имена), есть ли у клиента собственные поля (компания, ИНН), отдельная карточка клиента или достаточно панели.
+
+### Звонки — `features/calls/schemas.ts`
+
+`{ id, at, direction (incoming|outgoing), status (answered|missed), durationSec, phone, lead | null, manager, hasRecording, transcript[{ speaker, text }] | null, analysis { summary, agreements[], objections[], nextAction, generatedAt } | null, rating { score 1–5, comment } | null }`.
+Фильтры: `direction`, только пропущенные, `manager_id`, `lead_id`, `search` (клиент, номер). **`rating` — только руководителям**, остальным backend отдаёт `null` (демо-слой повторяет правило — проверено: у менеджера оценки нет даже в HTML).
+Вопросы: ссылка на запись и права на прослушивание; когда появляется `analysis` (задержка обработки); порог «от 30 секунд» — на backend.
 
 ### «Мой день», «Фокус», результаты отдела, рабочее пространство
 

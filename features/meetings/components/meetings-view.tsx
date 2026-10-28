@@ -1,10 +1,11 @@
 import Link from "next/link"
 import { ClipboardList, X } from "lucide-react"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { FilterSelect } from "@/components/shared/filter-select"
 import { SearchInput } from "@/components/shared/search-input"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
-import { buttonVariants } from "@/components/ui/button"
+import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
 import { meetingsRepository } from "@/features/meetings/api/meetings-repository"
@@ -12,6 +13,7 @@ import { MeetingsList } from "@/features/meetings/components/meetings-list"
 import { MEETING_PERIODS, MEETING_STATUS_META } from "@/features/meetings/lib/meeting-meta"
 import { meetingStatusSchema } from "@/features/meetings/schemas"
 import { teamRepository } from "@/features/team"
+import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
 import { formatNumber, pluralize } from "@/lib/format"
 import { editModeFor } from "@/lib/permissions/edit-mode"
@@ -38,20 +40,24 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
   const href = (patch: Record<string, string | null>) => hrefWithParams(routes.meetings, params, patch)
 
   const common = { hostId, leadId: null, limit: PAGE_LIMIT_MAX, offset: 0 }
-  const [result, pendingOutcome, members] = await Promise.all([
-    meetingsRepository.listMeetings({
-      ...common,
-      period: onlyOutcome ? null : period,
-      status: statusResult.success ? statusResult.data : null,
-      search: getParam(params, "q"),
-      outcomeRequired: onlyOutcome,
-    }),
-    meetingsRepository.listMeetings({ ...common, period: null, status: null, search: null, outcomeRequired: true, limit: 1 }),
-    isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-  ])
+  const loaded = await tryLoad(() =>
+    Promise.all([
+      meetingsRepository.listMeetings({
+        ...common,
+        period: onlyOutcome ? null : period,
+        status: statusResult.success ? statusResult.data : null,
+        search: getParam(params, "q"),
+        outcomeRequired: onlyOutcome,
+      }),
+      meetingsRepository.listMeetings({ ...common, period: null, status: null, search: null, outcomeRequired: true, limit: 1 }),
+      isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
+    ])
+  )
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const [result, pendingOutcome, members] = loaded.data
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {pendingOutcome.count > 0 && !onlyOutcome && (
         <Link
           href={href({ outcome: "required", period: null, status: null })}
@@ -65,18 +71,22 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
         </Link>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b">
+      <Toolbar>
         {onlyOutcome ? (
-          <div className="flex h-9 items-center gap-2 text-sm font-medium">
-            Встречи без итога
-            <Link href={href({ outcome: null })} className={buttonVariants({ variant: "ghost", size: "xs" })}>
-              <X data-icon="inline-start" aria-hidden />
-              Сбросить
+          <span className="flex h-8 items-center gap-1 rounded-lg bg-muted px-2.5 text-sm font-medium">
+            Без итога
+            <Link
+              href={href({ outcome: null })}
+              aria-label="Сбросить фильтр «Без итога»"
+              className="-mr-1 flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" aria-hidden />
             </Link>
-          </div>
+          </span>
         ) : (
           <SegmentedLinks
             label="Период"
+            variant="pill"
             items={MEETING_PERIODS.map((item) => ({
               key: item.value,
               label: item.label,
@@ -85,10 +95,7 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
             }))}
           />
         )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput label="Поиск встреч" placeholder="Клиент или заметка" className="w-full sm:w-72" />
+        <SearchInput label="Поиск встреч" placeholder="Клиент или заметка" className="w-full sm:w-64" />
         <FilterSelect
           label="Статус"
           param="status"
@@ -103,7 +110,7 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
             options={members.map((member) => ({ value: member.id, label: member.name }))}
           />
         )}
-      </div>
+      </Toolbar>
 
       <MeetingsList
         key={JSON.stringify([period, onlyOutcome, statusResult.data, hostId, getParam(params, "q")])}

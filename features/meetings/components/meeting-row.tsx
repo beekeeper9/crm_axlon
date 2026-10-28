@@ -32,7 +32,7 @@ export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editM
         <time dateTime={meeting.startsAt} className="text-base font-semibold tabular-nums">
           {formatTime(meeting.startsAt)}
         </time>
-        {meeting.endsAt && <span className="text-xs text-muted-foreground tabular-nums">до {formatTime(meeting.endsAt)}</span>}
+        {meeting.endsAt && <span className="text-meta text-muted-foreground tabular-nums">до {formatTime(meeting.endsAt)}</span>}
       </div>
 
       <div className="min-w-0 flex-1 space-y-1.5">
@@ -53,7 +53,7 @@ export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editM
           {isDemoChanged && <span className="text-xs text-warning">демо · не сохранено</span>}
         </div>
 
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-meta text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <format.icon className="size-3.5" aria-hidden />
             {format.label}
@@ -72,9 +72,9 @@ export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editM
           )}
         </p>
 
-        {meeting.notes && <p className="text-sm text-foreground/90">{meeting.notes}</p>}
+        {meeting.notes && <p className="text-meta text-foreground/85">{meeting.notes}</p>}
         {meeting.outcomeComment && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             <span className="font-medium text-foreground/80">Итог:</span> {meeting.outcomeComment}
           </p>
         )}

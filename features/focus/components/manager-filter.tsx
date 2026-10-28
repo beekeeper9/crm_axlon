@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { routes } from "@/config/routes"
 import { formatInitials, formatNumber } from "@/lib/format"

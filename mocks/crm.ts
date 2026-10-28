@@ -119,6 +119,12 @@ const rows: DemoDealRow[] = [
   ["lead-c-01", "Роза Акматова", "+996 777 25-26-27", "support", "c-docs", 4, "310000.00", ["Проверить комплект документов", 1, "11:00"], 4, []],
   ["lead-c-02", "Талант Иманалиев", "+996 700 28-29-30", "support", "c-docs", 1, "260000.00", ["Напомнить про справку", -1, "15:00"], 6, []],
   ["lead-c-03", "Мээрим Жунусова", "+996 555 31-32-33", "support", "c-process", 0, "290000.00", ["Сообщить клиенту статус", 2, "12:00"], 9, []],
+  // Закрытые сделки — архив клиентской базы
+  ["lead-x-01", "Бермет Усенова", "+996 555 21-43-65", "sales", "s-won", 0, "240000.00", null, 190, []],
+  ["lead-x-02", "Азамат Жээнбеков", "+996 700 44-55-66", "sales", "s-lost", 0, "180000.00", null, 240, []],
+  ["lead-x-03", "Алмаз Кочкоров", "+996 777 34-35-36", "sales", "s-won", 2, "310000.00", null, 120, []],
+  ["lead-x-04", "Саида Рысбекова", "+996 709 37-38-39", "sales", "s-lost", 4, null, null, 75, []],
+  ["lead-x-05", "ОсОО «Демо Логистик»", "+996 312 90-11-22", "support", "c-done", 1, "520000.00", null, 300, ["Юрлицо"]],
 ]
 
 function dueAt(next: NonNullable<DemoDealRow[7]>): string | null {
@@ -143,7 +149,8 @@ function toDeal([id, title, phone, pipelineId, stageId, manager, amount, next, d
       isOverdue: nextDueAt !== null && new Date(nextDueAt) < new Date(DEMO_NOW),
     },
     stageEnteredAt: demoAt(-daysOnStage, "10:00"),
-    updatedAt: demoAt(-Math.min(daysOnStage, 2), "16:20"),
+    // Старые закрытые сделки не менялись с момента закрытия
+    updatedAt: daysOnStage > 30 ? demoAt(-daysOnStage, "16:20") : demoAt(-Math.min(daysOnStage, 2), "16:20"),
     tags,
   }
 }

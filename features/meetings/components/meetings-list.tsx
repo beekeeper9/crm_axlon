@@ -4,14 +4,14 @@ import { useState } from "react"
 import { CalendarPlus, CalendarX2 } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/empty-state"
+import { ListGroup, ListPanel } from "@/components/shared/list-panel"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { MeetingFormDialog } from "@/features/meetings/components/meeting-form-dialog"
 import { MeetingOutcomeDialog } from "@/features/meetings/components/meeting-outcome-dialog"
 import { MeetingRow } from "@/features/meetings/components/meeting-row"
 import type { Meeting, MeetingFormValues, MeetingOutcomeFormValues } from "@/features/meetings/schemas"
 import { companyDateOf, companyWallTimeToIso } from "@/lib/datetime"
-import { formatDateTime, formatNumber, formatWeekdayDate } from "@/lib/format"
+import { formatDateTime, formatNumber, formatWeekdayDate, pluralize } from "@/lib/format"
 import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
 
 type Person = { id: string; name: string }
@@ -27,6 +27,8 @@ type MeetingsListProps = {
   currentUser: Person
   emptyTitle: string
   emptyDescription: string
+  /** Заголовок над списком (в карточке лида); без него — количество встреч */
+  heading?: string
 }
 
 function groupByDay(meetings: readonly Meeting[]): { day: string; meetings: Meeting[] }[] {
@@ -48,6 +50,7 @@ export function MeetingsList({
   currentUser,
   emptyTitle,
   emptyDescription,
+  heading,
 }: MeetingsListProps) {
   const [meetings, setMeetings] = useState<readonly Meeting[]>(initialMeetings)
   const [changedIds, setChangedIds] = useState<ReadonlySet<string>>(new Set())
@@ -107,9 +110,13 @@ export function MeetingsList({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {meetings.length > 0 ? `Встреч: ${formatNumber(meetings.length)}` : null}
-        </p>
+        {heading ? (
+          <h2 className="text-sm font-semibold">{heading}</h2>
+        ) : (
+          <p className="text-meta text-muted-foreground">
+            {meetings.length > 0 ? `${formatNumber(meetings.length)} ${pluralize(meetings.length, ["встреча", "встречи", "встреч"])}` : null}
+          </p>
+        )}
         {editMode !== "read-only" && (
           <Button size="sm" onClick={() => setFormOpen(true)} disabled={!canEdit} title={canEdit ? undefined : EDIT_UNAVAILABLE_HINT}>
             <CalendarPlus data-icon="inline-start" aria-hidden />
@@ -119,32 +126,32 @@ export function MeetingsList({
       </div>
 
       {days.length === 0 ? (
-        <Card>
+        <ListPanel>
           <EmptyState icon={CalendarX2} title={emptyTitle} description={emptyDescription} />
-        </Card>
+        </ListPanel>
       ) : (
-        days.map(({ day, meetings: dayMeetings }) => (
-          <section key={day} aria-labelledby={`meetings-${day}`} className="space-y-1.5">
-            <h2 id={`meetings-${day}`} className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {formatWeekdayDate(`${day}T12:00:00Z`)}
-            </h2>
-            <Card className="py-0">
-              <ul className="divide-y">
-                {dayMeetings.map((meeting) => (
-                  <MeetingRow
-                    key={meeting.id}
-                    meeting={meeting}
-                    showLead={lead === null}
-                    showPeople={showPeople}
-                    isDemoChanged={changedIds.has(meeting.id)}
-                    editMode={editMode}
-                    onRecordOutcome={setOutcomeFor}
-                  />
-                ))}
-              </ul>
-            </Card>
-          </section>
-        ))
+        <ListPanel>
+          {days.map(({ day, meetings: dayMeetings }) => (
+            <ListGroup
+              key={day}
+              id={`meetings-${day}`}
+              title={formatWeekdayDate(`${day}T12:00:00Z`)}
+              count={dayMeetings.length}
+            >
+              {dayMeetings.map((meeting) => (
+                <MeetingRow
+                  key={meeting.id}
+                  meeting={meeting}
+                  showLead={lead === null}
+                  showPeople={showPeople}
+                  isDemoChanged={changedIds.has(meeting.id)}
+                  editMode={editMode}
+                  onRecordOutcome={setOutcomeFor}
+                />
+              ))}
+            </ListGroup>
+          ))}
+        </ListPanel>
       )}
 
       <MeetingOutcomeDialog meeting={outcomeFor} onOpenChange={(open) => !open && setOutcomeFor(null)} onSave={saveOutcome} />

@@ -1,4 +1,4 @@
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import type { PaceStatus } from "@/features/dashboard/lib/plan-pace"
 import { formatPercent } from "@/lib/format"

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Check, Undo2 } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { StatusBadge } from "@/components/shared/status-badge"

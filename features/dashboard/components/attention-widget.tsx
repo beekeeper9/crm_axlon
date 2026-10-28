@@ -6,7 +6,7 @@ import {
   TrendingDown,
   type LucideIcon,
 } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"

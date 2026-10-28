@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Inbox, Undo2 } from "lucide-react"
-import { cn } from "cn"
+import { Undo2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,8 @@ import { CloseDealDialog, type CloseDealResult } from "@/features/sales/componen
 import { DealCard } from "@/features/sales/components/deal-card"
 import { findDeal, moveDeal } from "@/features/sales/lib/board-state"
 import type { Board, BoardColumn, Deal, LossReason, Pipeline } from "@/features/sales/schemas"
-import { formatDecimalMoney, formatNumber } from "@/lib/format"
+import { addDecimals } from "@/lib/decimal"
+import { formatDecimalMoney, formatNumber, pluralize } from "@/lib/format"
 import type { EditMode } from "@/lib/permissions/edit-mode"
 
 
@@ -54,16 +55,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
 
   return (
     <div className="space-y-3">
-      {editMode === "unavailable" && (
-        <p className="text-xs text-muted-foreground">
-          Смена этапа станет доступна после согласования API с backend.
-        </p>
-      )}
-      {canEdit && !lastChange && (
-        <p className="text-xs text-muted-foreground max-md:hidden">
-          Перетащите карточку на другой этап или выберите этап в меню карточки.
-        </p>
-      )}
+      <BoardSummary columns={columns} editMode={editMode} hasChange={lastChange !== null} />
       <div aria-live="polite">
         {lastChange && (
           <DemoNotice className="items-center">
@@ -88,7 +80,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
       </div>
 
       <div className="-mx-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
-        <ol className="flex min-w-max gap-3" aria-label={`Этапы воронки «${pipeline.name}»`}>
+        <ol className="flex min-w-max gap-2.5" aria-label={`Этапы воронки «${pipeline.name}»`}>
           {columns.map((column) => {
             const stage = stagesById.get(column.stageId)
             if (!stage) return null
@@ -96,7 +88,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
             return (
               <li
                 key={column.stageId}
-                className="flex w-72 shrink-0 flex-col"
+                className="flex w-[17rem] shrink-0 flex-col"
                 onDragOver={(event) => {
                   if (!canEdit || !draggedId) return
                   event.preventDefault()
@@ -114,23 +106,20 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
                   setDraggedId(null)
                 }}
               >
-                <header className="mb-2 space-y-0.5 px-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="truncate text-sm font-semibold">{stage.name}</h2>
-                    <span className="rounded-md bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">
-                      {formatNumber(column.count)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    {column.totalAmount && column.currency
-                      ? formatDecimalMoney(column.totalAmount, column.currency)
-                      : "Сумма не указана"}
-                  </p>
+                <header className="mb-2 flex items-baseline justify-between gap-2 px-1">
+                  <h2 className="flex min-w-0 items-baseline gap-1.5 text-sm font-semibold">
+                    <span className="truncate">{stage.name}</span>
+                    <span className="text-meta font-normal text-muted-foreground tabular-nums">{formatNumber(column.count)}</span>
+                  </h2>
+                  <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
+                    {column.totalAmount && column.currency ? formatDecimalMoney(column.totalAmount, column.currency) : "—"}
+                  </span>
                 </header>
                 <ul
+                  aria-label={`${stage.name}: ${formatNumber(column.count)}`}
                   className={cn(
-                    "flex min-h-32 flex-1 flex-col gap-2 rounded-xl p-1.5 transition-colors md:max-h-[calc(100svh-17rem)] md:overflow-y-auto",
-                    isDropTarget ? "bg-primary/10 ring-2 ring-primary/40" : "bg-muted/40"
+                    "flex min-h-24 flex-1 flex-col gap-1.5 rounded-xl p-1 transition-colors md:max-h-[calc(100svh-15rem)] md:overflow-y-auto",
+                    isDropTarget ? "bg-primary/10 ring-1 ring-primary/50 ring-inset" : "bg-muted/25"
                   )}
                 >
                   {column.deals.map((deal) => (
@@ -151,9 +140,8 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
                     />
                   ))}
                   {column.deals.length === 0 && (
-                    <li className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                      <Inbox className="size-4" aria-hidden />
-                      Нет сделок
+                    <li className="flex flex-1 items-center justify-center px-3 py-6 text-center text-meta text-muted-foreground">
+                      Пусто
                     </li>
                   )}
                 </ul>
@@ -172,6 +160,46 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
         onOpenChange={(open) => !open && setClosingDeal(null)}
         onConfirm={handleClose}
       />
+    </div>
+  )
+}
+
+type BoardSummaryProps = {
+  columns: readonly BoardColumn[]
+  editMode: EditMode
+  hasChange: boolean
+}
+
+/** Итог по воронке над доской и подсказка, как менять этап */
+function BoardSummary({ columns, editMode, hasChange }: BoardSummaryProps) {
+  const count = columns.reduce((sum, column) => sum + column.count, 0)
+  const currencies = new Set(columns.flatMap((column) => (column.currency ? [column.currency] : [])))
+  const [currency] = currencies
+  // Суммы этапов приходят от backend; складываем их, только если валюта одна
+  const total =
+    currencies.size === 1 && currency
+      ? addDecimals(columns.flatMap((column) => (column.totalAmount ? [column.totalAmount] : [])))
+      : null
+
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-meta text-muted-foreground">
+      <p>
+        <span className="font-medium text-foreground tabular-nums">{formatNumber(count)}</span>{" "}
+        {pluralize(count, ["сделка", "сделки", "сделок"])} в работе
+        {total && currency && (
+          <>
+            {" · "}
+            <span className="font-medium text-foreground tabular-nums">{formatDecimalMoney(total, currency)}</span>
+          </>
+        )}
+      </p>
+      {!hasChange && (
+        <p className="max-md:hidden">
+          {editMode === "demo" && "Перетащите карточку на другой этап или выберите этап в меню «⋯»"}
+          {editMode === "unavailable" && "Смена этапа станет доступна после согласования API с backend"}
+          {editMode === "read-only" && "Только просмотр"}
+        </p>
+      )}
     </div>
   )
 }

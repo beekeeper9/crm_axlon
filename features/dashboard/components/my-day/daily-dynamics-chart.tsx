@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import {
   ChartContainer,

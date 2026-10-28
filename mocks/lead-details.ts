@@ -1,13 +1,13 @@
 /**
- * ДЕМО-ДАННЫЕ карточки лида: история, звонки, оплаты и контекст ИИ.
+ * ДЕМО-ДАННЫЕ карточки лида: история, оплаты и контекст ИИ (звонки — mocks/calls.ts).
  * Строятся из демо-сделок (mocks/crm.ts); у нескольких лидов история подробнее.
- * Тексты ИИ и транскрипции — вымышленные примеры, не результат работы модели.
+ * Тексты ИИ — вымышленные примеры, не результат работы модели.
  * Используются только в режиме NEXT_PUBLIC_DATA_SOURCE=mock.
  */
-import type { LeadActivity, LeadCall, LeadDetail } from "@/features/leads/schemas"
+import type { LeadActivity, LeadDetail } from "@/features/leads/schemas"
 import { addDecimals, subtractDecimal } from "@/lib/decimal"
 import { demoDeals, demoSalesConfig } from "@/mocks/crm"
-import { demoAt, demoManagers } from "@/mocks/team"
+import { demoAt } from "@/mocks/team"
 
 type Extra = {
   email?: string
@@ -17,7 +17,6 @@ type Extra = {
   ai?: { summary: string; nextSteps: string[] }
   payment?: { total: string; items: [kind: "prepayment" | "additional" | "full", amount: string, dayOffset: number][] }
   activity?: [kind: LeadActivity["kind"], dayOffset: number, time: string, title: string, body: string | null][]
-  calls?: Omit<LeadCall, "id" | "manager">[]
 }
 
 const extras: Record<string, Extra> = {
@@ -38,29 +37,6 @@ const extras: Record<string, Extra> = {
       ["note", -3, "15:40", "Заметка", "Сравнивала с другой компанией, у нас понравился сервис"],
       ["meeting", -6, "12:00", "Встреча назначена на 24 окт., 15:00", null],
     ],
-    calls: [
-      {
-        at: demoAt(-2, "16:05"),
-        direction: "outgoing",
-        durationSec: 252,
-        summary: "Клиентка готова к покупке, уточняла, можно ли разбить оплату на 2–3 платежа. Договорились вернуться с ответом.",
-        transcript: [
-          { speaker: "manager", text: "Эльнура, добрый день! Удобно говорить? Хотел узнать, как вам наше предложение после встречи." },
-          { speaker: "client", text: "Да, здравствуйте. В целом всё нравится, но сразу всю сумму сложно." },
-          { speaker: "manager", text: "Понимаю. Давайте я уточню варианты оплаты частями и вернусь к вам с графиком." },
-          { speaker: "client", text: "Хорошо, буду ждать. Лучше в мессенджер." },
-        ],
-        rating: { score: 4, comment: "Хорошо выявил потребность. Не назначил точное время следующего контакта." },
-      },
-      {
-        at: demoAt(-7, "11:20"),
-        direction: "incoming",
-        durationSec: 95,
-        summary: "Входящий звонок по рекламе. Записана на встречу.",
-        transcript: null,
-        rating: { score: 5, comment: null },
-      },
-    ],
   },
   "lead-f-03": {
     city: "Бишкек",
@@ -76,16 +52,6 @@ const extras: Record<string, Extra> = {
       ["payment", -5, "12:30", "Предоплата 160 000 сом", null],
       ["stage", -5, "12:31", "Этап: Принята предоплата", null],
       ["meeting", -8, "14:00", "Встреча состоялась", "Выбрал расширенный пакет"],
-    ],
-    calls: [
-      {
-        at: demoAt(-2, "16:10"),
-        direction: "outgoing",
-        durationSec: 160,
-        summary: "Подтвердил получение предоплаты, попросил прислать счёт на остаток на почту.",
-        transcript: null,
-        rating: { score: 3, comment: "Не уточнил дату оплаты остатка." },
-      },
     ],
   },
   "lead-f-04": {
@@ -113,6 +79,18 @@ const extras: Record<string, Extra> = {
       ["meeting", -1, "14:30", "Встреча состоялась", "Готов оплатить, ждёт реквизиты"],
     ],
   },
+}
+
+function stageName(stageId: string): string {
+  return demoSalesConfig.pipelines.flatMap((pipeline) => pipeline.stages).find((stage) => stage.id === stageId)?.name ?? ""
+}
+
+/** Лид создан за две недели до демо-сегодня или за неделю до входа на текущий этап, если это раньше */
+function createdAt(stageEnteredAt: string): string {
+  const weekBefore = new Date(new Date(stageEnteredAt).getTime() - 7 * 86_400_000)
+  const twoWeeksAgo = new Date(demoAt(-14, "11:00"))
+  const earliest = weekBefore < twoWeeksAgo ? weekBefore : twoWeeksAgo
+  return `${earliest.toISOString().slice(0, 10)}T11:00:00+06:00`
 }
 
 const PAYMENT_STAGES = new Set(["s-prepaid", "c-docs", "c-process"])
@@ -146,7 +124,7 @@ export function demoLeadDetail(leadId: string): LeadDetail | null {
     amount: deal.amount,
     currency: deal.currency,
     source: extra.source ?? (deal.tags.find((tag) => ["Сайт", "Instagram", "Рекомендация"].includes(tag)) ?? null),
-    createdAt: demoAt(-14, "11:00"),
+    createdAt: createdAt(deal.stageEnteredAt),
     stageEnteredAt: deal.stageEnteredAt,
     tags: deal.tags,
     nextAction: deal.nextAction,
@@ -168,16 +146,21 @@ export function demoLeadDetail(leadId: string): LeadDetail | null {
       label,
       value,
     })),
-    related: [],
+    related: demoDeals
+      .filter((item) => item.client.name === deal.client.name && item.id !== deal.id)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        pipelineName: demoSalesConfig.pipelines.find((candidate) => candidate.id === item.pipelineId)?.name ?? "",
+        stageName: stageName(item.stageId),
+      })),
   }
 }
 
 export function demoLeadActivity(leadId: string): LeadActivity[] {
   const deal = demoDeals.find((item) => item.id === leadId)
   if (!deal) return []
-  const stageName =
-    demoSalesConfig.pipelines.flatMap((pipeline) => pipeline.stages).find((stage) => stage.id === deal.stageId)?.name ?? ""
-  const rows = extras[leadId]?.activity ?? [["stage", 0, "00:00", `Этап: ${stageName}`, null] as const]
+  const rows = extras[leadId]?.activity ?? [["stage", 0, "00:00", `Этап: ${stageName(deal.stageId)}`, null] as const]
   const activity = rows.map(([kind, dayOffset, time, title, body], index) => ({
     id: `${leadId}-act-${index}`,
     at: kind === "stage" && !extras[leadId]?.activity ? deal.stageEnteredAt : demoAt(dayOffset, time),
@@ -186,12 +169,6 @@ export function demoLeadActivity(leadId: string): LeadActivity[] {
     body,
     author: kind === "chat" ? deal.client.name : deal.manager.name,
   }))
-  const created: LeadActivity = { id: `${leadId}-created`, at: demoAt(-14, "11:00"), kind: "note", title: "Лид создан", body: null, author: null }
+  const created: LeadActivity = { id: `${leadId}-created`, at: createdAt(deal.stageEnteredAt), kind: "note", title: "Лид создан", body: null, author: null }
   return [...activity, created].toSorted((a, b) => b.at.localeCompare(a.at))
-}
-
-export function demoLeadCalls(leadId: string): LeadCall[] {
-  const deal = demoDeals.find((item) => item.id === leadId)
-  const manager = deal?.manager ?? demoManagers[0]
-  return (extras[leadId]?.calls ?? []).map((call, index) => ({ ...call, id: `${leadId}-call-${index}`, manager }))
 }

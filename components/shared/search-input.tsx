@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { LoaderCircle, Search, X } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Input } from "@/components/ui/input"
 import { useSearchParamPatch } from "@/hooks/use-search-param-patch"

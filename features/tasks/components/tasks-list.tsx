@@ -4,15 +4,15 @@ import { useState } from "react"
 import { ListChecks, Plus } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/empty-state"
+import { ListGroup, ListPanel } from "@/components/shared/list-panel"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet"
 import { TaskFormDialog } from "@/features/tasks/components/task-form-dialog"
 import { TaskRow } from "@/features/tasks/components/task-row"
 import { DUE_GROUPS } from "@/features/tasks/lib/task-meta"
 import type { Task, TaskFormValues } from "@/features/tasks/schemas"
 import { companyWallTimeToIso } from "@/lib/datetime"
-import { formatNumber } from "@/lib/format"
+import { formatNumber, pluralize } from "@/lib/format"
 import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
 
 type Person = { id: string; name: string }
@@ -28,6 +28,8 @@ type TasksListProps = {
   lead: Person | null
   emptyTitle: string
   emptyDescription: string
+  /** Заголовок над списком (в карточке лида); без него — количество задач */
+  heading?: string
 }
 
 type Group = { id: string; label: string; tasks: Task[] }
@@ -61,6 +63,7 @@ export function TasksList({
   lead,
   emptyTitle,
   emptyDescription,
+  heading,
 }: TasksListProps) {
   const [tasks, setTasks] = useState<readonly Task[]>(initialTasks)
   const [changedIds, setChangedIds] = useState<ReadonlySet<string>>(new Set())
@@ -125,9 +128,13 @@ export function TasksList({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {tasks.length > 0 ? `Задач в списке: ${formatNumber(tasks.length)}` : null}
-        </p>
+        {heading ? (
+          <h2 className="text-sm font-semibold">{heading}</h2>
+        ) : (
+          <p className="text-meta text-muted-foreground">
+            {tasks.length > 0 ? `${formatNumber(tasks.length)} ${pluralize(tasks.length, ["задача", "задачи", "задач"])}` : null}
+          </p>
+        )}
         {editMode !== "read-only" && (
           <Button
             size="sm"
@@ -142,36 +149,34 @@ export function TasksList({
       </div>
 
       {groups.length === 0 ? (
-        <Card>
+        <ListPanel>
           <EmptyState icon={ListChecks} title={emptyTitle} description={emptyDescription} />
-        </Card>
+        </ListPanel>
       ) : (
-        groups.map((group) => (
-          <section key={group.id} aria-labelledby={`tasks-group-${group.id}`} className="space-y-1.5">
-            <h2 id={`tasks-group-${group.id}`} className="flex items-center gap-2 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              <span className={group.id === "overdue" ? "text-destructive" : group.id === "demo" ? "text-warning" : undefined}>
-                {group.label}
-              </span>
-              <span className="tabular-nums">{formatNumber(group.tasks.length)}</span>
-            </h2>
-            <Card className="py-0">
-              <ul className="divide-y">
-                {group.tasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    showAssignee={showAssignee}
-                    showLead={lead === null}
-                    isDemoChanged={changedIds.has(task.id)}
-                    canComplete={canEdit}
-                    onOpen={(item) => setOpenTaskId(item.id)}
-                    onComplete={(item) => complete(item, "")}
-                  />
-                ))}
-              </ul>
-            </Card>
-          </section>
-        ))
+        <ListPanel>
+          {groups.map((group) => (
+            <ListGroup
+              key={group.id}
+              id={`tasks-${group.id}`}
+              title={group.label}
+              count={group.tasks.length}
+              tone={group.id === "overdue" ? "danger" : group.id === "demo" ? "warning" : "default"}
+            >
+              {group.tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  showAssignee={showAssignee}
+                  showLead={lead === null}
+                  isDemoChanged={changedIds.has(task.id)}
+                  canComplete={canEdit}
+                  onOpen={(item) => setOpenTaskId(item.id)}
+                  onComplete={(item) => complete(item, "")}
+                />
+              ))}
+            </ListGroup>
+          ))}
+        </ListPanel>
       )}
 
       <TaskDetailSheet

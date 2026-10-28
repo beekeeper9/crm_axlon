@@ -1,11 +1,14 @@
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { FilterSelect } from "@/components/shared/filter-select"
 import { SearchInput } from "@/components/shared/search-input"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
+import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
 import { teamRepository } from "@/features/team"
 import { tasksRepository, UNASSIGNED, type TasksQuery } from "@/features/tasks/api/tasks-repository"
 import { TasksList } from "@/features/tasks/components/tasks-list"
+import { tryLoad } from "@/lib/api/load"
 import { pageParams } from "@/lib/api/pagination"
 import { editModeFor } from "@/lib/permissions/edit-mode"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -35,22 +38,27 @@ export async function TasksView({ user, params }: TasksViewProps) {
   const assigneeId = isTeamView ? assigneeParam : assigneeParam === UNASSIGNED ? UNASSIGNED : user.id
   const href = (patch: Record<string, string | null>) => hrefWithParams(routes.tasks, params, patch)
 
-  const [result, members] = await Promise.all([
-    tasksRepository.listTasks({
-      status,
-      assigneeId,
-      leadId: null,
-      search: getParam(params, "q"),
-      ...pageParams(1, TASKS_LIMIT),
-    }),
-    isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-  ])
+  const loaded = await tryLoad(() =>
+    Promise.all([
+      tasksRepository.listTasks({
+        status,
+        assigneeId,
+        leadId: null,
+        search: getParam(params, "q"),
+        ...pageParams(1, TASKS_LIMIT),
+      }),
+      isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
+    ])
+  )
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const [result, members] = loaded.data
 
   return (
-    <div className="space-y-4">
-      <div className="border-b">
+    <div className="space-y-3">
+      <Toolbar>
         <SegmentedLinks
           label="Статус задач"
+          variant="pill"
           items={STATUS_TABS.map((tab) => ({
             key: tab.value,
             label: tab.label,
@@ -58,10 +66,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
             isActive: tab.value === status,
           }))}
         />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput label="Поиск задач" placeholder="Задача или клиент" className="w-full sm:w-72" />
+        <SearchInput label="Поиск задач" placeholder="Задача или клиент" className="w-full sm:w-64" />
         {isTeamView ? (
           <FilterSelect
             label="Исполнитель"
@@ -82,7 +87,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
             ]}
           />
         )}
-      </div>
+      </Toolbar>
 
       <TasksList
         key={JSON.stringify([status, assigneeId, getParam(params, "q")])}

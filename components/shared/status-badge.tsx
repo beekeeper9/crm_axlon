@@ -1,4 +1,4 @@
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral"
 

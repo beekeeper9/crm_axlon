@@ -75,24 +75,7 @@ export const leadActivitySchema = z.object({
   author: z.string().nullable(),
 })
 
-export const leadCallSchema = z.object({
-  id: z.string(),
-  at: z.iso.datetime({ offset: true }),
-  direction: z.enum(["incoming", "outgoing"]),
-  durationSec: z.int().nonnegative(),
-  manager: refSchema,
-  /** Краткий итог разговора от ИИ */
-  summary: z.string().nullable(),
-  transcript: z.array(z.object({ speaker: z.enum(["manager", "client"]), text: z.string() })).nullable(),
-  /**
-   * Оценка звонка 1–5. Backend отдаёт её только руководителям:
-   * для менеджера поле приходит как null, а не скрывается интерфейсом.
-   */
-  rating: z.object({ score: z.int().min(1).max(5), comment: z.string().nullable() }).nullable(),
-})
-
 export type LeadOption = z.infer<typeof leadOptionSchema>
 export type LeadDetail = z.infer<typeof leadDetailSchema>
 export type ActivityKind = z.infer<typeof activityKindSchema>
 export type LeadActivity = z.infer<typeof leadActivitySchema>
-export type LeadCall = z.infer<typeof leadCallSchema>

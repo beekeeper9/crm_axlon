@@ -1,5 +1,5 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { formatPointsDelta, formatSignedPercent } from "@/lib/format"
 
