@@ -3,6 +3,7 @@ import { meetingSchema, type Meeting, type MeetingPeriod, type MeetingStatus } f
 import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { simulateLatency } from "@/mocks/latency"
+import { demoScopedManagerId } from "@/mocks/scope"
 import { demoMeetings } from "@/mocks/meetings"
 import { demoDate } from "@/mocks/team"
 
@@ -47,8 +48,9 @@ function matches(meeting: Meeting, query: MeetingsQuery): boolean {
 }
 
 const mockMeetingsRepository: MeetingsRepository = {
-  async listMeetings({ limit, offset, ...query }) {
+  async listMeetings({ limit, offset, ...requested }) {
     await simulateLatency(400)
+    const query = { ...requested, hostId: await demoScopedManagerId(requested.hostId) }
     const meetings = demoMeetings
       .filter((meeting) => matches(meeting, { limit, offset, ...query }))
       .toSorted((a, b) => a.startsAt.localeCompare(b.startsAt))

@@ -14,13 +14,24 @@ export const routes = {
   materials: "/materials",
   assistant: "/assistant",
   workspace: "/workspace",
+  team: "/team",
   login: "/login",
   selectCompany: "/select-company",
+  changePassword: "/change-password",
+  staff: "/staff",
+  staffNew: "/staff/new",
+  company: "/company",
+  platform: "/platform",
+  platformNew: "/platform/new",
 } as const
 
 export type AppRoute = (typeof routes)[keyof typeof routes]
 
 /** Карточка лида */
+export function teamMemberRoute(managerId: string): string {
+  return `${routes.team}/${encodeURIComponent(managerId)}`
+}
+
 export function leadRoute(leadId: string): string {
   return `${routes.leads}/${encodeURIComponent(leadId)}`
 }

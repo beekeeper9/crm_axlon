@@ -7,17 +7,19 @@ import { AssistantLink, PrimaryNav } from "@/components/layout/nav-links"
 import { UserMenu } from "@/components/layout/user-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
+import { homeRouteFor } from "@/config/navigation"
 import { routes } from "@/config/routes"
 import { siteConfig } from "@/config/site"
+import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
 const HEADER_CLASSES =
-  "sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/75 md:px-4"
+  "sticky top-0 z-30 flex h-14 print:hidden shrink-0 items-center gap-2 border-b bg-background/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/75 md:px-4"
 
-function BrandLink() {
+function BrandLink({ href }: { href: string }) {
   return (
     <Link
-      href={routes.myDay}
+      href={href}
       className="flex shrink-0 items-center gap-2 rounded-md pr-2 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
     >
       <span className="flex size-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
@@ -31,15 +33,17 @@ function BrandLink() {
 /** Верхняя панель: основные разделы, каталог «Все разделы», ИИ-помощник и профиль. */
 export async function AppHeader() {
   const user = await getCurrentUser()
+  const isPlatformAdmin = hasPermission(user.role, "platform.manage")
 
   return (
     <header className={HEADER_CLASSES}>
       <MobileNav role={user.role} />
-      <BrandLink />
+      <BrandLink href={homeRouteFor(user.role)} />
       <div className="mx-1 hidden h-5 w-px bg-border lg:block" aria-hidden />
       <PrimaryNav role={user.role} />
-      <AllSectionsMenu role={user.role} />
-      <AssistantLink />
+      {/* Администратор платформы управляет доступом, а не продажами: каталог CRM ему не нужен */}
+      {!isPlatformAdmin && <AllSectionsMenu role={user.role} />}
+      {!isPlatformAdmin && <AssistantLink />}
 
       <div className="ml-auto flex items-center gap-2">
         {isMockDataSource && (
@@ -60,7 +64,7 @@ export async function AppHeader() {
 export function AppHeaderSkeleton() {
   return (
     <header className={HEADER_CLASSES} aria-busy="true">
-      <BrandLink />
+      <BrandLink href={routes.myDay} />
       <Skeleton className="hidden h-6 w-[28rem] lg:block" />
       <Skeleton className="ml-auto size-7 rounded-full" />
     </header>

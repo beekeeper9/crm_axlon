@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { demoCalls } from "@/mocks/calls"
 import { simulateLatency } from "@/mocks/latency"
+import { demoOwnScope, demoScopedManagerId } from "@/mocks/scope"
 
 export type CallsQuery = PageParams & {
   direction: CallDirection | null
@@ -44,15 +45,16 @@ function matches(call: Call, { direction, missedOnly, managerId, leadId, search 
 }
 
 const mockCallsRepository: CallsRepository = {
-  async listCalls({ limit, offset, ...query }) {
+  async listCalls({ limit, offset, ...requested }) {
     await simulateLatency(450)
+    const query = { ...requested, managerId: await demoScopedManagerId(requested.managerId) }
     const calls = demoCalls.filter((call) => matches(call, query)).toSorted((a, b) => b.at.localeCompare(a.at))
     return callsPageSchema.parse(paginate(await withAccessRules(calls), { limit, offset }))
   },
   async getCall(callId) {
     await simulateLatency(250)
-    const call = demoCalls.find((item) => item.id === callId)
-    if (!call) return null
+    const [call, ownScope] = [demoCalls.find((item) => item.id === callId), await demoOwnScope()]
+    if (!call || (ownScope && call.manager.id !== ownScope)) return null
     const [visible] = await withAccessRules([call])
     return callSchema.parse(visible)
   },

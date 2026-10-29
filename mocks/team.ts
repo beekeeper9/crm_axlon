@@ -4,6 +4,8 @@
  * чтобы связи между разделами были правдоподобными.
  */
 
+import { DEMO_TODAY } from "@/config/demo-clock"
+
 export const demoManagers = [
   { id: "m-1", name: "Айбек Садыков" },
   { id: "m-2", name: "Нурлан Абдыкадыров" },
@@ -21,8 +23,7 @@ export const demoHeadOfSales: DemoPerson = { id: "u-rop", name: "Алина Ки
  * «Сейчас» в демо-режиме. Просрочку, группы сроков и периоды в реальном режиме
  * считает backend; в демо их считает mock-слой относительно этой даты.
  */
-export const DEMO_NOW = "2026-10-27T13:00:00+06:00"
-export const DEMO_TODAY = "2026-10-27"
+export { DEMO_NOW, DEMO_TODAY } from "@/config/demo-clock"
 
 /** Дата YYYY-MM-DD со сдвигом от демо-сегодня */
 export function demoDate(offsetDays: number): string {

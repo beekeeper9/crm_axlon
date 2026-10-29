@@ -29,8 +29,9 @@ export function SegmentedLinks({ label, items, variant = "tabs", iconOnly = fals
     <nav
       aria-label={label}
       className={cn(
-        "flex shrink-0",
-        variant === "tabs" ? "-mb-px gap-1 overflow-x-auto" : "gap-0.5 rounded-lg bg-muted p-0.5",
+        // Сужается вместе с экраном и прокручивается, а не распирает страницу
+        "flex max-w-full min-w-0 overflow-x-auto",
+        variant === "tabs" ? "-mb-px gap-1" : "gap-0.5 rounded-lg bg-muted p-0.5",
         className
       )}
     >

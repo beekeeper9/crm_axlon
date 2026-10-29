@@ -3,6 +3,7 @@ import { focusListSchema, type FocusList } from "@/features/focus/schemas"
 import { contractPending } from "@/lib/api/errors"
 import { filterDemoFocusList } from "@/mocks/focus"
 import { simulateLatency } from "@/mocks/latency"
+import { demoOwnScope } from "@/mocks/scope"
 
 export type FocusQuery = {
   /** null — все доступные пользователю лиды (для руководителя — вся команда) */
@@ -16,7 +17,10 @@ export type FocusRepository = {
 const mockFocusRepository: FocusRepository = {
   async getFocusList({ managerId }) {
     await simulateLatency(400)
-    return focusListSchema.parse(filterDemoFocusList(managerId))
+    const ownScope = await demoOwnScope()
+    const list = filterDemoFocusList(ownScope ?? managerId)
+    // Список коллег со счётчиками нужен только руководителю
+    return focusListSchema.parse(ownScope ? { ...list, managers: [] } : list)
   },
 }
 

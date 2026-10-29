@@ -4,6 +4,7 @@ import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { demoClients, toClientSummary } from "@/mocks/clients"
 import { simulateLatency } from "@/mocks/latency"
+import { demoOwnScope, demoScopedManagerId } from "@/mocks/scope"
 
 /** active — есть открытая сделка; archive — все сделки закрыты */
 export type ClientStatus = "active" | "archive"
@@ -29,8 +30,9 @@ function digits(value: string): string {
 }
 
 const mockClientsRepository: ClientsRepository = {
-  async listClients({ search, status, managerId, limit, offset }) {
+  async listClients({ search, status, managerId: requested, limit, offset }) {
     await simulateLatency(400)
+    const managerId = await demoScopedManagerId(requested)
     const needle = search?.toLocaleLowerCase("ru") ?? ""
     const needleDigits = search ? digits(search) : ""
     const clients = demoClients
@@ -49,8 +51,9 @@ const mockClientsRepository: ClientsRepository = {
 
   async getClient(clientId) {
     await simulateLatency(300)
-    const client = demoClients.find((item) => item.id === clientId)
-    return client ? clientDetailSchema.parse(client) : null
+    const [client, ownScope] = [demoClients.find((item) => item.id === clientId), await demoOwnScope()]
+    if (!client || (ownScope && client.manager?.id !== ownScope)) return null
+    return clientDetailSchema.parse(client)
   },
 }
 

@@ -1,6 +1,5 @@
 import { z } from "zod"
 
-import { ROLES } from "@/lib/permissions/roles"
 
 const emptyToUndefined = (value: unknown) => (value === "" ? undefined : value)
 
@@ -12,11 +11,6 @@ const envSchema = z
     NEXT_PUBLIC_DATA_SOURCE: z.preprocess(
       emptyToUndefined,
       z.enum(["mock", "api"]).default("mock")
-    ),
-    /** Роль демо-пользователя. Используется только в режиме "mock". */
-    NEXT_PUBLIC_DEMO_ROLE: z.preprocess(
-      emptyToUndefined,
-      z.enum(ROLES).default("head_of_sales")
     ),
   })
   .refine(
@@ -32,7 +26,6 @@ const envSchema = z
 export const env = envSchema.parse({
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
   NEXT_PUBLIC_DATA_SOURCE: process.env.NEXT_PUBLIC_DATA_SOURCE,
-  NEXT_PUBLIC_DEMO_ROLE: process.env.NEXT_PUBLIC_DEMO_ROLE,
 })
 
 export const isMockDataSource = env.NEXT_PUBLIC_DATA_SOURCE === "mock"

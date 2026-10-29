@@ -1,69 +1,92 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { redirect } from "next/navigation"
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 
-import { PageHeader } from "@/components/shared/page-header"
 import { buttonVariants } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+import { homeRouteFor } from "@/config/navigation"
 import { routes } from "@/config/routes"
-import { DashboardGrid } from "@/features/dashboard"
-import { workspaceRepository } from "@/features/workspace"
+import { MyDayView, MyDayViewSkeleton } from "@/features/my-day"
+import { nowIso } from "@/lib/clock"
 import { hasPermission } from "@/lib/permissions/roles"
+import { getParam } from "@/lib/search-params"
 import { getCurrentUser } from "@/lib/session/current-user"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Мой день" }
 
-const TITLE = "Мой день"
+type MyDayPageProps = PageProps<"/my-day">
+
+const monthLabelFormat = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" })
+
+function shiftMonth(month: string, delta: number): string {
+  const [year, value] = month.split("-").map(Number)
+  const date = new Date(Date.UTC(year, value - 1 + delta, 1))
+  return date.toISOString().slice(0, 7)
+}
+
+function monthLabel(month: string): string {
+  const label = monthLabelFormat.format(new Date(`${month}-01T00:00:00Z`)).replace(" г.", "")
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
 
 /**
- * Набор виджетов зависит от роли: менеджер видит личный план и дела,
- * руководитель — результаты отдела.
+ * «Мой день» — личное пространство менеджера по продажам.
+ * У руководителя своя стартовая страница — «Кабинет РОПа»; сюда он перенаправляется.
  */
-async function MyDayContent() {
-  const user = await getCurrentUser()
-  const layout = await workspaceRepository.getDashboardLayout(user.role)
-  const isTeamView = hasPermission(user.role, "team.view")
+async function MyDayContent({ searchParams }: Pick<MyDayPageProps, "searchParams">) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams])
+  if (!hasPermission(user.role, "my_day.view")) redirect(homeRouteFor(user.role))
+
+  const currentMonth = nowIso().slice(0, 7)
+  const requested = getParam(params, "month")
+  const month = requested && /^\d{4}-\d{2}$/.test(requested) && requested <= currentMonth ? requested : currentMonth
+  const monthHref = (value: string) => (value === currentMonth ? routes.myDay : `${routes.myDay}?month=${value}`)
+  const canGoForward = month < currentMonth
+  const navButton = buttonVariants({ variant: "outline", size: "icon" })
 
   return (
     <>
-      <PageHeader
-        title={TITLE}
-        description={[user.fullName, isTeamView ? user.departmentName : null, "текущий месяц"]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          !isTeamView && (
-            // «В работу» ведёт к приоритетным лидам — с них начинается день менеджера
-            <Link href={routes.focus} className={buttonVariants({ size: "lg" })}>
-              В работу
-              <ArrowRight data-icon="inline-end" aria-hidden />
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">Мой день</h1>
+          <span className="text-meta text-muted-foreground">{user.fullName}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <nav aria-label="Месяц" className="flex items-center gap-1.5">
+            <Link href={monthHref(shiftMonth(month, -1))} className={navButton} aria-label="Предыдущий месяц" scroll={false}>
+              <ChevronLeft aria-hidden />
             </Link>
-          )
-        }
-      />
-      <DashboardGrid layout={layout} role={user.role} />
+            <span className="min-w-28 text-center text-sm font-medium" aria-live="polite">
+              {monthLabel(month)}
+            </span>
+            {canGoForward ? (
+              <Link href={monthHref(shiftMonth(month, 1))} className={navButton} aria-label="Следующий месяц" scroll={false}>
+                <ChevronRight aria-hidden />
+              </Link>
+            ) : (
+              <span className={cn(navButton, "pointer-events-none opacity-40")} aria-hidden>
+                <ChevronRight />
+              </span>
+            )}
+          </nav>
+          <Link href={routes.focus} className={buttonVariants()}>
+            В работу
+            <ArrowRight data-icon="inline-end" aria-hidden />
+          </Link>
+        </div>
+      </header>
+      <MyDayView userId={user.id} month={month} />
     </>
   )
 }
 
-function MyDaySkeleton() {
+export default function MyDayPage({ searchParams }: MyDayPageProps) {
   return (
-    <>
-      <PageHeader title={TITLE} />
-      <div className="grid gap-4 xl:grid-cols-3" aria-busy="true">
-        <Skeleton className="h-56 rounded-xl xl:col-span-2" />
-        <Skeleton className="h-56 rounded-xl" />
-      </div>
-    </>
-  )
-}
-
-export default function MyDayPage() {
-  return (
-    <div className="space-y-6">
-      <Suspense fallback={<MyDaySkeleton />}>
-        <MyDayContent />
+    <div className="mx-auto max-w-6xl space-y-4">
+      <Suspense fallback={<MyDayViewSkeleton />}>
+        <MyDayContent searchParams={searchParams} />
       </Suspense>
     </div>
   )

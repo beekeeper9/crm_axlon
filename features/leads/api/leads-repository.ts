@@ -10,6 +10,7 @@ import {
 import { contractPending } from "@/lib/api/errors"
 import { demoDeals } from "@/mocks/crm"
 import { simulateLatency } from "@/mocks/latency"
+import { demoOwnScope } from "@/mocks/scope"
 import { demoLeadActivity, demoLeadDetail } from "@/mocks/lead-details"
 
 export type LeadsRepository = {
@@ -24,8 +25,10 @@ export type LeadsRepository = {
 const mockLeadsRepository: LeadsRepository = {
   async getLead(leadId) {
     await simulateLatency(300)
-    const lead = demoLeadDetail(leadId)
-    return lead ? leadDetailSchema.parse(lead) : null
+    const [lead, ownScope] = [demoLeadDetail(leadId), await demoOwnScope()]
+    // Чужой лид для менеджера — как 404 от backend: данных нет вовсе
+    if (!lead || (ownScope && lead.manager.id !== ownScope)) return null
+    return leadDetailSchema.parse(lead)
   },
 
   async getActivity(leadId) {
@@ -35,7 +38,9 @@ const mockLeadsRepository: LeadsRepository = {
 
   async listOptions() {
     await simulateLatency(150)
-    return leadOptionSchema.array().parse(demoDeals.map((deal) => ({ id: deal.id, name: deal.title })))
+    const ownScope = await demoOwnScope()
+    const deals = demoDeals.filter((deal) => !ownScope || deal.manager.id === ownScope)
+    return leadOptionSchema.array().parse(deals.map((deal) => ({ id: deal.id, name: deal.title })))
   },
 }
 

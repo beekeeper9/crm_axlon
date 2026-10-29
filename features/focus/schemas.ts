@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
+
 /**
  * Предлагаемая форма данных «Фокуса». НЕ согласована с backend.
  * Какие лиды попадают в фокус и почему — решает backend (правила компании и ИИ);
@@ -29,6 +31,9 @@ export const focusItemSchema = z.object({
   /** Текст рекомендации ИИ; null — рекомендации нет или ИИ не подключён */
   aiRecommendation: z.string().nullable(),
   manager: z.object({ id: z.string(), name: z.string() }),
+  /** Сумма сделки, если известна (десятичная строка + валюта) */
+  amount: decimalStringSchema.nullable(),
+  currency: currencyCodeSchema.nullable(),
 })
 
 export const focusGroupSchema = z.object({

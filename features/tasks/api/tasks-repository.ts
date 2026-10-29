@@ -4,6 +4,7 @@ import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { simulateLatency } from "@/mocks/latency"
+import { demoOwnScope } from "@/mocks/scope"
 import { demoTasks, demoTodayTasksFor } from "@/mocks/tasks"
 
 /** Значение фильтра исполнителя для задач без исполнителя */
@@ -45,9 +46,16 @@ const mockTasksRepository: TasksRepository = {
     return todayTasksSchema.parse(demoTodayTasksFor(user.id))
   },
 
-  async listTasks({ limit, offset, ...query }) {
+  async listTasks({ limit, offset, ...requested }) {
     await simulateLatency(400)
+    // Менеджеру — свои задачи и «ничьи», которые можно взять; чужие не приходят
+    const ownScope = await demoOwnScope()
+    const query =
+      ownScope && requested.assigneeId !== UNASSIGNED
+        ? { ...requested, assigneeId: requested.leadId ? requested.assigneeId : ownScope }
+        : requested
     const tasks = demoTasks
+      .filter((task) => !ownScope || task.assignee === null || task.assignee.id === ownScope)
       .filter((task) => matches(task, { limit, offset, ...query }))
       .toSorted((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999"))
     return tasksPageSchema.parse(paginate(tasks, { limit, offset }))

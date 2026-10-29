@@ -7,8 +7,7 @@ import { cn } from "@/lib/utils"
 import {
   assistantNavItem,
   isNavItemActive,
-  primaryNavigation,
-  visibleFor,
+  primaryNavigationFor,
 } from "@/config/navigation"
 import type { Role } from "@/lib/permissions/roles"
 
@@ -20,7 +19,7 @@ export function PrimaryNav({ role }: { role: Role }) {
 
   return (
     <nav aria-label="Основные разделы" className="hidden items-center gap-0.5 lg:flex">
-      {visibleFor(primaryNavigation, role).map((navItem) => {
+      {primaryNavigationFor(role).map((navItem) => {
         const isActive = isNavItemActive(navItem, pathname)
         return (
           <Link

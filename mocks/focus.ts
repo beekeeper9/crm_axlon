@@ -4,6 +4,7 @@
  * Используются только в режиме NEXT_PUBLIC_DATA_SOURCE=mock.
  */
 import type { FocusGroup, FocusItem, FocusList } from "@/features/focus/schemas"
+import { demoDeals } from "@/mocks/crm"
 import { demoManagers } from "@/mocks/team"
 
 type ManagerIndex = 0 | 1 | 2 | 3 | 4 | 5
@@ -33,6 +34,8 @@ function toItem([id, leadName, stage, manager, priority, reason, since, interact
     nextAction: next && { title: next[0], dueAt: next[1] },
     aiRecommendation: ai,
     manager: demoManagers[manager],
+    amount: demoDeals.find((deal) => deal.id === `lead-${id}`)?.amount ?? null,
+    currency: demoDeals.find((deal) => deal.id === `lead-${id}`)?.currency ?? null,
   }
 }
 

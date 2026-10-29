@@ -12,6 +12,7 @@ import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/li
 import { addDecimals } from "@/lib/decimal"
 import { demoDeals, demoSalesConfig } from "@/mocks/crm"
 import { simulateLatency } from "@/mocks/latency"
+import { demoScopedManagerId } from "@/mocks/scope"
 
 export type DealsFilter = {
   pipelineId: string
@@ -66,8 +67,9 @@ const mockSalesRepository: SalesRepository = {
     return salesConfigSchema.parse(demoSalesConfig)
   },
 
-  async getBoard(filter) {
+  async getBoard(requested) {
     await simulateLatency(450)
+    const filter = { ...requested, managerId: await demoScopedManagerId(requested.managerId) }
     const pipeline = demoSalesConfig.pipelines.find((item) => item.id === filter.pipelineId)
     const deals = demoDeals.filter((deal) => matchesFilter(deal, filter))
     const columns = (pipeline?.stages ?? [])
@@ -86,8 +88,9 @@ const mockSalesRepository: SalesRepository = {
     return boardSchema.parse({ pipelineId: filter.pipelineId, columns })
   },
 
-  async listDeals({ stageId, attention, sort, limit, offset, ...filter }) {
+  async listDeals({ stageId, attention, sort, limit, offset, ...requested }) {
     await simulateLatency(400)
+    const filter = { ...requested, managerId: await demoScopedManagerId(requested.managerId) }
     const deals = demoDeals
       .filter((deal) => matchesFilter(deal, filter))
       .filter((deal) => !stageId || deal.stageId === stageId)

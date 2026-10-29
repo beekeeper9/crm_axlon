@@ -10,9 +10,11 @@ import {
   isAccessTokenFresh,
   tokenCookieOptions,
 } from "@/lib/auth/cookies"
+import { DEMO_SESSION_COOKIE } from "@/lib/session/demo-session"
 
 /**
- * Перед рендером страницы (только в режиме api):
+ * Демо-режим: без демо-сессии — на страницу входа.
+ * Режим api, перед рендером страницы:
  * - без refresh-токена — на страницу входа;
  * - access истёк или скоро истечёт — обмен refresh-токена с ротацией. Новая пара
  *   уходит и в браузер (Set-Cookie), и в текущий запрос, чтобы страница сразу работала с ней.
@@ -21,10 +23,15 @@ import {
  * Права здесь не проверяются: это делает backend на каждом запросе.
  */
 export async function proxy(request: NextRequest) {
-  if (isMockDataSource) return NextResponse.next()
-
   const { pathname, search } = request.nextUrl
   const isLoginPage = pathname === routes.login
+
+  // Демо-режим: без демо-сессии — на вход. Действительность сессии и роль проверяет сервер страницы
+  if (isMockDataSource) {
+    if (isLoginPage || request.cookies.has(DEMO_SESSION_COOKIE)) return NextResponse.next()
+    return redirectToLogin(request, `${pathname}${search}`)
+  }
+
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value
 
   if (!refresh) {
@@ -36,7 +43,7 @@ export async function proxy(request: NextRequest) {
   if (!isAccessTokenFresh(request.cookies.get(ACCESS_COOKIE)?.value)) {
     const tokens = await exchangeRefreshToken(refresh)
     if (!tokens) {
-      const toLogin = redirectToLogin(request, `${pathname}${search}`)
+      const toLogin = redirectToLogin(request, `${pathname}${search}`, "expired")
       for (const name of [ACCESS_COOKIE, REFRESH_COOKIE, TENANT_COOKIE]) toLogin.cookies.delete(name)
       return toLogin
     }
@@ -57,9 +64,10 @@ export async function proxy(request: NextRequest) {
   return response ?? NextResponse.next()
 }
 
-function redirectToLogin(request: NextRequest, returnTo: string): NextResponse {
+function redirectToLogin(request: NextRequest, returnTo: string, reason?: "expired"): NextResponse {
   const url = new URL(routes.login, request.url)
   if (returnTo !== "/") url.searchParams.set("next", returnTo)
+  if (reason) url.searchParams.set("reason", reason)
   return NextResponse.redirect(url)
 }
 

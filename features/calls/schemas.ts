@@ -30,6 +30,8 @@ export const callSchema = z.object({
       agreements: z.array(z.string()),
       objections: z.array(z.string()),
       nextAction: z.string().nullable(),
+      /** Достигнута ли цель звонка (признак разбора в CRM: да / частично / нет) */
+      goal: z.enum(["achieved", "partial", "missed"]).nullable(),
       generatedAt: z.iso.datetime({ offset: true }),
     })
     .nullable(),

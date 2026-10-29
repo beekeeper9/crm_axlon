@@ -34,6 +34,15 @@
 
 Проверено 28.10.2026 на локальной заглушке, повторяющей согласованные ответы (не на реальном backend): вход и ошибка входа с `request_id`, выбор компании, три параллельных запроса с истёкшим access → один обмен refresh-токена без повторного использования, отклонённый refresh → очистка cookie и переход на вход, выход.
 
+### Чего не хватает для входа (предложение, нужно backend)
+
+`GET /api/v1/me/` — дополнительные необязательные поля (frontend уже читает их, если они придут):
+- `full_name` — для шапки вместо логина;
+- `is_platform_admin: boolean` — **блокирующий вопрос:** администратор платформы не член компании, и по `memberships` его нельзя отличить. Без этого флага панель администратора в режиме api недоступна;
+- `must_change_password: boolean` — пользователь вошёл по временному паролю; пока true, frontend пускает только на смену пароля.
+
+Коды ошибок входа (`POST /api/v1/auth/token/`): неверный логин или пароль — 401 без уточнения, что именно неверно; отключённый аккаунт — `account_disabled` (сообщать только при верном пароле, чтобы не раскрывать существование аккаунтов).
+
 ### Ошибки — `lib/api/errors.ts`
 
 Тело: `{ "error": { "code", "message", "details"?, "request_id" } }`.
@@ -138,6 +147,51 @@ Backend: `owner`, `admin`, `manager`, `sales_rep`, `viewer`. Перевод в �
 Фильтры: `direction`, только пропущенные, `manager_id`, `lead_id`, `search` (клиент, номер). **`rating` — только руководителям**, остальным backend отдаёт `null` (демо-слой повторяет правило — проверено: у менеджера оценки нет даже в HTML).
 Вопросы: ссылка на запись и права на прослушивание; когда появляется `analysis` (задержка обработки); порог «от 30 секунд» — на backend.
 
-### «Мой день», «Фокус», результаты отдела, рабочее пространство
+### Область видимости — обязательное требование к backend
 
-Без изменений с прошлого этапа: `nowSummarySchema`, `personalTurnoverSchema`, `earningsSchema`, `personalKpisSchema`, `salesSegmentsSchema`, `focusListSchema`, `salesSummarySchema`, `revenueTrendSchema`, `teamPerformanceSchema`, `salesFunnelSchema`, `attentionListSchema`, раскладка `{ id, name, widgets: [{ id, type, size }] }`. Денежные поля этих схем пока числа — при согласовании перейдут на десятичные строки с `currency`.
+Для роли `sales_rep` все списки и карточки (сделки, задачи, встречи, звонки, клиенты, «Фокус», «После встречи») возвращают только записи сотрудника; чужая запись по id — 404. Параметры фильтра по сотруднику (`manager_id`, `host_id`, `assignee_id`) для менеджера игнорируются. Список коллег со счётчиками («Фокус» → `managers`) менеджеру не отдаётся. Демо-слой (`mocks/scope.ts`) повторяет это правило.
+
+### «Мой день» менеджера — `features/my-day/schemas.ts`
+
+Только для текущего пользователя (из токена), без параметра «чей».
+- **Месяц** `myMonthSchema` (`month=YYYY-MM`, один запрос на страницу): `period { month, label, isCurrent, workDaysTotal, workDaysLeft }`; `now` (только текущий месяц) `{ awaitingReply { count, longestWaitWorkMinutes }, meetingsToday { held, total }, meetingsWithoutOutcome, reschedulesWithoutDate, tasks { overdue, dueToday } }`; `turnover { fact, target, expectedToDate, forecast, progress, expectedProgress, growth { amount, comparedTo }, prepayments, additionalPayments, note }`; `earnings { total, notice, lines[{ label, amount, note }], footnote } | null`; `kpis { sales { count, growth, comparedTo, planNote }, salesPerMeeting { ratio, sales, held, bonusThreshold }, averageDeal { amount, note }, meetingsHeld { count, attendance, upcoming } }`; `monthFunnel { assigned, passed, held, sales, upcoming }`; `daily[{ date, cumulative, plan, turnover, sales }]`; `segments[{ id, name, sales, previousSales, turnover, prepayments, additionalPayments, averageDeal, share }]`. Деньги — десятичные строки и `currency`. **Все расчёты (рабочие дни, план к дню, прогноз, заработок) — backend.** Нет данных за месяц — `null` (или 404).
+- **Дела на сегодня** `todayActionsSchema`: `asOf`, `actions[{ id, kind (reply | overdue_task | meeting_outcome | confirm_meeting | no_next_step | stale_deal), urgency (now | today | soon), lead { id, name }, problem, detail, at, amount, currency }]`. Отбор, срочность и порог «давно без движения» — правила backend; один пункт на клиента.
+- Расписание дня — существующие «Встречи» (`period=today`) и «Задачи на сегодня»; сделки в фокусе — «Фокус» (добавлены `amount`, `currency`).
+
+### Кабинет РОПа — `features/team-cabinet/schemas.ts`
+
+Доступ — роли РОП, директор, админ; остальным 403. Числа — детерминированно (SQL), совпадают с «Отчётами дня», «Встречами», «Звонками».
+- **Сегодня** `teamTodaySchema`: `asOf` («данные на HH:MM»), `workDay { number, total, monthLabel }`, `attention[{ id, priority, manager, problem, value, target }]`, `rows[{ manager, level (green|yellow|red), reasons[], absence { kind, label, until } | null, inactiveDays, dayScore (2–5 | null), today { meetings { total, confirmed, toConfirm, nextToConfirmAt, held, noShow, rescheduled, cancelled, withoutOutcome }, payments { count, amount, currency }, calls { total, answered, conversations, minutes }, waitingReplies { count, maxWaitHours }, tasks { today, overdue, unassigned }, hygiene { withoutOutcome, rescheduledNoDate, noNextStep } }, plan }]`, `department { today, plan }` — агрегат backend.
+- **План** `planSchema`: `target | null` (план продаж — клиенты с первым платежом), `fact`, `remaining`, `workDaysTotal`, `workDaysLeft`, `expectedToDate`, `perDayNeeded`, `forecast` (линейный), `meetingsHeldNeeded`, `meetingsToBookNeeded`, `meetingToSale`, `attendance`.
+- **Встречи и звонки** `teamQualitySchema` (`period=week|month`): итоги встреч, `heldWithoutSale[]`, `calls[{ manager, total, conversations, rated, avgScore, goalAchievedShare, nextStepShare }]`, `toListen[{ callId, lead, manager, score, kind (weak|strong), summary }]`. Причины отмен — нужны.
+- **Воронка** `teamFunnelSchema`: по этапам `count`, `amount`, `medianAgeDays`, `staleCount` (дольше `staleThresholdDays`), `conversionToNext | null`, `isPile`. Без истории переходов конверсия = null.
+- **Карточка менеджера** `memberCardSchema` (14 дней): `dayScores[]`, `plan`, оплаты, `activity[{ date, calls, conversations, isWorkDay }]`, `discipline`, `callQuality { rated, total, distribution, goalAchievedShare, nextStepShare, gaps[] } | null`, `focusPoints[]` (правила, не ИИ), `dealsToPush[]`, `toListen[]`.
+- **Звонки:** в разбор добавлен признак `goal` (achieved | partial | missed) — «цель звонка да/частично/нет» из ТЗ.
+
+Не подключено (нужны контракты): «Срез на планёрку» и отправка в Telegram, задание планов (форма и история), график отсутствий с типами, выгрузки без телефонов, итоги one-to-one (P2), калибровка оценок ИИ.
+
+### Сотрудники и аккаунты — `features/staff` (предложение, не согласовано)
+
+Публичной регистрации нет. Аккаунты создаются только внутри системы по иерархии; **роль нового аккаунта назначает сервер по роли создателя**, в запросе её нет:
+
+| Создатель | Создаёт | Компания и отдел |
+|-----------|---------|------------------|
+| Администратор платформы | Директора | Новая компания (`company_name`) |
+| Директор (`owner`) | РОПа (`manager`) | Своя компания, отдел из своей компании |
+| РОП (`manager`) | Менеджера (`sales_rep`) | Своя компания и **свой** отдел (переданный отдел игнорируется) |
+| Менеджер, наблюдатель | — | 403 |
+
+Предлагаемые endpoint:
+- `GET /api/v1/staff/` (X-Tenant) — сотрудники в области пользователя: директор — компания, РОП — свой отдел. `{ count, results: [{ id, login, full_name, role, company { id, name }, department { id, name } | null, status: active|invited|deactivated, created_by { id, name } | null, created_at }] }`.
+- `GET /api/v1/staff/create-options/` — `{ creatable_role, requires_company_name, departments[{ id, name }], fixed_department | null, login_is_optional }`.
+- `POST /api/v1/staff/` — `{ full_name, login?, department_id?, company_name? }` → 201 `{ member, temporary_password }`. **Временный пароль генерирует сервер и возвращает один раз**; повторно получить его нельзя. Ошибки: 403 `permission_denied`, 400 `validation_error` (`login` занят, `department_id` чужой, нет `company_name`).
+- `POST /api/v1/auth/password/change/` — `{ current_password, new_password }` → 204; снимает `must_change_password`. Правила пароля — на backend (сейчас интерфейс подсказывает «не короче 8 символов»).
+- Нужны позже: деактивация (`POST /api/v1/staff/{id}/deactivate/`), выдача нового временного пароля, перевод между отделами, список компаний для администратора платформы.
+
+Принадлежность: у каждого аккаунта — компания, отдел (кроме директора), кто создал. Область видимости РОПа — только его отдел; несколько отделов у одного РОПа — вопрос к backend.
+
+В режиме api все эти экраны показывают «не подключено» и ничего не создают. В демо-режиме работают на хранилище в памяти сервера (`mocks/demo-accounts.ts`).
+
+### «Фокус», рабочее пространство
+
+Без изменений: `focusListSchema` (+ `amount`, `currency` у элемента). Раскладка рабочего пространства убрана вместе со старой главной; вернётся отдельным контрактом, когда будет утверждена настройка РОПом.

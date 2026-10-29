@@ -3,6 +3,7 @@ import { afterMeetingQueueSchema, type AfterMeetingQueue } from "@/features/afte
 import { contractPending } from "@/lib/api/errors"
 import { demoAfterMeetingQueue } from "@/mocks/after-meeting"
 import { simulateLatency } from "@/mocks/latency"
+import { demoScopedManagerId } from "@/mocks/scope"
 
 export type AfterMeetingRepository = {
   /** hostId — для руководителя; менеджеру backend сам ограничивает своими встречами */
@@ -12,7 +13,7 @@ export type AfterMeetingRepository = {
 const mockAfterMeetingRepository: AfterMeetingRepository = {
   async getQueue({ hostId }) {
     await simulateLatency(400)
-    return afterMeetingQueueSchema.parse(demoAfterMeetingQueue(hostId))
+    return afterMeetingQueueSchema.parse(demoAfterMeetingQueue(await demoScopedManagerId(hostId)))
   },
 }
 

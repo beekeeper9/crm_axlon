@@ -11,11 +11,18 @@ import { backendRoleSchema } from "@/lib/permissions/backend-roles"
 
 const tokenPairSchema = z.object({ access: z.string(), refresh: z.string() })
 
-/** `GET /api/v1/me/` — `tenant` в членстве это slug компании */
+/**
+ * `GET /api/v1/me/` — `tenant` в членстве это slug компании.
+ * Согласованы: id, username, memberships. Остальные поля — ПРЕДЛОЖЕНИЕ (API_CONTRACT.md),
+ * необязательные: пока backend их не отдаёт, интерфейс работает как раньше.
+ */
 export const meSchema = z.object({
   id: z.union([z.string(), z.int()]).transform(String),
   username: z.string(),
   memberships: z.array(z.object({ tenant: z.string(), role: backendRoleSchema })),
+  fullName: z.string().nullable().optional(),
+  isPlatformAdmin: z.boolean().optional().default(false),
+  mustChangePassword: z.boolean().optional().default(false),
 })
 
 export type Me = z.infer<typeof meSchema>

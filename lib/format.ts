@@ -1,6 +1,6 @@
 import { localeConfig } from "@/config/locale"
 
-const { locale, currencyLabel, timeZone } = localeConfig
+const { locale, timeZone } = localeConfig
 
 const numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
 const decimalFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
@@ -8,22 +8,9 @@ const signedIntegerFormat = new Intl.NumberFormat(locale, {
   maximumFractionDigits: 0,
   signDisplay: "exceptZero",
 })
-const compactFormat = new Intl.NumberFormat(locale, {
-  notation: "compact",
-  maximumFractionDigits: 1,
-})
 const percentFormat = new Intl.NumberFormat(locale, {
   style: "percent",
   maximumFractionDigits: 1,
-})
-const signedPercentFormat = new Intl.NumberFormat(locale, {
-  style: "percent",
-  maximumFractionDigits: 1,
-  signDisplay: "exceptZero",
-})
-const signedDecimalFormat = new Intl.NumberFormat(locale, {
-  maximumFractionDigits: 1,
-  signDisplay: "exceptZero",
 })
 const dayMonthFormat = new Intl.DateTimeFormat(locale, {
   day: "numeric",
@@ -60,34 +47,9 @@ export function formatDecimal(value: number): string {
   return decimalFormat.format(value)
 }
 
-/** 1 250 000 сом */
-export function formatMoney(value: number): string {
-  return `${numberFormat.format(value)} ${currencyLabel}`
-}
-
-/** 1,3 млн сом — для осей графиков и плотных мест */
-export function formatMoneyCompact(value: number): string {
-  return `${compactFormat.format(value)} ${currencyLabel}`
-}
-
-/** 9,1 млн — без валюты, для осей графиков */
-export function formatCompactNumber(value: number): string {
-  return compactFormat.format(value)
-}
-
 /** Принимает долю (0.234) и возвращает «23,4 %» */
 export function formatPercent(ratio: number): string {
   return percentFormat.format(ratio)
-}
-
-/** Относительное изменение со знаком: «+8,6 %» */
-export function formatSignedPercent(ratio: number): string {
-  return signedPercentFormat.format(ratio)
-}
-
-/** Изменение доли в процентных пунктах: 0.231 → 0.248 даёт «−1,7 п. п.» */
-export function formatPointsDelta(ratioDelta: number): string {
-  return `${signedDecimalFormat.format(ratioDelta * 100)} п. п.`
 }
 
 /** «27 окт.» — принимает дату ISO (YYYY-MM-DD) или дату-время */
@@ -160,4 +122,11 @@ const pluralRules = new Intl.PluralRules(locale)
 export function pluralize(count: number, [one, few, many]: readonly [string, string, string]): string {
   const rule = pluralRules.select(count)
   return rule === "one" ? one : rule === "few" ? few : many
+}
+
+const compactFormat = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 })
+
+/** «1,3 млн» — для осей графиков */
+export function formatCompactNumber(value: number): string {
+  return compactFormat.format(value)
 }
