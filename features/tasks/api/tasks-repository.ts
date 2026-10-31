@@ -1,7 +1,12 @@
+import { z } from "zod"
+
 import { isMockDataSource } from "@/config/env"
-import { taskSchema, todayTasksSchema, type Task, type TodayTasks } from "@/features/tasks/schemas"
+import { taskSchema, todayTasksSchema, type Task, type TaskType, type TodayTasks } from "@/features/tasks/schemas"
+import { loadMemberNames } from "@/features/team"
+import { apiRequest } from "@/lib/api/client"
 import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { simulateLatency } from "@/mocks/latency"
 import { demoOwnScope } from "@/mocks/scope"
@@ -62,13 +67,77 @@ const mockTasksRepository: TasksRepository = {
   },
 }
 
-/** Endpoint не согласованы — см. docs/API_CONTRACT.md, раздел «Задачи». */
+/** Задача из `GET /activities/?kind=task` (P0); имена полей уже в camelCase */
+const backendTaskSchema = z.object({
+  id: z.string(),
+  subjectType: z.enum(["customer", "deal", "lead"]),
+  subjectId: z.string(),
+  title: z.string().nullable(),
+  body: z.string().nullable(),
+  dueDate: z.iso.date().nullable(),
+  taskStatus: z.enum(["open", "completed", "cancelled"]),
+  taskType: z.enum(["call", "meeting", "follow_up", "other"]).nullable(),
+  priority: z.enum(["low", "normal", "high", "urgent"]).nullable(),
+  assigneeUserId: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  result: z.string().nullable(),
+  isOverdue: z.boolean(),
+  dueGroup: z.enum(["overdue", "today", "this_week", "later"]).nullable(),
+  completedAt: z.iso.datetime({ offset: true }).nullable(),
+})
+
+const backendTasksPageSchema = paginatedSchema(backendTaskSchema)
+
+/** «Напомнить» и «другое» у backend — обычная задача в интерфейсе */
+const TASK_TYPES: Record<NonNullable<z.infer<typeof backendTaskSchema>["taskType"]>, TaskType> = {
+  call: "call",
+  meeting: "meeting",
+  follow_up: "todo",
+  other: "todo",
+}
+
+const BACKEND_STATUS = { open: "open", done: "completed", all: undefined } as const
+
+/**
+ * Пока подключены только задачи сделки (карточка лида): фильтров по исполнителю и поиска
+ * у backend нет, а молча показать неотфильтрованный список было бы неправдой.
+ * Отменённые задачи не показываются: в интерфейсе нет такого статуса.
+ */
 const httpTasksRepository: TasksRepository = {
   async getTodayTasks() {
     return contractPending("задачи пользователя на сегодня")
   },
-  async listTasks() {
-    return contractPending("список задач")
+  async listTasks({ status, assigneeId, leadId, search, limit, offset }) {
+    if (!leadId || assigneeId || search) return contractPending("список задач с фильтрами")
+    const [page, memberNames, user] = await Promise.all([
+      apiRequest("/api/v1/activities/", {
+        auth: await getRenderAuth(),
+        query: { kind: "task", subjectType: "deal", subjectId: leadId, taskStatus: BACKEND_STATUS[status], limit, offset },
+        schema: backendTasksPageSchema,
+      }),
+      loadMemberNames(),
+      getCurrentUser(),
+    ])
+    // Без права на список сотрудников известно только собственное имя
+    const nameOf = (userId: string) => (userId === user.id ? user.fullName : memberNames.get(userId) ?? "Сотрудник")
+    const visible = page.results.filter((task) => task.taskStatus !== "cancelled")
+    const tasks = visible.map((task): Task => ({
+      id: task.id,
+      title: task.title || "Без названия",
+      description: task.body,
+      type: task.taskType ? TASK_TYPES[task.taskType] : "todo",
+      priority: task.priority === "high" || task.priority === "urgent" ? "high" : "normal",
+      status: task.taskStatus === "completed" ? "done" : "open",
+      dueAt: task.dueDate,
+      isOverdue: task.isOverdue,
+      dueGroup: task.taskStatus === "open" ? (task.dueGroup ?? "no_due") : null,
+      assignee: task.assigneeUserId ? { id: task.assigneeUserId, name: nameOf(task.assigneeUserId) } : null,
+      createdBy: task.createdBy ? { id: task.createdBy, name: nameOf(task.createdBy) } : { id: "", name: "Неизвестно" },
+      lead: null,
+      completedAt: task.completedAt,
+      result: task.result,
+    }))
+    return { count: page.count - (page.results.length - visible.length), results: tasks }
   },
 }
 

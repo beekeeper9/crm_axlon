@@ -6,9 +6,8 @@ import { cn } from "@/lib/utils"
 
 import { PersonAvatar } from "@/components/shared/person-avatar"
 import { leadRoute } from "@/config/routes"
-import { TASK_TYPE_META } from "@/features/tasks/lib/task-meta"
+import { TASK_TYPE_META, formatTaskDue } from "@/features/tasks/lib/task-meta"
 import type { Task } from "@/features/tasks/schemas"
-import { formatDateTime } from "@/lib/format"
 
 type TaskRowProps = {
   task: Task
@@ -75,7 +74,7 @@ export function TaskRow({ task, showAssignee, showLead, isDemoChanged, canComple
           task.isOverdue && !isDone ? "font-medium text-destructive" : "text-muted-foreground"
         )}
       >
-        {task.dueAt ? formatDateTime(task.dueAt) : "без срока"}
+        {task.dueAt ? formatTaskDue(task.dueAt) : "без срока"}
       </time>
       {showAssignee && (task.assignee ? <PersonAvatar name={task.assignee.name} /> : <span className="size-5 shrink-0" />)}
     </li>

@@ -22,6 +22,7 @@ import { LeadCallsList } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
 import { TasksList, tasksRepository } from "@/features/tasks"
 import { teamRepository } from "@/features/team"
+import type { ApiError } from "@/lib/api/errors"
 import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
 import { formatDayMonth, formatDecimalMoney, formatFullDate } from "@/lib/format"
@@ -103,54 +104,74 @@ function Deferred({ children }: { children: React.ReactNode }) {
 async function LeadWork({ lead, user }: LeadViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
   const leadRef = { id: lead.id, name: lead.title }
-  const loaded = await tryLoad(() =>
-    Promise.all([
-    tasksRepository.listTasks({ status: "all", assigneeId: null, leadId: lead.id, search: null, limit: PAGE_LIMIT_MAX, offset: 0 }),
-    meetingsRepository.listMeetings({
-      period: null,
-      status: null,
-      hostId: null,
-      leadId: lead.id,
-      search: null,
-      outcomeRequired: false,
-      limit: PAGE_LIMIT_MAX,
-      offset: 0,
-    }),
-    isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-    ])
-  )
-  if (!loaded.ok) return <ApiErrorState error={loaded.error} bare />
-  const [tasks, meetings, members] = loaded.data
+  // Разделы загружаются отдельно: неподключённые встречи не должны скрывать задачи
+  const [tasks, meetings, members] = await Promise.all([
+    tryLoad(() =>
+      tasksRepository.listTasks({ status: "all", assigneeId: null, leadId: lead.id, search: null, limit: PAGE_LIMIT_MAX, offset: 0 })
+    ),
+    tryLoad(() =>
+      meetingsRepository.listMeetings({
+        period: null,
+        status: null,
+        hostId: null,
+        leadId: lead.id,
+        search: null,
+        outcomeRequired: false,
+        limit: PAGE_LIMIT_MAX,
+        offset: 0,
+      })
+    ),
+    tryLoad(() => (isTeamView ? teamRepository.listMembers() : Promise.resolve([]))),
+  ])
+  if (!members.ok) return <ApiErrorState error={members.error} bare />
   const editMode = editModeFor(user.role)
   const currentUser = { id: user.id, name: user.fullName }
 
   return (
     <div className="space-y-6">
-      <TasksList
-        heading="Задачи"
-        initialTasks={tasks.results}
-        members={members}
-        currentUser={currentUser}
-        canAssign={hasPermission(user.role, "records.assign")}
-        editMode={editMode}
-        showAssignee={isTeamView}
-        lead={leadRef}
-        emptyTitle="Задач по лиду нет"
-        emptyDescription="Поставьте задачу — так следующий шаг не потеряется."
-      />
-      <MeetingsList
-        heading="Встречи"
-        initialMeetings={meetings.results}
-        editMode={editMode}
-        showPeople
-        lead={leadRef}
-        leadOptions={[]}
-        hosts={members}
-        currentUser={currentUser}
-        emptyTitle="Встреч не было"
-        emptyDescription="Назначьте встречу, когда клиент будет готов."
-      />
+      {tasks.ok ? (
+        <TasksList
+          heading="Задачи"
+          // Список отфильтрован по этому лиду, поэтому привязка известна, даже если backend отдал только id
+          initialTasks={tasks.data.results.map((task) => ({ ...task, lead: task.lead ?? leadRef }))}
+          members={members.data}
+          currentUser={currentUser}
+          canAssign={hasPermission(user.role, "records.assign")}
+          editMode={editMode}
+          showAssignee={isTeamView}
+          lead={leadRef}
+          emptyTitle="Задач по лиду нет"
+          emptyDescription="Поставьте задачу — так следующий шаг не потеряется."
+        />
+      ) : (
+        <WorkSectionError heading="Задачи" error={tasks.error} />
+      )}
+      {meetings.ok ? (
+        <MeetingsList
+          heading="Встречи"
+          initialMeetings={meetings.data.results}
+          editMode={editMode}
+          showPeople
+          lead={leadRef}
+          leadOptions={[]}
+          hosts={members.data}
+          currentUser={currentUser}
+          emptyTitle="Встреч не было"
+          emptyDescription="Назначьте встречу, когда клиент будет готов."
+        />
+      ) : (
+        <WorkSectionError heading="Встречи" error={meetings.error} />
+      )}
     </div>
+  )
+}
+
+function WorkSectionError({ heading, error }: { heading: string; error: ApiError }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold">{heading}</h2>
+      <ApiErrorState error={error} />
+    </section>
   )
 }
 

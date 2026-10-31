@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { leadRoute } from "@/config/routes"
-import { TASK_TYPE_META } from "@/features/tasks/lib/task-meta"
+import { TASK_TYPE_META, formatTaskDue } from "@/features/tasks/lib/task-meta"
 import type { Task } from "@/features/tasks/schemas"
 import { formatDateTime } from "@/lib/format"
 import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
@@ -74,7 +74,7 @@ function TaskDetail({ task, editMode, isDemoChanged, onComplete, onEdit, onTake 
 
       <div className="space-y-5 px-4 pb-6">
         <dl className="divide-y">
-          <DetailRow label="Срок">{task.dueAt ? formatDateTime(task.dueAt) : "Без срока"}</DetailRow>
+          <DetailRow label="Срок">{task.dueAt ? formatTaskDue(task.dueAt) : "Без срока"}</DetailRow>
           <DetailRow label="Исполнитель">{task.assignee?.name ?? <span className="text-warning">Не назначен</span>}</DetailRow>
           <DetailRow label="Поставил(а)">{task.createdBy.name}</DetailRow>
           <DetailRow label="Лид">

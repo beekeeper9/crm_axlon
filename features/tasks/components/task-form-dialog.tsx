@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { TASK_TYPE_META } from "@/features/tasks/lib/task-meta"
+import { TASK_TYPE_META, isDateOnlyDue } from "@/features/tasks/lib/task-meta"
 import { taskFormSchema, taskTypeSchema, type Task, type TaskFormValues } from "@/features/tasks/schemas"
 import { isoToCompanyWallTime } from "@/lib/datetime"
 
@@ -59,7 +59,8 @@ function TaskForm({
   const [values, setValues] = useState<TaskFormValues>(() => ({
     title: task?.title ?? "",
     type: task?.type ?? "call",
-    dueAt: task?.dueAt ? isoToCompanyWallTime(task.dueAt) : "",
+    // Для срока без времени время не придумываем: его выберет пользователь
+    dueAt: task?.dueAt && !isDateOnlyDue(task.dueAt) ? isoToCompanyWallTime(task.dueAt) : "",
     priority: task?.priority ?? "normal",
     assigneeId: task ? (task.assignee?.id ?? null) : currentUser.id,
     description: task?.description ?? "",

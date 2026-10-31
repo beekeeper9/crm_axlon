@@ -12,7 +12,7 @@ import {
   type Pipeline,
   type SalesConfig,
 } from "@/features/sales/schemas"
-import { teamRepository } from "@/features/team"
+import { loadMemberNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/errors"
@@ -162,16 +162,6 @@ const BACKEND_ORDERING: Record<DealSort, string> = {
   "-amount": "-amount",
   amount: "amount",
   title: "title",
-}
-
-/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
-async function loadMemberNames(): Promise<Map<string, string>> {
-  try {
-    return new Map((await teamRepository.listMembers()).map((member) => [member.id, member.name]))
-  } catch (error) {
-    if (error instanceof ApiError && error.kind === "forbidden") return new Map()
-    throw error
-  }
 }
 
 /**

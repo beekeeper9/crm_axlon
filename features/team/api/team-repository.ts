@@ -3,6 +3,7 @@ import { z } from "zod"
 import { isMockDataSource } from "@/config/env"
 import { teamMembersSchema, type TeamMember } from "@/features/team/schemas"
 import { apiRequest } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/errors"
 import { paginatedSchema } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { simulateLatency } from "@/mocks/latency"
@@ -40,3 +41,13 @@ const httpTeamRepository: TeamRepository = {
 }
 
 export const teamRepository: TeamRepository = isMockDataSource ? mockTeamRepository : httpTeamRepository
+
+/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
+export async function loadMemberNames(): Promise<Map<string, string>> {
+  try {
+    return new Map((await teamRepository.listMembers()).map((member) => [member.id, member.name]))
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "forbidden") return new Map()
+    throw error
+  }
+}

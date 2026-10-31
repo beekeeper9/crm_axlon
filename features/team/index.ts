@@ -1,2 +1,2 @@
-export { teamRepository } from "./api/team-repository"
+export { loadMemberNames, teamRepository } from "./api/team-repository"
 export type { TeamMember } from "./schemas"

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-/** Предлагаемая форма задачи. НЕ согласована с backend — см. docs/API_CONTRACT.md. */
+/** Форма задачи в интерфейсе. В режиме api её собирает tasks-repository из `/activities/` (docs/API_CONTRACT.md). */
 
 const refSchema = z.object({ id: z.string(), name: z.string() })
 
@@ -29,7 +29,8 @@ export const taskSchema = z.object({
   type: taskTypeSchema,
   priority: taskPrioritySchema,
   status: taskStatusSchema,
-  dueAt: z.iso.datetime({ offset: true }).nullable(),
+  /** Срок со временем или только дата (backend хранит дату без времени) */
+  dueAt: z.union([z.iso.datetime({ offset: true }), z.iso.date()]).nullable(),
   /** Просрочку считает backend, чтобы не зависеть от часов браузера */
   isOverdue: z.boolean(),
   /** null у выполненных задач */
