@@ -1,6 +1,10 @@
+import { z } from "zod"
+
 import { isMockDataSource } from "@/config/env"
 import { teamMembersSchema, type TeamMember } from "@/features/team/schemas"
-import { contractPending } from "@/lib/api/errors"
+import { apiRequest } from "@/lib/api/client"
+import { paginatedSchema } from "@/lib/api/pagination"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { simulateLatency } from "@/mocks/latency"
 import { demoManagers } from "@/mocks/team"
 
@@ -16,10 +20,22 @@ const mockTeamRepository: TeamRepository = {
   },
 }
 
-/** Endpoint не согласован — см. docs/API_CONTRACT.md, раздел «Сотрудники». */
+/** `GET /api/v1/staff/` (ветка P0): id сотрудника в фильтрах — id пользователя, как owner_user_id сделки */
+const backendStaffSchema = paginatedSchema(
+  z.object({
+    userId: z.string(),
+    login: z.string(),
+    fullName: z.string(),
+    status: z.enum(["active", "invited", "deactivated"]),
+  })
+)
+
 const httpTeamRepository: TeamRepository = {
   async listMembers() {
-    return contractPending("список сотрудников")
+    const staff = await apiRequest("/api/v1/staff/", { auth: await getRenderAuth(), schema: backendStaffSchema })
+    return staff.results
+      .filter((member) => member.status !== "deactivated")
+      .map((member) => ({ id: member.userId, name: member.fullName || member.login }))
   },
 }
 

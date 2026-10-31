@@ -1,14 +1,24 @@
+import { z } from "zod"
+
 import { isMockDataSource } from "@/config/env"
 import {
   boardSchema,
   dealSchema,
   salesConfigSchema,
+  stageKindSchema,
   type Board,
+  type BoardColumn,
   type Deal,
+  type Pipeline,
   type SalesConfig,
 } from "@/features/sales/schemas"
-import { contractPending } from "@/lib/api/errors"
+import { teamRepository } from "@/features/team"
+import type { ApiAuth } from "@/lib/api/auth-session"
+import { apiRequest } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/errors"
+import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { addDecimals } from "@/lib/decimal"
 import { demoDeals, demoSalesConfig } from "@/mocks/crm"
 import { simulateLatency } from "@/mocks/latency"
@@ -21,8 +31,8 @@ export type DealsFilter = {
   search: string | null
 }
 
-/** Сортировка таблицы; «-» в начале — по убыванию. Набор полей нужно согласовать с backend */
-export const DEAL_SORTS = ["-updated", "updated", "-amount", "amount", "next_action", "title"] as const
+/** Сортировка таблицы; «-» в начале — по убыванию. Только поля, которые сортирует backend */
+export const DEAL_SORTS = ["-updated", "updated", "-amount", "amount", "title"] as const
 export type DealSort = (typeof DEAL_SORTS)[number]
 
 /** Быстрые фильтры «требует внимания»: флаги просрочки и следующего шага приходят от backend */
@@ -56,7 +66,7 @@ function matchesFilter(
   if (managerId && deal.manager.id !== managerId) return false
   if (!search) return true
   const needle = search.toLocaleLowerCase("ru")
-  return [deal.title, deal.client.phone ?? "", ...deal.tags].some((value) =>
+  return [deal.title, deal.client?.phone ?? "", ...deal.tags].some((value) =>
     value.toLocaleLowerCase("ru").includes(needle)
   )
 }
@@ -108,25 +118,167 @@ function compareDeals(sort: DealSort): (a: Deal, b: Deal) => number {
     case "amount":
     case "-amount":
       return (a, b) => direction * (Number(a.amount ?? -1) - Number(b.amount ?? -1))
-    case "next_action":
-      return (a, b) => (a.nextAction?.dueAt ?? "9999").localeCompare(b.nextAction?.dueAt ?? "9999")
     case "title":
       return (a, b) => a.title.localeCompare(b.title, "ru")
     default:
-      return (a, b) => direction * a.updatedAt.localeCompare(b.updatedAt)
+      return (a, b) => direction * (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "")
   }
 }
 
-/** Endpoint не согласованы — см. docs/API_CONTRACT.md, раздел «Продажи». */
+/** Ответы backend (`/api/v1/sales/…`, ветка P0); имена полей уже в camelCase */
+const backendPipelineSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isDefault: z.boolean(),
+  stages: z.array(
+    z.object({ id: z.string(), name: z.string(), position: z.int(), kind: stageKindSchema, isActive: z.boolean() })
+  ),
+})
+
+const backendLossReasonsSchema = paginatedSchema(
+  z.object({ id: z.string(), name: z.string(), isActive: z.boolean() })
+)
+
+const backendDealSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  amount: decimalStringSchema,
+  currency: currencyCodeSchema,
+  pipelineId: z.string(),
+  stageId: z.string(),
+  ownerUserId: z.string(),
+  nextStep: z.string().nullable(),
+})
+
+const backendDealsPageSchema = paginatedSchema(backendDealSchema)
+type BackendDeal = z.infer<typeof backendDealSchema>
+
+/** Сделок в колонке доски за один запрос; остальные видны в таблице */
+const BOARD_STAGE_LIMIT = 50
+
+const BACKEND_ORDERING: Record<DealSort, string> = {
+  "-updated": "-updated_at",
+  updated: "updated_at",
+  "-amount": "-amount",
+  amount: "amount",
+  title: "title",
+}
+
+/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
+async function loadMemberNames(): Promise<Map<string, string>> {
+  try {
+    return new Map((await teamRepository.listMembers()).map((member) => [member.id, member.name]))
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "forbidden") return new Map()
+    throw error
+  }
+}
+
+/**
+ * Список сделок backend отдаёт без клиента, даты смены этапа, даты обновления и срока
+ * следующего шага — эти поля остаются пустыми, а не придумываются (см. docs/API_CONTRACT.md).
+ */
+function toDeal(deal: BackendDeal, memberNames: ReadonlyMap<string, string>): Deal {
+  return {
+    id: deal.id,
+    title: deal.title,
+    client: null,
+    pipelineId: deal.pipelineId,
+    stageId: deal.stageId,
+    amount: deal.amount,
+    currency: deal.currency,
+    manager: { id: deal.ownerUserId, name: memberNames.get(deal.ownerUserId) ?? "Сотрудник" },
+    nextAction: deal.nextStep ? { title: deal.nextStep, dueAt: null, isOverdue: false } : null,
+    stageEnteredAt: null,
+    updatedAt: null,
+    tags: [],
+  }
+}
+
+function toPipeline(pipeline: z.infer<typeof backendPipelineSchema>): Pipeline | null {
+  const stages = pipeline.stages
+    .filter((stage) => stage.isActive)
+    .toSorted((a, b) => a.position - b.position)
+    .map(({ id, name, kind }) => ({ id, name, kind }))
+  return stages.length > 0 ? { id: pipeline.id, name: pipeline.name, stages } : null
+}
+
+type DealsRequest = {
+  pipelineId: string | null
+  stageId: string | null
+  managerId: string | null
+  search: string | null
+  status?: "open"
+  attention?: DealAttention | null
+  ordering: string
+  limit: number
+  offset: number
+}
+
+function requestDeals(auth: ApiAuth, query: DealsRequest) {
+  return apiRequest("/api/v1/sales/deals/", { auth, query, schema: backendDealsPageSchema })
+}
+
 const httpSalesRepository: SalesRepository = {
   async getConfig() {
-    return contractPending("настройки воронок")
+    const auth = await getRenderAuth()
+    const [pipelines, lossReasons] = await Promise.all([
+      apiRequest("/api/v1/sales/pipelines/", { auth, schema: z.array(backendPipelineSchema) }),
+      apiRequest("/api/v1/sales/loss-reasons/", { auth, query: { active: true }, schema: backendLossReasonsSchema }),
+    ])
+    // Воронка по умолчанию — первой: её доска открывается без выбора
+    const ordered = pipelines.toSorted((a, b) => Number(b.isDefault) - Number(a.isDefault))
+    return {
+      pipelines: ordered.flatMap((pipeline) => toPipeline(pipeline) ?? []),
+      lossReasons: lossReasons.results.map(({ id, name }) => ({ id, label: name })),
+    }
   },
-  async getBoard() {
-    return contractPending("доска воронки")
+
+  /**
+   * Отдельного endpoint доски нет: по запросу на каждый рабочий этап, count — сколько сделок
+   * на этапе всего. Суммы этапов backend не считает, поэтому totalAmount пустой.
+   */
+  async getBoard({ pipelineId, managerId, search }) {
+    const auth = await getRenderAuth()
+    const [backendPipeline, memberNames] = await Promise.all([
+      apiRequest(`/api/v1/sales/pipelines/${encodeURIComponent(pipelineId)}/`, { auth, schema: backendPipelineSchema }),
+      loadMemberNames(),
+    ])
+    const pipeline = toPipeline(backendPipeline)
+    if (!pipeline) throw new ApiError("not_found", "В воронке нет активных этапов")
+    const columns = await Promise.all(
+      pipeline.stages
+        .filter((stage) => stage.kind === "open")
+        .map(async (stage): Promise<BoardColumn> => {
+          const page = await requestDeals(auth, {
+            pipelineId,
+            stageId: stage.id,
+            managerId,
+            search,
+            status: "open",
+            ordering: BACKEND_ORDERING["-updated"],
+            limit: BOARD_STAGE_LIMIT,
+            offset: 0,
+          })
+          return {
+            stageId: stage.id,
+            count: page.count,
+            totalAmount: null,
+            currency: null,
+            deals: page.results.map((deal) => toDeal(deal, memberNames)),
+          }
+        })
+    )
+    return { pipelineId, columns }
   },
-  async listDeals() {
-    return contractPending("список сделок")
+
+  async listDeals({ sort, ...query }) {
+    const auth = await getRenderAuth()
+    const [page, memberNames] = await Promise.all([
+      requestDeals(auth, { ...query, ordering: BACKEND_ORDERING[sort] }),
+      loadMemberNames(),
+    ])
+    return { count: page.count, results: page.results.map((deal) => toDeal(deal, memberNames)) }
   },
 }
 

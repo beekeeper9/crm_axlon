@@ -132,7 +132,7 @@ function dueAt(next: NonNullable<DemoDealRow[7]>): string | null {
   return dayOffset === null ? null : demoAt(dayOffset, time)
 }
 
-function toDeal([id, title, phone, pipelineId, stageId, manager, amount, next, daysOnStage, tags]: DemoDealRow): Deal {
+function toDeal([id, title, phone, pipelineId, stageId, manager, amount, next, daysOnStage, tags]: DemoDealRow): DemoDeal {
   const nextDueAt = next && dueAt(next)
   return {
     id,
@@ -155,4 +155,11 @@ function toDeal([id, title, phone, pipelineId, stageId, manager, amount, next, d
   }
 }
 
-export const demoDeals: Deal[] = rows.map(toDeal)
+/** В демо-данных у сделки всегда есть клиент и даты — производные моки опираются на это */
+export type DemoDeal = Deal & {
+  client: NonNullable<Deal["client"]>
+  stageEnteredAt: string
+  updatedAt: string
+}
+
+export const demoDeals: DemoDeal[] = rows.map(toDeal)

@@ -21,7 +21,6 @@ type SortableColumn = { asc: DealSort; desc: DealSort | null }
 const SORTABLE = {
   title: { asc: "title", desc: null },
   amount: { asc: "amount", desc: "-amount" },
-  next: { asc: "next_action", desc: null },
   updated: { asc: "updated", desc: "-updated" },
 } satisfies Record<string, SortableColumn>
 
@@ -110,7 +109,7 @@ export function DealsTable({
                 <th scope="col" className="h-9 px-3 font-medium">Этап</th>
                 <SortHeader label="Сумма" column={SORTABLE.amount} sort={sort} hrefFor={hrefFor} align="right" />
                 {showManager && <th scope="col" className="h-9 px-3 font-medium">Ответственный</th>}
-                <SortHeader label="Следующий шаг" column={SORTABLE.next} sort={sort} hrefFor={hrefFor} />
+                <th scope="col" className="h-9 px-3 font-medium">Следующий шаг</th>
                 <SortHeader label="Обновлено" column={SORTABLE.updated} sort={sort} hrefFor={hrefFor} align="right" />
               </tr>
             </thead>
@@ -127,7 +126,7 @@ export function DealsTable({
                       >
                         {deal.title}
                       </Link>
-                      {deal.client.phone && <p className="text-meta text-muted-foreground tabular-nums">{deal.client.phone}</p>}
+                      {deal.client?.phone && <p className="text-meta text-muted-foreground tabular-nums">{deal.client.phone}</p>}
                     </td>
                     <td className="px-3 py-2">
                       {stageInfo && (
@@ -168,7 +167,7 @@ export function DealsTable({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-meta whitespace-nowrap text-muted-foreground">
-                      {formatDayMonth(deal.updatedAt)}
+                      {deal.updatedAt ? formatDayMonth(deal.updatedAt) : "—"}
                     </td>
                   </tr>
                 )

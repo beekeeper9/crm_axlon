@@ -3,7 +3,8 @@ import { z } from "zod"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 
 /**
- * Предлагаемая форма данных «Продаж». НЕ согласована с backend — см. docs/API_CONTRACT.md.
+ * Данные «Продаж» в форме интерфейса. В режиме api их собирает из ответов backend
+ * `features/sales/api/sales-repository.ts` (контракт — docs/API_CONTRACT.md, раздел «Продажи»).
  * Воронки и этапы приходят из настроек компании: в компонентах нет списка этапов.
  * Сделка в этой CRM — это лид в воронке, поэтому её карточка открывается как карточка лида.
  */
@@ -34,7 +35,8 @@ export const salesConfigSchema = z.object({
 export const dealSchema = z.object({
   id: z.string(),
   title: z.string(),
-  client: z.object({ name: z.string(), phone: z.string().nullable() }),
+  /** null — клиент не привязан или backend не отдаёт его в списке сделок */
+  client: z.object({ name: z.string(), phone: z.string().nullable() }).nullable(),
   pipelineId: z.string(),
   stageId: z.string(),
   /** Деньги — десятичная строка и ISO-код валюты; null — сумма ещё не известна */
@@ -49,8 +51,9 @@ export const dealSchema = z.object({
       isOverdue: z.boolean(),
     })
     .nullable(),
-  stageEnteredAt: z.iso.datetime({ offset: true }),
-  updatedAt: z.iso.datetime({ offset: true }),
+  /** null — backend не отдаёт дату в списке сделок */
+  stageEnteredAt: z.iso.datetime({ offset: true }).nullable(),
+  updatedAt: z.iso.datetime({ offset: true }).nullable(),
   tags: z.array(z.string()),
 })
 

@@ -110,18 +110,30 @@
 4. **Поиск по клиентам** для форм (выбор лида при назначении встречи): endpoint с `search` и `limit`.
 5. **Часовой пояс компании** — в данных компании или фиксированный.
 
-### Сотрудники — `features/team`
+### Сотрудники — `features/team` (подключено к P0)
 
-`[{ id, name }]` — сотрудники в области видимости пользователя, для фильтров и выбора исполнителя.
+`GET /api/v1/staff/` → `[{ id: user_id, name: full_name || login }]` без деактивированных. Id — пользователя, как `owner_user_id` у сделки и `manager_id` в фильтре. Менеджер (`sales_rep`) получает 403: фильтр по сотрудникам ему не показывается, имена в сделках не загружаются.
 
-### Продажи — `features/sales/schemas.ts`
+### Продажи — `features/sales` (подключено к P0, проверено 31.10.2026 на локальном backend)
 
-- **Настройки воронок** `salesConfigSchema`: `pipelines: [{ id, name, stages: [{ id, name, kind: open|won|lost }] }]`, `lossReasons: [{ id, label }]`. Этапы и порядок задаёт компания; интерфейс не знает названий этапов.
-- **Доска** `boardSchema`: `{ pipelineId, columns: [{ stageId, count, totalAmount, currency, deals[] }] }` — только рабочие этапы. `count` и `totalAmount` считает backend с учётом фильтров. Нужна ли подгрузка карточек колонки по `limit/offset` — уточнить.
-- **Сделка** `dealSchema`: `id, title, client { name, phone }, pipelineId, stageId, amount, currency, manager { id, name }, nextAction { title, dueAt, isOverdue } | null, stageEnteredAt, updatedAt, tags[]`. Сделка = лид в воронке, открывается карточкой лида.
-- **Таблица и «Список»**: тот же объект, `{ count, results }`; фильтры `pipeline_id` (необязателен — в «Списке» все воронки), `stage_id`, `manager_id`, `search`, «требует внимания» (`overdue` — следующий шаг просрочен, `no_next_step` — шага нет); сортировка `-updated` (по умолчанию), `updated`, `amount`, `-amount`, `next_action`, `title`. Имена параметров и полей сортировки — предложение.
-- **Дата последней активности.** Сейчас «Обновлено» = `updatedAt`. Нужно ли отдельное поле `last_activity_at` (последний звонок, сообщение, встреча) — вопрос.
-- **Смена этапа** (нужен endpoint): `stage_id`; при закрытии — `loss_reason_id` (обязателен для lost) и `comment`. Backend проверяет правила компании (успех только с оплатой) и возвращает обновлённую сделку или `validation_error`.
+Интерфейс работает со своими схемами (`features/sales/schemas.ts`), ответы backend переводит `features/sales/api/sales-repository.ts`.
+
+- **Настройки воронок** — `GET /sales/pipelines/` (массив без пагинации) и `GET /sales/loss-reasons/?active=true` (`{count, results}`). Неактивные этапы скрываются, этапы — по `position`, воронка `is_default` — первой; воронка без активных этапов не показывается.
+- **Доска** — отдельного endpoint нет: `GET /sales/pipelines/{id}/` и по запросу `GET /sales/deals/?pipeline_id&stage_id&status=open&limit=50` на каждый рабочий этап; `count` этапа — из ответа. **Суммы этапов backend не считает** — колонка показывает «—».
+- **Таблица и «Список»** — `GET /sales/deals/` с `pipeline_id`, `stage_id`, `manager_id`, `search`, `attention`, `ordering`, `limit/offset`. Сортировка: `updated_at`, `amount`, `title` (± ). Сортировка по следующему шагу убрана: backend её не поддерживает и молча подставил бы сортировку по умолчанию.
+- **Смена этапа** с доски в режиме api недоступна (`editMode = unavailable`), ничего не имитируется.
+
+Пробелы backend (`DealReadSerializer`), поля остаются пустыми, а не придумываются:
+
+| Нужно интерфейсу | Сейчас | Предложение |
+|---|---|---|
+| Клиент: имя и телефон | только `customer_id` | вложить `customer { id, name, phone }` в список сделок |
+| «Обновлено» | нет `updated_at` в ответе (хотя сортировка по нему есть) | добавить `updated_at` |
+| «На этапе с» | нет | `stage_entered_at` (есть в истории смены этапов) |
+| Срок следующего шага и просрочка | `next_step` — только текст | `next_step_due_at`; `attention=overdue` сейчас значит «просрочена ожидаемая дата закрытия», а кнопка в «Списке» названа «Шаг просрочен» |
+| Сумма по этапу | нет | `count` и `total_amount` по этапам одним запросом (`GET /sales/pipelines/{id}/board/`) |
+| Имя ответственного | только `owner_user_id`, имена — через `/staff/` (менеджеру 403) | вложить `owner { id, name }` |
+| Поиск | `title` и `source` | также телефон и имя клиента (подсказка в поле поиска это обещает) |
 
 ### Карточка лида — `features/leads/schemas.ts`
 
