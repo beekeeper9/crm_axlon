@@ -88,7 +88,8 @@ async function setTenant(slug: string): Promise<void> {
 
 /**
  * Коды ошибок входа по коду backend (`identity/presentation/auth_errors.py`, simplejwt):
- * неверный логин или пароль и отключённый аккаунт — одинаково 401 `no_active_account`.
+ * неверный логин или пароль и отключённый аккаунт — одинаково 401 (`authentication_failed`).
+ * Поэтому любой 401 без кода MFA считается неверными учётными данными.
  */
 function apiLoginError(error: unknown): { kind: LoginErrorKind; message: string; requestId: string | null } {
   if (!(error instanceof ApiError)) return { kind: "unavailable", message: API_ERROR_MESSAGES.server, requestId: null }
