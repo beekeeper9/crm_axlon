@@ -41,12 +41,16 @@ export async function proxy(request: NextRequest) {
 
   let response: NextResponse | null = null
   if (!isAccessTokenFresh(request.cookies.get(ACCESS_COOKIE)?.value)) {
-    const tokens = await exchangeRefreshToken(refresh)
-    if (!tokens) {
+    const result = await exchangeRefreshToken(refresh)
+    if (result.status === "rejected") {
       const toLogin = redirectToLogin(request, `${pathname}${search}`, "expired")
       for (const name of [ACCESS_COOKIE, REFRESH_COOKIE, TENANT_COOKIE]) toLogin.cookies.delete(name)
       return toLogin
     }
+    // Временный сбой (нет связи, 429, 5xx): refresh-токен, скорее всего, ещё действителен — не выходим.
+    // Страница попробует текущий access; если он истёк, покажет ошибку, а следующий запрос повторит обмен.
+    if (result.status === "unavailable") return NextResponse.next()
+    const { tokens } = result
     request.cookies.set(ACCESS_COOKIE, tokens.access)
     request.cookies.set(REFRESH_COOKIE, tokens.refresh)
     response = NextResponse.next({ request: { headers: request.headers } })

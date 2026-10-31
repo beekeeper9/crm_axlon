@@ -11,6 +11,8 @@ export const ROLES = [
   "director",
   "head_of_sales",
   "manager",
+  "lead_caller",
+  "operations",
   "viewer",
 ] as const
 
@@ -21,6 +23,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   director: "Директор",
   head_of_sales: "Руководитель отдела продаж",
   manager: "Менеджер",
+  lead_caller: "Первичная обработка лидов",
+  operations: "Операционный отдел",
   viewer: "Наблюдатель",
 }
 
@@ -64,6 +68,12 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   director: [...MANAGEMENT, "staff.manage", "company.view"],
   head_of_sales: [...MANAGEMENT, "staff.manage"],
   manager: ["records.edit", "my_day.view"],
+  /**
+   * Роли P0 backend. Их рабочие пространства в продукте ещё не описаны — пока минимальный набор:
+   * работа со своими записями, без «Моего дня» и командных разделов. Данные ограничивает backend.
+   */
+  lead_caller: ["records.edit"],
+  operations: ["records.edit"],
   /** Только просмотр показателей команды (роль backend `viewer`) */
   viewer: ["team.view", "analytics.view"],
 }

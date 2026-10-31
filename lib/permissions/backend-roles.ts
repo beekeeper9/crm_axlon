@@ -3,11 +3,22 @@ import { z } from "zod"
 import type { Role } from "@/lib/permissions/roles"
 
 /**
- * Роли, которые возвращает backend в `memberships[].role`.
- * Это другой словарь, чем роли интерфейса: backend-роль `manager` — руководитель,
- * а «менеджер» интерфейса — менеджер по продажам (`sales_rep`). Поэтому соответствие явное.
+ * Роли, которые backend хранит и возвращает в `memberships[].role` (`access_control/domain/rbac.py`).
+ * Это другой словарь, чем роли интерфейса: backend-роль `manager` — руководитель (устаревшее
+ * значение для РОПа), а «менеджер» интерфейса — менеджер по продажам (`sales_rep`).
+ * Неизвестные роли backend сам не отдаёт в `/me/`, поэтому список закрытый.
  */
-export const BACKEND_ROLES = ["owner", "admin", "manager", "sales_rep", "viewer"] as const
+export const BACKEND_ROLES = [
+  "owner",
+  "admin",
+  "director",
+  "manager",
+  "head_of_sales",
+  "sales_rep",
+  "lead_caller",
+  "operations",
+  "viewer",
+] as const
 
 export const backendRoleSchema = z.enum(BACKEND_ROLES)
 
@@ -15,14 +26,18 @@ export type BackendRole = z.infer<typeof backendRoleSchema>
 
 /**
  * Единственное место перевода ролей backend в роли интерфейса.
- * ПРЕДЛОЖЕНИЕ: смысл `admin` (администратор компании) нужно подтвердить —
- * пока он получает интерфейс директора. Администратор платформы — не роль компании.
+ * Повторяет `PRODUCT_ROLES` backend: owner, admin и director — директор; manager и head_of_sales — РОП.
+ * Администратор платформы — не роль компании, а признак `is_platform_admin` в `/me/`.
  */
 const UI_ROLE_BY_BACKEND_ROLE: Record<BackendRole, Role> = {
   owner: "director",
   admin: "director",
+  director: "director",
   manager: "head_of_sales",
+  head_of_sales: "head_of_sales",
   sales_rep: "manager",
+  lead_caller: "lead_caller",
+  operations: "operations",
   viewer: "viewer",
 }
 

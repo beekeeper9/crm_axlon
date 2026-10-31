@@ -1,4 +1,4 @@
-import { CloudOff, Lock, PlugZap, SearchX, ServerCrash, type LucideIcon } from "lucide-react"
+import { CloudOff, Hourglass, Lock, PlugZap, RefreshCw, SearchX, ServerCrash, type LucideIcon } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import type { ApiError, ApiErrorKind } from "@/lib/api/errors"
@@ -18,6 +18,12 @@ const STATES: Record<ApiErrorKind, { icon: LucideIcon; title: string; descriptio
   network: { icon: CloudOff, title: "Нет связи с сервером", description: "Проверьте интернет и обновите страницу." },
   not_found: { icon: SearchX, title: "Данные не найдены", description: "Возможно, запись удалена или ссылка устарела." },
   validation: { icon: ServerCrash, title: "Запрос не принят", description: "Сервер отклонил параметры запроса. Сбросьте фильтры и попробуйте снова." },
+  conflict: {
+    icon: RefreshCw,
+    title: "Данные уже изменились",
+    description: "Кто-то обновил запись раньше вас. Обновите страницу и повторите действие.",
+  },
+  rate_limited: { icon: Hourglass, title: "Слишком много запросов", description: "Подождите минуту и обновите страницу." },
   invalid_response: {
     icon: ServerCrash,
     title: "Сервер ответил в неожиданном формате",

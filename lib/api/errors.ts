@@ -6,6 +6,10 @@ export type ApiErrorKind =
   | "forbidden"
   | "validation"
   | "not_found"
+  /** 409: запись изменили параллельно (version) или переход недопустим в текущем состоянии */
+  | "conflict"
+  /** 429: ограничение частоты запросов или временная блокировка входа */
+  | "rate_limited"
   | "server"
   /** Ответ backend не совпал с ожидаемой схемой */
   | "invalid_response"
@@ -22,6 +26,8 @@ type ApiErrorOptions = {
   /** `error.request_id` — показываем пользователю, чтобы поддержка нашла запрос в логах */
   requestId?: string
   fieldErrors?: FieldErrors
+  /** Через сколько секунд можно повторить (заголовок Retry-After), если сервер его прислал */
+  retryAfterSeconds?: number
 }
 
 export class ApiError extends Error {
@@ -30,6 +36,7 @@ export class ApiError extends Error {
   readonly code?: string
   readonly requestId?: string
   readonly fieldErrors?: FieldErrors
+  readonly retryAfterSeconds?: number
 
   constructor(kind: ApiErrorKind, message: string, options: ApiErrorOptions = {}) {
     super(message)
@@ -39,6 +46,7 @@ export class ApiError extends Error {
     this.code = options.code
     this.requestId = options.requestId
     this.fieldErrors = options.fieldErrors
+    this.retryAfterSeconds = options.retryAfterSeconds
   }
 }
 
@@ -46,6 +54,8 @@ export function errorKindFromStatus(status: number): ApiErrorKind {
   if (status === 401) return "unauthorized"
   if (status === 403) return "forbidden"
   if (status === 404) return "not_found"
+  if (status === 409) return "conflict"
+  if (status === 429) return "rate_limited"
   if (status === 400 || status === 422) return "validation"
   return "server"
 }
@@ -74,10 +84,17 @@ function toFieldErrors(details: unknown): FieldErrors | undefined {
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
-export function apiErrorFromResponse(status: number, payload: unknown): ApiError {
+/** Retry-After в секундах; форму с датой backend не использует */
+export function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined
+  const seconds = Number(value)
+  return Number.isInteger(seconds) && seconds >= 0 ? seconds : undefined
+}
+
+export function apiErrorFromResponse(status: number, payload: unknown, retryAfterSeconds?: number): ApiError {
   const parsed = errorEnvelopeSchema.safeParse(payload)
   if (!parsed.success) {
-    return new ApiError(errorKindFromStatus(status), `API ответил статусом ${status}`, { status })
+    return new ApiError(errorKindFromStatus(status), `API ответил статусом ${status}`, { status, retryAfterSeconds })
   }
 
   const { code, message, details, requestId } = parsed.data.error
@@ -87,6 +104,7 @@ export function apiErrorFromResponse(status: number, payload: unknown): ApiError
     code,
     requestId,
     fieldErrors: kind === "validation" ? toFieldErrors(details) : undefined,
+    retryAfterSeconds,
   })
 }
 
@@ -97,6 +115,8 @@ export const API_ERROR_MESSAGES: Record<ApiErrorKind, string> = {
   forbidden: "У вас нет доступа к этим данным.",
   validation: "Данные заполнены с ошибками.",
   not_found: "Данные не найдены.",
+  conflict: "Данные уже изменились. Обновите страницу и повторите действие.",
+  rate_limited: "Слишком много запросов. Подождите немного и повторите.",
   server: "Сервер временно недоступен. Попробуйте позже.",
   invalid_response: "Сервер вернул данные в неожиданном формате.",
   contract_pending: "Этот раздел ещё не подключён к серверу.",

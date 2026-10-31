@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { login, type LoginState } from "@/lib/auth/actions"
 
-const INITIAL_STATE: LoginState = { error: null, requestId: null, login: "" }
+const INITIAL_STATE: LoginState = { error: null, requestId: null, login: "", otpRequired: false }
 
 /** Форма входа: Enter отправляет форму, кнопка блокируется на время запроса */
 export function LoginForm({ returnTo }: { returnTo: string | null }) {
   const [state, formAction, isPending] = useActionState(login, INITIAL_STATE)
   const fieldError = state.error && (state.error.kind === "invalid" || state.error.kind === "validation")
+  const otpError = state.error && state.error.kind === "invalid_otp"
 
   return (
     <form action={formAction} className="grid gap-4" noValidate>
@@ -29,7 +30,7 @@ export function LoginForm({ returnTo }: { returnTo: string | null }) {
           spellCheck={false}
           defaultValue={state.login}
           required
-          autoFocus
+          autoFocus={!state.otpRequired}
           aria-invalid={Boolean(fieldError)}
           aria-describedby={state.error ? "login-error" : undefined}
           className="h-10"
@@ -42,11 +43,31 @@ export function LoginForm({ returnTo }: { returnTo: string | null }) {
           name="password"
           autoComplete="current-password"
           required
+          autoFocus={state.otpRequired}
           aria-invalid={Boolean(fieldError)}
           aria-describedby={state.error ? "login-error" : undefined}
           className="h-10"
         />
       </div>
+      {state.otpRequired && (
+        <div className="grid gap-1.5">
+          <Label htmlFor="login-otp">Код подтверждения</Label>
+          <Input
+            id="login-otp"
+            name="otp"
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            aria-invalid={Boolean(otpError)}
+            aria-describedby="login-otp-hint"
+            className="h-10"
+          />
+          <p id="login-otp-hint" className="text-xs text-muted-foreground">
+            6 цифр из приложения-аутентификатора или резервный код
+          </p>
+        </div>
+      )}
 
       {state.error && (
         <div id="login-error" role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-sm">

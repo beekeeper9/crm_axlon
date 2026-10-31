@@ -45,8 +45,8 @@ async function getDemoSession(): Promise<SessionState | null> {
 
 /**
  * Пользователь из `GET /api/v1/me/` и роль в выбранной компании.
- * Признаки администратора платформы и обязательной смены пароля — ПРЕДЛОЖЕНИЕ к контракту
- * (см. API_CONTRACT.md); пока backend их не отдаёт, они считаются false.
+ * Признаки администратора платформы и обязательной смены пароля backend отдаёт с P0-1;
+ * в более ранней версии их нет, и они считаются false.
  */
 async function getApiSession(): Promise<SessionState | null> {
   const auth = await getRenderAuth()
@@ -57,14 +57,20 @@ async function getApiSession(): Promise<SessionState | null> {
     if (error instanceof ApiError && error.kind === "unauthorized") return null
     throw error
   }
-  const base = { id: me.id, login: me.username, fullName: me.fullName ?? me.username }
+  const base = { id: me.id, login: me.username, fullName: me.displayName ?? me.username }
   if (me.isPlatformAdmin) {
     return { user: { ...base, role: "platform_admin", companyName: "", departmentName: "" }, mustChangePassword: me.mustChangePassword }
   }
   const membership = me.memberships.find((item) => item.tenant === auth.tenant)
   if (!membership) redirect(routes.selectCompany)
   return {
-    user: { ...base, role: uiRoleFromBackend(membership.role), companyName: membership.tenant, departmentName: "" },
+    user: {
+      ...base,
+      role: uiRoleFromBackend(membership.role),
+      // До P0-1 backend не отдаёт название компании — тогда показываем её slug
+      companyName: membership.company?.name ?? membership.tenant,
+      departmentName: membership.department?.name ?? "",
+    },
     mustChangePassword: me.mustChangePassword,
   }
 }

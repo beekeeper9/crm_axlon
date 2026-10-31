@@ -32,7 +32,7 @@ async function CompanyList({ searchParams }: Pick<PageProps<"/select-company">, 
             >
               <Building2 className="size-4 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{membership.tenant}</span>
+                <span className="block truncate text-sm font-medium">{membership.company?.name ?? membership.tenant}</span>
                 <span className="text-xs text-muted-foreground">{ROLE_LABELS[uiRoleFromBackend(membership.role)]}</span>
               </span>
               <ChevronRight className="size-4 text-muted-foreground" aria-hidden />

@@ -13,11 +13,11 @@
 | Правило | Как реализовано |
 |---------|-----------------|
 | JSON, поля в `snake_case` | `lib/api/case.ts`: ответ → `camelCase`, тело и параметры запроса → `snake_case`. Только в API-клиенте, компоненты работают с `camelCase` |
-| Базовый URL | `NEXT_PUBLIC_API_BASE_URL` (проверяется в `config/env.ts`) |
+| Базовый URL | `API_BASE_URL` — только для сервера Next.js, в браузер не попадает (проверяется в `config/env.ts`) |
 | Режим данных | `NEXT_PUBLIC_DATA_SOURCE=mock\|api`; репозитории модулей выбирают реализацию один раз |
 | Авторизация JWT Bearer | Заголовок `Authorization: Bearer <access>`; без cookie-сессий и без `credentials: "include"` |
 | Компания | Заголовок `X-Tenant: <slug>` для бизнес-запросов; slug из `GET /api/v1/me/` → `memberships[].tenant`. Tenant в путь не добавляется |
-| Обновление токена | При 401 — один запрос `POST /api/v1/auth/token/refresh/` с `{ refresh }`, новый refresh из ответа сохраняется, старый больше не используется. Параллельные запросы ждут одно общее обновление (иначе второй отправил бы уже ротированный токен). Если обновление не удалось — токены удаляются, ошибка `unauthorized` |
+| Обновление токена | При 401 — один запрос `POST /api/v1/auth/token/refresh/` с `{ refresh }`, новый refresh из ответа сохраняется, старый больше не используется (backend: ротация + чёрный список, окна повторного использования нет). Параллельные запросы ждут одно общее обновление. Backend отклонил refresh (400/401) — токены удаляются, ошибка `unauthorized`; временный сбой (нет связи, 429, 5xx) — токены **не** удаляются, пользователь не выходит из системы |
 | Проверка ответов | Каждый ответ проверяется Zod-схемой модуля; несовпадение → `invalid_response` |
 
 ### Авторизация — `lib/api/auth-api.ts`
@@ -26,29 +26,34 @@
 |----------|-----------|
 | `POST /api/v1/auth/token/` | Логин → `{ access, refresh }` |
 | `POST /api/v1/auth/token/refresh/` | `{ refresh }` → новая пара (refresh ротируется) |
-| `GET /api/v1/me/` | `{ id, username, memberships: [{ tenant, role }] }` |
+| `GET /api/v1/me/` | `{ id, username, display_name?, is_platform_admin?, must_change_password?, memberships: [{ tenant, role, company?, department?, permissions? }] }` (поля с `?` — с backend P0-1) |
 | `POST /api/v1/auth/logout/` | Завершить текущую сессию (один refresh) |
 | `POST /api/v1/auth/logout-all/` | Завершить все сессии |
+| `POST /api/v1/auth/password/change/` | `{ current_password, new_password }` → 204, снимает `must_change_password` (backend P0-1) |
 
 Подключено: страницы `/login`, `/select-company`, выход в меню профиля, обновление токена в `proxy.ts`. Токены хранит сервер Next.js в httpOnly-cookie (см. `DECISIONS.md`). В режиме `mock` вход не нужен и не имитируется.
 
 Проверено 28.10.2026 на локальной заглушке, повторяющей согласованные ответы (не на реальном backend): вход и ошибка входа с `request_id`, выбор компании, три параллельных запроса с истёкшим access → один обмен refresh-токена без повторного использования, отклонённый refresh → очистка cookie и переход на вход, выход.
 
-### Чего не хватает для входа (предложение, нужно backend)
+### Вход: фактическое поведение backend (сверено с кодом ветки `feature/p0-4-cabinet`, 31.10.2026)
 
-`GET /api/v1/me/` — дополнительные необязательные поля (frontend уже читает их, если они придут):
-- `full_name` — для шапки вместо логина;
-- `is_platform_admin: boolean` — **блокирующий вопрос:** администратор платформы не член компании, и по `memberships` его нельзя отличить. Без этого флага панель администратора в режиме api недоступна;
-- `must_change_password: boolean` — пользователь вошёл по временному паролю; пока true, frontend пускает только на смену пароля.
-
-Коды ошибок входа (`POST /api/v1/auth/token/`): неверный логин или пароль — 401 без уточнения, что именно неверно; отключённый аккаунт — `account_disabled` (сообщать только при верном пароле, чтобы не раскрывать существование аккаунтов).
+- Тело входа: `{ username, password, otp? }`. Ответ — `{ access, refresh }`. Access живёт 10 мин, refresh — 24 ч (настройки backend по умолчанию), в токенах есть `exp`.
+- Ошибки входа (`lib/auth/actions.ts` → `apiLoginError`):
+  - 401 `no_active_account` — неверный логин или пароль **и** отключённый аккаунт (backend их не различает) → «Неверный логин или пароль»;
+  - 401 `mfa_required` — у аккаунта включена MFA → форма показывает поле кода, запрос повторяется с `otp`;
+  - 401 `invalid_otp` — неверный код;
+  - 429 `account_locked` — временная блокировка после неудачных попыток (без `Retry-After`);
+  - 429 `throttled` — ограничение частоты (с заголовком `Retry-After`).
+- `/me/` с P0-1: `display_name` (имя и фамилия или логин), `is_platform_admin`, `must_change_password`, у членства — `company { id, name, country, currency, timezone }`, `department { id, name } | null`, `permissions[]`. Поля необязательны в схеме frontend, чтобы работать и с более ранней версией backend.
+- **Ограничение backend:** `must_change_password` проверяет только frontend — backend не запрещает другие запросы с временным паролем.
+- **Риск ограничения частоты:** все запросы идут с сервера Next.js, то есть с одного IP. Анонимные `auth/token/` и `auth/token/refresh/` попадают в общий лимит `auth` (10/мин) на всех пользователей. Нужно решение backend (`TRUSTED_PROXY_COUNT` + `X-Forwarded-For` или лимит refresh по токену). Не проверено под нагрузкой.
 
 ### Ошибки — `lib/api/errors.ts`
 
 Тело: `{ "error": { "code", "message", "details"?, "request_id" } }`.
 
 - `code = validation_error` → `ApiError.kind = "validation"`, `details` (формат DRF `{ field: ["…"] }`) → `ApiError.fieldErrors` с именами полей в `camelCase`.
-- Остальные коды: вид ошибки по HTTP-статусу (401, 403, 404, 400/422, прочие → server). 404 без `X-Tenant` — тоже `not_found`.
+- Остальные коды: вид ошибки по HTTP-статусу (401, 403, 404, 400/422, 409 → `conflict`, 429 → `rate_limited` с `retryAfterSeconds` из `Retry-After`, прочие → server). 404 без `X-Tenant` — тоже `not_found`.
 - `request_id` сохраняется в `ApiError.requestId` для логов и обращения в поддержку. Пользователю показываются только понятные тексты из `API_ERROR_MESSAGES`, без технических подробностей.
 
 ### Пагинация — `lib/api/pagination.ts`
@@ -63,10 +68,20 @@
 
 ### Роли — `lib/permissions/backend-roles.ts`
 
-Backend: `owner`, `admin`, `manager`, `sales_rep`, `viewer`. Перевод в роли интерфейса — только в `uiRoleFromBackend`:
+Хранимые роли backend (`access_control/domain/rbac.py`, ветка P0) и роли интерфейса — только в `uiRoleFromBackend`, повторяет `PRODUCT_ROLES` backend:
 
-| Backend | Интерфейс | Статус |
-|---------|-----------|--------|
+| Backend | Интерфейс |
+|---------|-----------|
+| `owner`, `admin`, `director` | Директор |
+| `manager` (устаревшее), `head_of_sales` | Руководитель отдела продаж |
+| `sales_rep` | Менеджер |
+| `lead_caller` | Первичная обработка лидов (рабочее пространство в продукте не описано — минимальный набор прав) |
+| `operations` | Операционный отдел (то же) |
+| `viewer` | Наблюдатель |
+
+«Администратор платформы» — признак `is_platform_admin` в `/me/`, а не роль компании. Скрытие кнопок — только удобство: backend проверяет RBAC и область `own/team/all` на каждой операции. Список `permissions` из `/me/` frontend пока читает, но не использует для отображения — следующий шаг.
+
+---------|-----------|--------|
 | `owner` | Директор | предложение |
 | `admin` | Директор | **уточнить**: это администратор компании? |
 | `manager` | Руководитель отдела продаж | предложение (backend `manager` = руководитель) |

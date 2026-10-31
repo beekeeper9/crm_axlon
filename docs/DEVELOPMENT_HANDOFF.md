@@ -77,7 +77,7 @@ Next 16 отличается от привычных версий: перед и
 
 ## 5. Demo mode и API mode
 
-| | Demo (`NEXT_PUBLIC_DATA_SOURCE=mock`, по умолчанию) | API (`=api` + `NEXT_PUBLIC_API_BASE_URL`) |
+| | Demo (`NEXT_PUBLIC_DATA_SOURCE=mock`, по умолчанию) | API (`=api` + `API_BASE_URL`, только сервер) |
 |---|---|---|
 | Вход | Тестовые аккаунты из `mocks/demo-accounts.seed.ts` (подсказка на странице входа), пароли хешируются scrypt, сессия — случайный токен в httpOnly-cookie `crm_demo_session` | Согласованные endpoint авторизации |
 | Данные | Демо-наборы в `mocks/`, связаны между разделами; «сегодня» = 27.10.2026 (`config/demo-clock.ts`) | Почти все бизнес-endpoint не согласованы → экраны показывают «Раздел ещё не подключён к серверу» |
@@ -134,7 +134,7 @@ Next 16 отличается от привычных версий: перед и
 1. Получить от backend-разработчика подтверждение контракта: флаг администратора платформы и поля `/me/`, endpoint сотрудников и смены пароля, затем бизнес-модулей, начиная с «Продаж» и «Задач».
 2. Для каждого согласованного endpoint заменить `contractPending(...)` в http-реализации репозитория на `apiRequest(...)` с авторизацией из `getRenderAuth()` (чтение) или `getActionAuth()` (server actions), сверив схему Zod с реальным ответом.
 3. Перевести демо-изменения (`editModeFor` → `demo`) на server actions с вызовом репозитория.
-4. Проверить вход и ротацию токенов на реальном backend (настройка `NEXT_PUBLIC_DATA_SOURCE=api`, `NEXT_PUBLIC_API_BASE_URL`).
+4. Проверить вход и ротацию токенов на реальном backend (настройка `NEXT_PUBLIC_DATA_SOURCE=api`, `API_BASE_URL`).
 
 ## 12. Согласованные правила работы
 
