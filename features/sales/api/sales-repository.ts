@@ -195,12 +195,22 @@ function toDeal(deal: BackendDeal, memberNames: ReadonlyMap<string, string>): De
   }
 }
 
-function toPipeline(pipeline: z.infer<typeof backendPipelineSchema>): Pipeline | null {
+/** Только активные этапы, по порядку. Схема интерфейса требует хотя бы один этап — проверяет вызывающий */
+function toPipeline(pipeline: z.infer<typeof backendPipelineSchema>): Pipeline {
   const stages = pipeline.stages
     .filter((stage) => stage.isActive)
     .toSorted((a, b) => a.position - b.position)
     .map(({ id, name, kind }) => ({ id, name, kind }))
-  return stages.length > 0 ? { id: pipeline.id, name: pipeline.name, stages } : null
+  return { id: pipeline.id, name: pipeline.name, stages }
+}
+
+/** Одна воронка с активными этапами (список этапов может оказаться пустым) */
+export async function fetchPipeline(auth: ApiAuth, pipelineId: string): Promise<Pipeline> {
+  const pipeline = await apiRequest(`/api/v1/sales/pipelines/${encodeURIComponent(pipelineId)}/`, {
+    auth,
+    schema: backendPipelineSchema,
+  })
+  return toPipeline(pipeline)
 }
 
 type DealsRequest = {
@@ -229,7 +239,7 @@ const httpSalesRepository: SalesRepository = {
     // Воронка по умолчанию — первой: её доска открывается без выбора
     const ordered = pipelines.toSorted((a, b) => Number(b.isDefault) - Number(a.isDefault))
     return {
-      pipelines: ordered.flatMap((pipeline) => toPipeline(pipeline) ?? []),
+      pipelines: ordered.map(toPipeline).filter((pipeline) => pipeline.stages.length > 0),
       lossReasons: lossReasons.results.map(({ id, name }) => ({ id, label: name })),
     }
   },
@@ -240,12 +250,8 @@ const httpSalesRepository: SalesRepository = {
    */
   async getBoard({ pipelineId, managerId, search }) {
     const auth = await getRenderAuth()
-    const [backendPipeline, memberNames] = await Promise.all([
-      apiRequest(`/api/v1/sales/pipelines/${encodeURIComponent(pipelineId)}/`, { auth, schema: backendPipelineSchema }),
-      loadMemberNames(),
-    ])
-    const pipeline = toPipeline(backendPipeline)
-    if (!pipeline) throw new ApiError("not_found", "В воронке нет активных этапов")
+    const [pipeline, memberNames] = await Promise.all([fetchPipeline(auth, pipelineId), loadMemberNames()])
+    if (pipeline.stages.length === 0) throw new ApiError("not_found", "В воронке нет активных этапов")
     const columns = await Promise.all(
       pipeline.stages
         .filter((stage) => stage.kind === "open")

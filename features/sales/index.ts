@@ -1,6 +1,6 @@
 export { SalesView, SalesViewSkeleton } from "./components/sales-view"
 export { LeadsListView } from "./components/leads-list-view"
-export { salesRepository } from "./api/sales-repository"
+export { fetchPipeline, salesRepository } from "./api/sales-repository"
 export {
   pipelineStageSchema,
   stageKindSchema,

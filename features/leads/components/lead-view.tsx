@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { ExternalLink, Mail, MapPin, Phone } from "lucide-react"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { PersonAvatar } from "@/components/shared/person-avatar"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import { LeadCallsList } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
 import { TasksList, tasksRepository } from "@/features/tasks"
 import { teamRepository } from "@/features/team"
+import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
 import { formatDayMonth, formatDecimalMoney, formatFullDate } from "@/lib/format"
 import { editModeFor } from "@/lib/permissions/edit-mode"
@@ -38,7 +40,7 @@ function telHref(phone: string): string {
 
 export function LeadView({ lead, user }: LeadViewProps) {
   const stage = lead.pipeline.stages.find((item) => item.id === lead.stageId)
-  const primaryPhone = lead.client.phones[0]
+  const primaryPhone = lead.client?.phones[0]
 
   return (
     <div className="space-y-4">
@@ -82,7 +84,8 @@ export function LeadView({ lead, user }: LeadViewProps) {
               { value: "work", label: "Работа", content: <Deferred><LeadWork lead={lead} user={user} /></Deferred> },
               { value: "history", label: "История", content: <Deferred><LeadTimeline leadId={lead.id} /></Deferred> },
               { value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> },
-              { value: "payment", label: "Оплата", content: <LeadPayment lead={lead} /> },
+              // Оплаты по сделке в режиме api ещё не загружаются: пустая вкладка выглядела бы как «оплат нет»
+              ...(isMockDataSource ? [{ value: "payment", label: "Оплата", content: <LeadPayment lead={lead} /> }] : []),
               { value: "data", label: "Данные", content: <LeadFields lead={lead} /> },
             ]}
           />
@@ -100,7 +103,8 @@ function Deferred({ children }: { children: React.ReactNode }) {
 async function LeadWork({ lead, user }: LeadViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
   const leadRef = { id: lead.id, name: lead.title }
-  const [tasks, meetings, members] = await Promise.all([
+  const loaded = await tryLoad(() =>
+    Promise.all([
     tasksRepository.listTasks({ status: "all", assigneeId: null, leadId: lead.id, search: null, limit: PAGE_LIMIT_MAX, offset: 0 }),
     meetingsRepository.listMeetings({
       period: null,
@@ -113,7 +117,10 @@ async function LeadWork({ lead, user }: LeadViewProps) {
       offset: 0,
     }),
     isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-  ])
+    ])
+  )
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} bare />
+  const [tasks, meetings, members] = loaded.data
   const editMode = editModeFor(user.role)
   const currentUser = { id: user.id, name: user.fullName }
 
@@ -170,33 +177,9 @@ function LeadAside({ lead }: { lead: LeadDetail }) {
   return (
     <aside className="self-start rounded-xl bg-card ring-1 ring-border lg:col-start-2 lg:row-span-2 lg:row-start-1">
       <AsideSection title="Клиент">
-        <ul className="space-y-1.5 text-sm">
-          {lead.client.phones.map((phone) => (
-            <li key={phone}>
-              <a href={telHref(phone)} className="flex items-center gap-2 tabular-nums hover:text-primary">
-                <Phone className="size-3.5 text-muted-foreground" aria-hidden />
-                {phone}
-              </a>
-            </li>
-          ))}
-          {lead.client.email && (
-            <li>
-              <a href={`mailto:${lead.client.email}`} className="flex items-center gap-2 hover:text-primary">
-                <Mail className="size-3.5 text-muted-foreground" aria-hidden />
-                {lead.client.email}
-              </a>
-            </li>
-          )}
-          {lead.client.city && (
-            <li className="flex items-center gap-2">
-              <MapPin className="size-3.5 text-muted-foreground" aria-hidden />
-              {lead.client.city}
-            </li>
-          )}
-          {lead.client.phones.length === 0 && !lead.client.email && (
-            <li className="text-meta text-muted-foreground">Контакты не указаны</li>
-          )}
-        </ul>
+        {lead.client ? <ClientContacts client={lead.client} /> : (
+          <p className="text-meta text-muted-foreground">Клиент не привязан к сделке или у вас нет доступа к его данным</p>
+        )}
       </AsideSection>
 
       <AsideSection title="Сделка">
@@ -235,6 +218,39 @@ function LeadAside({ lead }: { lead: LeadDetail }) {
         </AsideSection>
       )}
     </aside>
+  )
+}
+
+function ClientContacts({ client }: { client: NonNullable<LeadDetail["client"]> }) {
+  return (
+    <ul className="space-y-1.5 text-sm">
+      <li className="font-medium">{client.name}</li>
+      {client.phones.map((phone) => (
+        <li key={phone}>
+          <a href={telHref(phone)} className="flex items-center gap-2 tabular-nums hover:text-primary">
+            <Phone className="size-3.5 text-muted-foreground" aria-hidden />
+            {phone}
+          </a>
+        </li>
+      ))}
+      {client.email && (
+        <li>
+          <a href={`mailto:${client.email}`} className="flex items-center gap-2 hover:text-primary">
+            <Mail className="size-3.5 text-muted-foreground" aria-hidden />
+            {client.email}
+          </a>
+        </li>
+      )}
+      {client.city && (
+        <li className="flex items-center gap-2">
+          <MapPin className="size-3.5 text-muted-foreground" aria-hidden />
+          {client.city}
+        </li>
+      )}
+      {client.phones.length === 0 && !client.email && (
+        <li className="text-meta text-muted-foreground">Контакты не указаны</li>
+      )}
+    </ul>
   )
 }
 

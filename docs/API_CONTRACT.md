@@ -137,6 +137,8 @@
 
 ### Карточка лида — `features/leads/schemas.ts`
 
+**Подключено к backend (31.10.2026, ветка backend `feature/deal-detail-embeds`):** `GET /sales/deals/{id}/` с вложенными `customer { id, name, email, phone } | null` (null — клиент не привязан или недоступен пользователю по правилам модуля клиентов) и `owner { id, name }`; воронка — `GET /sales/pipelines/{id}/`; «На этапе с» — последняя запись `GET /sales/deals/{id}/stage-history/`, без смен этапа — `created_at`. 404 (чужая или несуществующая сделка) → «Страница не найдена». Не отдаются и остаются пустыми: город клиента, метки, сводка ИИ, свои поля, другие сделки клиента; вкладка «Оплата» в режиме api скрыта, вкладки «Работа», «История», «Звонки» показывают «Раздел ещё не подключён».
+
 `leadDetailSchema`: `id, title, client { name, phones[], email, city }, pipeline { id, name, stages[] }, stageId, manager, amount, currency, source, createdAt, stageEnteredAt, tags[], nextAction, aiContext { summary, nextSteps[], generatedAt } | null, payment { total, paid, remaining, currency, items[{ id, kind: prepayment|additional|full, amount, paidDate }] } | null, customFields [{ id, label, value }], related [{ id, title, pipelineName, stageName }]`.
 
 Отдельные запросы (каждая вкладка загружается независимо):

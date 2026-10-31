@@ -4,9 +4,11 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { buttonVariants } from "@/components/ui/button"
 import { routes } from "@/config/routes"
 import { LeadView, LeadViewSkeleton, leadsRepository } from "@/features/leads"
+import { tryLoad } from "@/lib/api/load"
 import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "Карточка лида" }
@@ -15,7 +17,9 @@ type LeadPageProps = PageProps<"/leads/[leadId]">
 
 async function LeadContent({ params }: Pick<LeadPageProps, "params">) {
   const { leadId } = await params
-  const [lead, user] = await Promise.all([leadsRepository.getLead(leadId), getCurrentUser()])
+  const [loaded, user] = await Promise.all([tryLoad(() => leadsRepository.getLead(leadId)), getCurrentUser()])
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const lead = loaded.data
   if (!lead) notFound()
 
   return (

@@ -4,8 +4,8 @@ import { pipelineStageSchema } from "@/features/sales"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 
 /**
- * ПРЕДЛАГАЕМАЯ модель карточки лида. НЕ согласована с backend:
- * какие поля обязательны, а какие настраивает компания — открытый вопрос (docs/API_CONTRACT.md).
+ * Модель карточки лида (сделки). В режиме api её собирает `features/leads/api/leads-repository.ts`
+ * из `GET /sales/deals/{id}/`; чего backend не отдаёт — пусто (docs/API_CONTRACT.md, «Карточка лида»).
  */
 
 const refSchema = z.object({ id: z.string(), name: z.string() })
@@ -15,12 +15,15 @@ export const leadOptionSchema = refSchema
 export const leadDetailSchema = z.object({
   id: z.string(),
   title: z.string(),
-  client: z.object({
-    name: z.string(),
-    phones: z.array(z.string()),
-    email: z.string().nullable(),
-    city: z.string().nullable(),
-  }),
+  /** null — клиент не привязан к сделке или недоступен пользователю */
+  client: z
+    .object({
+      name: z.string(),
+      phones: z.array(z.string()),
+      email: z.string().nullable(),
+      city: z.string().nullable(),
+    })
+    .nullable(),
   pipeline: z.object({ id: z.string(), name: z.string(), stages: z.array(pipelineStageSchema) }),
   stageId: z.string(),
   manager: refSchema,

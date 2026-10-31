@@ -4,9 +4,12 @@ import { z } from "zod"
 const emptyToUndefined = (value: unknown) => (value === "" ? undefined : value)
 
 /**
- * Модуль читается только на сервере Next.js (серверные компоненты, server actions, proxy.ts):
- * все запросы к Python API идут с сервера, поэтому адрес API не попадает в браузер.
+ * Все запросы к Python API идут с сервера Next.js, поэтому адрес API не попадает в браузер.
+ * `isMockDataSource` нужен и клиентским компонентам (через lib/permissions/edit-mode.ts):
+ * в браузере API_BASE_URL всегда пуст, поэтому обязательность адреса проверяется только на сервере.
  */
+const isServer = typeof window === "undefined"
+
 const envSchema = z
   .object({
     /** Базовый URL Django API, только для сервера. Обязателен, когда DATA_SOURCE = "api". */
@@ -19,7 +22,7 @@ const envSchema = z
   })
   .refine(
     (env) =>
-      env.NEXT_PUBLIC_DATA_SOURCE === "mock" || env.API_BASE_URL,
+      env.NEXT_PUBLIC_DATA_SOURCE === "mock" || env.API_BASE_URL || !isServer,
     {
       message: "API_BASE_URL обязателен при NEXT_PUBLIC_DATA_SOURCE=api",
       path: ["API_BASE_URL"],

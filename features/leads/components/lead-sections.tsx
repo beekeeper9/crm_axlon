@@ -13,10 +13,12 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { EmptyState } from "@/components/shared/empty-state"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { leadsRepository } from "@/features/leads/api/leads-repository"
 import type { ActivityKind, LeadDetail } from "@/features/leads/schemas"
+import { tryLoad } from "@/lib/api/load"
 import { formatDateTime, formatDayMonth, formatDecimalMoney } from "@/lib/format"
 
 /**
@@ -104,7 +106,9 @@ const ACTIVITY_META: Record<ActivityKind, { icon: LucideIcon; tone: string }> = 
 }
 
 export async function LeadTimeline({ leadId }: { leadId: string }) {
-  const activity = await leadsRepository.getActivity(leadId)
+  const loaded = await tryLoad(() => leadsRepository.getActivity(leadId))
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} bare />
+  const activity = loaded.data
   if (activity.length === 0) {
     return <EmptyState icon={NotebookPen} title="Событий пока нет" description="Здесь появятся звонки, сообщения, встречи и смены этапов." />
   }
@@ -173,9 +177,9 @@ export function LeadPayment({ lead }: { lead: LeadDetail }) {
 
 export function LeadFields({ lead }: { lead: LeadDetail }) {
   const rows: { label: string; value: string | null }[] = [
-    { label: "Имя клиента", value: lead.client.name },
-    { label: "Город", value: lead.client.city },
-    { label: "Эл. почта", value: lead.client.email },
+    { label: "Имя клиента", value: lead.client?.name ?? null },
+    { label: "Город", value: lead.client?.city ?? null },
+    { label: "Эл. почта", value: lead.client?.email ?? null },
     { label: "Источник", value: lead.source },
     ...lead.customFields.map((field) => ({ label: field.label, value: field.value })),
   ]
