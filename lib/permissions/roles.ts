@@ -49,8 +49,10 @@ export type Permission =
   | "staff.hire"
   /** Рабочее пространство директора: компания и отделы */
   | "company.view"
-  /** Панель администратора платформы: компании и аккаунты директоров */
+  /** Панель администратора платформы: компании, подписки, ошибки и обращения */
   | "platform.manage"
+  /** Обращения в поддержку платформы — у сотрудников компаний */
+  | "support.contact"
 
 const MANAGEMENT: readonly Permission[] = [
   "team.view",
@@ -67,17 +69,17 @@ const MANAGEMENT: readonly Permission[] = [
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_admin: ["platform.manage"],
-  director: [...MANAGEMENT, "staff.manage", "staff.hire", "company.view"],
-  head_of_sales: [...MANAGEMENT, "staff.manage"],
-  manager: ["records.edit", "my_day.view"],
+  director: [...MANAGEMENT, "staff.manage", "staff.hire", "company.view", "support.contact"],
+  head_of_sales: [...MANAGEMENT, "staff.manage", "support.contact"],
+  manager: ["records.edit", "my_day.view", "support.contact"],
   /**
    * Роли P0 backend. Их рабочие пространства в продукте ещё не описаны — пока минимальный набор:
    * работа со своими записями, без «Моего дня» и командных разделов. Данные ограничивает backend.
    */
-  lead_caller: ["records.edit"],
-  operations: ["records.edit"],
+  lead_caller: ["records.edit", "support.contact"],
+  operations: ["records.edit", "support.contact"],
   /** Только просмотр показателей команды (роль backend `viewer`) */
-  viewer: ["team.view", "analytics.view"],
+  viewer: ["team.view", "analytics.view", "support.contact"],
 }
 
 export function hasPermission(role: Role, permission: Permission): boolean {
@@ -89,7 +91,6 @@ export function hasPermission(role: Role, permission: Permission): boolean {
  * в форме — её назначает сервер по роли создателя. Здесь — только чтобы подписать форму.
  */
 export const CREATABLE_ROLE: Partial<Record<Role, Role>> = {
-  platform_admin: "director",
   director: "head_of_sales",
   head_of_sales: "manager",
 }

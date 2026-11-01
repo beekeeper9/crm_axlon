@@ -32,6 +32,20 @@ const STATES: Record<ApiErrorKind, { icon: LucideIcon; title: string; descriptio
   server: { icon: ServerCrash, title: "Сервер временно недоступен", description: "Попробуйте обновить страницу через минуту." },
 }
 
+/** Отказы, у которых причина важнее вида ошибки: подписка компании и модули тарифа */
+const BY_CODE: Record<string, { icon: LucideIcon; title: string; description: string }> = {
+  subscription_inactive: {
+    icon: Lock,
+    title: "Подписка компании неактивна",
+    description: "Срок подписки истёк или она приостановлена. Обратитесь к директору или в поддержку платформы.",
+  },
+  feature_not_in_plan: {
+    icon: Lock,
+    title: "Модуль не входит в тариф компании",
+    description: "Этот раздел не подключён для вашей компании. Чтобы подключить его, директору нужно обратиться в поддержку платформы.",
+  },
+}
+
 type ApiErrorStateProps = {
   error: ApiError
   /** Внутри панели (без собственной рамки) */
@@ -40,7 +54,7 @@ type ApiErrorStateProps = {
 
 /** Объясняет, что именно случилось, и показывает код запроса для поддержки */
 export function ApiErrorState({ error, bare = false }: ApiErrorStateProps) {
-  const state = STATES[error.kind]
+  const state = (error.code && BY_CODE[error.code]) || STATES[error.kind]
   const body = (
     <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">

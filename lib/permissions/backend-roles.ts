@@ -44,3 +44,20 @@ const UI_ROLE_BY_BACKEND_ROLE: Record<BackendRole, Role> = {
 export function uiRoleFromBackend(role: BackendRole): Role {
   return UI_ROLE_BY_BACKEND_ROLE[role]
 }
+
+/**
+ * Обратный перевод для создания сотрудников: роль интерфейса → хранимая роль backend.
+ * Директор, РОП и менеджер создаются с актуальными значениями (не устаревшими owner/manager).
+ */
+const BACKEND_ROLE_BY_UI_ROLE: Partial<Record<Role, BackendRole>> = {
+  director: "director",
+  head_of_sales: "head_of_sales",
+  manager: "sales_rep",
+  lead_caller: "lead_caller",
+  operations: "operations",
+  viewer: "viewer",
+}
+
+export function backendRoleFromUi(role: Role): BackendRole | null {
+  return BACKEND_ROLE_BY_UI_ROLE[role] ?? null
+}

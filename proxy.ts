@@ -58,7 +58,10 @@ export async function proxy(request: NextRequest) {
     response.cookies.set(REFRESH_COOKIE, tokens.refresh, tokenCookieOptions(tokens.refresh))
   }
 
-  if (!request.cookies.get(TENANT_COOKIE)?.value && pathname !== routes.selectCompany) {
+  // Панель администратора платформы работает без выбранной компании: у администратора её нет.
+  // Кто администратор, проверяют страница (по /me/) и backend на каждом запросе.
+  const isPlatformPath = pathname === routes.platform || pathname.startsWith(`${routes.platform}/`)
+  if (!request.cookies.get(TENANT_COOKIE)?.value && pathname !== routes.selectCompany && !isPlatformPath) {
     const toCompany = NextResponse.redirect(new URL(routes.selectCompany, request.url))
     // Новые токены нужно сохранить и при перенаправлении
     response?.cookies.getAll().forEach((cookie) => toCompany.cookies.set(cookie))

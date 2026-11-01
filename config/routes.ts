@@ -22,7 +22,11 @@ export const routes = {
   staffNew: "/staff/new",
   company: "/company",
   platform: "/platform",
-  platformNew: "/platform/new",
+  platformCompanies: "/platform/companies",
+  platformCompanyNew: "/platform/companies/new",
+  platformErrors: "/platform/errors",
+  platformTickets: "/platform/tickets",
+  support: "/support",
 } as const
 
 export type AppRoute = (typeof routes)[keyof typeof routes]
@@ -34,4 +38,13 @@ export function teamMemberRoute(managerId: string): string {
 
 export function leadRoute(leadId: string): string {
   return `${routes.leads}/${encodeURIComponent(leadId)}`
+}
+
+/** Карточка компании в панели администратора платформы */
+export function platformCompanyRoute(companyId: string): string {
+  return `${routes.platformCompanies}/${encodeURIComponent(companyId)}`
+}
+
+export function platformTicketRoute(ticketId: string): string {
+  return `${routes.platformTickets}/${encodeURIComponent(ticketId)}`
 }

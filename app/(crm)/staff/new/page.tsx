@@ -9,11 +9,11 @@ import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "Новый сотрудник" }
 
-/** Доступ проверяется на сервере; данные и создание аккаунтов backend проверяет ещё раз */
+/** Директор создаёт аккаунт, РОП — заявку директору; backend проверяет права ещё раз */
 async function Content() {
   const user = await getCurrentUser()
-  if (!hasPermission(user.role, "staff.hire")) redirect(homeRouteFor(user.role))
-  return <CreateStaffView mode="company" />
+  if (!hasPermission(user.role, "staff.manage")) redirect(homeRouteFor(user.role))
+  return <CreateStaffView />
 }
 
 export default function Page() {

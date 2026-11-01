@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Building2, UserPlus, Users } from "lucide-react"
+import { Building2, Send, UserPlus, Users } from "lucide-react"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -12,6 +12,8 @@ import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { staffRepository } from "@/features/staff/api/staff-repository"
 import { CreateStaffFlow } from "@/features/staff/components/create-staff-flow"
+import { DepartmentForm } from "@/features/staff/components/department-form"
+import { StaffRequests } from "@/features/staff/components/staff-requests"
 import type { AccountStatus, StaffMember } from "@/features/staff/schemas"
 import { tryLoad } from "@/lib/api/load"
 import { formatDayMonth, formatNumber, pluralize } from "@/lib/format"
@@ -23,13 +25,10 @@ const STATUS_META: Record<AccountStatus, { label: string; tone: StatusTone }> = 
   deactivated: { label: "Отключён", tone: "neutral" },
 }
 
-/** «Сотрудники» (директор, РОП) и «Платформа» (администратор): кого видит пользователь в своей области */
-/** canHire: создавать аккаунты может только директор (и администратор платформы — директоров) */
-export async function StaffListView({ mode, canHire = false }: { mode: "company" | "platform"; canHire?: boolean }) {
-  const loaded = await tryLoad(() => Promise.all([staffRepository.listStaff(), staffRepository.getCreateOptions()]))
-  const isPlatform = mode === "platform"
-  const newHref = isPlatform ? routes.platformNew : routes.staffNew
-  const title = isPlatform ? "Компании и директора" : "Сотрудники"
+/** «Сотрудники»: директор видит компанию и решает по заявкам, РОП — свой отдел и свои заявки */
+export async function StaffListView({ canHire, currentUserId }: { canHire: boolean; currentUserId: string }) {
+  const loaded = await tryLoad(() => Promise.all([staffRepository.listStaff(), staffRepository.getCreateOptions(), staffRepository.listRequests()]))
+  const title = "Сотрудники"
 
   if (!loaded.ok) {
     return (
@@ -39,42 +38,42 @@ export async function StaffListView({ mode, canHire = false }: { mode: "company"
       </div>
     )
   }
-  const [members, options] = loaded.data
-  const createLabel =
-    (isPlatform || canHire) && options.creatableRole ? `Добавить: ${ROLE_LABELS[options.creatableRole].toLowerCase()}` : null
+  const [members, options, requests] = loaded.data
+  const isRequest = options.mode === "request"
+  const createLabel = options.creatableRole && (canHire || isRequest) ? (isRequest ? "Заявка на сотрудника" : "Добавить сотрудника") : null
+  const count = `${formatNumber(members.length)} ${pluralize(members.length, ["сотрудник", "сотрудника", "сотрудников"])}`
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={title}
         description={
-          isPlatform
-            ? "Администратор платформы создаёт директоров компаний; работой отделов управляют сами компании"
-            : options.fixedDepartment
-              ? `Отдел «${options.fixedDepartment.name}» · ${formatNumber(members.length)} ${pluralize(members.length, ["сотрудник", "сотрудника", "сотрудников"])}`
-              : `${formatNumber(members.length)} ${pluralize(members.length, ["сотрудник", "сотрудника", "сотрудников"])} в вашей области`
+          options.fixedDepartment
+            ? `Отдел «${options.fixedDepartment.name}» · ${count}. Найм и увольнение подтверждает директор`
+            : `${count} в вашей области`
         }
         actions={
           createLabel && (
-            <Link href={newHref} className={buttonVariants({ size: "lg" })}>
-              <UserPlus data-icon="inline-start" aria-hidden />
+            <Link href={routes.staffNew} className={buttonVariants({ size: "lg" })}>
+              {isRequest ? <Send data-icon="inline-start" aria-hidden /> : <UserPlus data-icon="inline-start" aria-hidden />}
               {createLabel}
             </Link>
           )
         }
       />
+      <StaffRequests requests={requests} canDecide={canHire} currentUserId={currentUserId} />
       {members.length === 0 ? (
         <ListPanel>
-          <EmptyState icon={isPlatform ? Building2 : Users} title="Пока никого нет" description="Создайте первый аккаунт — данные для входа появятся сразу после создания." />
+          <EmptyState icon={Users} title="Пока никого нет" description={isRequest ? "Отправьте директору заявку на первого сотрудника отдела." : "Создайте первый аккаунт — данные для входа появятся сразу после создания."} />
         </ListPanel>
       ) : (
-        <StaffTable members={members} isPlatform={isPlatform} />
+        <StaffTable members={members} />
       )}
     </div>
   )
 }
 
-function StaffTable({ members, isPlatform }: { members: readonly StaffMember[]; isPlatform: boolean }) {
+function StaffTable({ members }: { members: readonly StaffMember[] }) {
   return (
     <ListPanel>
       <div className="overflow-x-auto">
@@ -82,7 +81,7 @@ function StaffTable({ members, isPlatform }: { members: readonly StaffMember[]; 
           <thead className="text-left text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
             <tr>
               <th scope="col" className="h-9 px-4 font-medium">Сотрудник</th>
-              <th scope="col" className="h-9 px-3 font-medium">{isPlatform ? "Компания" : "Роль и отдел"}</th>
+              <th scope="col" className="h-9 px-3 font-medium">Роль и отдел</th>
               <th scope="col" className="h-9 px-3 font-medium">Статус</th>
               <th scope="col" className="h-9 px-4 text-right font-medium">Создан</th>
             </tr>
@@ -95,14 +94,8 @@ function StaffTable({ members, isPlatform }: { members: readonly StaffMember[]; 
                   <p className="font-mono text-xs text-muted-foreground">{member.login}</p>
                 </td>
                 <td className="px-3 py-2.5 text-meta">
-                  {isPlatform ? (
-                    member.company?.name ?? "—"
-                  ) : (
-                    <>
-                      {ROLE_LABELS[member.role]}
-                      {member.department && <span className="block text-xs text-muted-foreground">{member.department.name}</span>}
-                    </>
-                  )}
+                  {ROLE_LABELS[member.role]}
+                  {member.department && <span className="block text-xs text-muted-foreground">{member.department.name}</span>}
                 </td>
                 <td className="px-3 py-2.5">
                   <StatusBadge tone={STATUS_META[member.status].tone}>{STATUS_META[member.status].label}</StatusBadge>
@@ -120,20 +113,22 @@ function StaffTable({ members, isPlatform }: { members: readonly StaffMember[]; 
   )
 }
 
-export async function CreateStaffView({ mode }: { mode: "company" | "platform" }) {
-  const backHref = mode === "platform" ? routes.platform : routes.staff
+export async function CreateStaffView() {
   const loaded = await tryLoad(() => staffRepository.getCreateOptions())
-  const title = mode === "platform" ? "Новый директор компании" : "Новый сотрудник"
+  const isRequest = loaded.ok && loaded.data.mode === "request"
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <PageHeader title={title} description="Пароль система придумает сама и покажет один раз — его нужно передать сотруднику" />
+      <PageHeader
+        title={isRequest ? "Заявка на сотрудника" : "Новый сотрудник"}
+        description={isRequest ? "Директор одобрит заявку — тогда аккаунт будет создан" : "Пароль система придумает сама и покажет один раз — его нужно передать сотруднику"}
+      />
       <div className="rounded-xl bg-card p-5 ring-1 ring-border sm:p-6">
         {!loaded.ok ? (
           <ApiErrorState error={loaded.error} bare />
         ) : !loaded.data.creatableRole ? (
-          <EmptyState icon={Users} title="Нельзя создавать аккаунты" description="У вашей роли нет права создавать сотрудников." />
+          <EmptyState icon={Users} title="Нельзя создавать аккаунты" description="У вашей роли нет права создавать сотрудников или вы не назначены в отдел." />
         ) : (
-          <CreateStaffFlow options={loaded.data} backHref={backHref} isDemo={isMockDataSource} />
+          <CreateStaffFlow options={loaded.data} backHref={routes.staff} isDemo={isMockDataSource} />
         )}
       </div>
     </div>
@@ -150,7 +145,7 @@ export async function CompanyView({ companyName }: { companyName: string }) {
     <div className="space-y-6">
       <PageHeader
         title={companyName || "Компания"}
-        description="Отделы продаж, их руководители и команды"
+        description="Отделы продаж, их руководители и команды. Назначьте каждому отделу РОПа"
         actions={
           <>
             <Link href={routes.staff} className={buttonVariants({ variant: "outline", size: "lg" })}>
@@ -163,6 +158,12 @@ export async function CompanyView({ companyName }: { companyName: string }) {
           </>
         }
       />
+      {!isMockDataSource && <DepartmentForm />}
+      {options.departments.length === 0 && (
+        <ListPanel>
+          <EmptyState icon={Building2} title="Отделов пока нет" description="Создайте отдел продаж, затем добавьте РОПа и выберите этот отдел." />
+        </ListPanel>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
         {options.departments.map((department) => {
           const people = members.filter((member) => member.department?.id === department.id)

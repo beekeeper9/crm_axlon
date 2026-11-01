@@ -1,14 +1,25 @@
+import { z } from "zod"
+
 import { isMockDataSource } from "@/config/env"
 import {
+  approvedRequestSchema,
   createdAccountSchema,
   createOptionsSchema,
   staffMemberSchema,
+  staffRequestSchema,
+  type ApprovedRequest,
   type CreatedAccount,
   type CreateOptions,
   type CreateStaffInput,
   type StaffMember,
+  type StaffRequest,
 } from "@/features/staff/schemas"
-import { ApiError, contractPending } from "@/lib/api/errors"
+import { loadMemberNames } from "@/features/team"
+import { apiRequest } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/errors"
+import { paginatedSchema } from "@/lib/api/pagination"
+import { getActionAuth, getRenderAuth } from "@/lib/auth/token-store"
+import { backendRoleFromUi, backendRoleSchema, uiRoleFromBackend } from "@/lib/permissions/backend-roles"
 import { CREATABLE_ROLE } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { demoAccount, demoAccounts, demoCompany, demoCreateAccount, demoDepartment, demoDepartmentsOf, demoVisibleAccounts, type DemoAccount } from "@/mocks/demo-accounts"
@@ -19,6 +30,20 @@ export type StaffRepository = {
   listStaff(): Promise<StaffMember[]>
   getCreateOptions(): Promise<CreateOptions>
   createAccount(input: CreateStaffInput): Promise<CreatedAccount>
+  /** Заявки на найм и увольнение: директору — компании, РОПу — его отдела */
+  listRequests(): Promise<StaffRequest[]>
+  /** РОП просит директора нанять сотрудника в свой отдел */
+  requestHire(input: CreateStaffInput): Promise<StaffRequest>
+  /** Директор одобряет: найм создаёт аккаунт, пароль — один раз в ответе */
+  approveRequest(requestId: string): Promise<ApprovedRequest>
+  rejectRequest(requestId: string, note: string): Promise<StaffRequest>
+  cancelRequest(requestId: string): Promise<StaffRequest>
+  createDepartment(name: string): Promise<{ id: string; name: string }>
+}
+
+/** Заявок и новых отделов в демо-режиме нет: они существуют только на сервере */
+function demoOnlyServer(): never {
+  throw new ApiError("contract_pending", "В демо-режиме заявки и отделы не сохраняются")
 }
 
 function toMember(account: DemoAccount): StaffMember {
@@ -52,9 +77,11 @@ const mockStaffRepository: StaffRepository = {
     const user = await getCurrentUser()
     const account = demoAccounts().find((item) => item.id === user.id)
     const department = demoDepartment(account?.departmentId ?? null)
+    const role = CREATABLE_ROLE[user.role] ?? null
     return createOptionsSchema.parse({
-      creatableRole: CREATABLE_ROLE[user.role] ?? null,
-      requiresCompanyName: user.role === "platform_admin",
+      creatableRole: role,
+      roles: role ? [role] : [],
+      mode: user.role === "head_of_sales" ? "request" : "direct",
       departments: user.role === "director" && account?.companyId ? demoDepartmentsOf(account.companyId).map(({ id, name }) => ({ id, name })) : [],
       fixedDepartment: user.role === "head_of_sales" && department ? { id: department.id, name: department.name } : null,
       loginIsOptional: true,
@@ -74,18 +101,195 @@ const mockStaffRepository: StaffRepository = {
     }
     return createdAccountSchema.parse({ member: toMember(result.account), temporaryPassword: result.temporaryPassword })
   },
+
+  async listRequests() {
+    return []
+  },
+  requestHire: demoOnlyServer,
+  approveRequest: demoOnlyServer,
+  rejectRequest: demoOnlyServer,
+  cancelRequest: demoOnlyServer,
+  createDepartment: demoOnlyServer,
 }
 
-/** Endpoint не согласованы — см. docs/API_CONTRACT.md, раздел «Сотрудники и аккаунты». */
+const backendDepartmentSchema = z.object({ id: z.string(), name: z.string(), isActive: z.boolean() })
+
+/** `GET /api/v1/staff/`: сотрудники в области пользователя (директор — компания, РОП — отдел) */
+const backendStaffSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  login: z.string(),
+  fullName: z.string(),
+  role: backendRoleSchema,
+  department: backendDepartmentSchema.nullable(),
+  status: z.enum(["active", "invited", "deactivated"]),
+  createdBy: z.string().nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+})
+
+const backendCreateOptionsSchema = z.object({
+  creatableRoles: z.array(backendRoleSchema),
+  departments: z.array(backendDepartmentSchema),
+  fixedDepartmentId: z.string().nullable(),
+  mode: z.enum(["direct", "request"]),
+})
+
+const backendRequestSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["hire", "dismiss"]),
+  status: z.enum(["pending", "approved", "rejected", "cancelled"]),
+  department: backendDepartmentSchema,
+  requestedBy: z.object({ id: z.string(), name: z.string() }),
+  createdAt: z.iso.datetime({ offset: true }),
+  candidate: z.object({ fullName: z.string(), login: z.string().nullable(), role: backendRoleSchema }).nullable(),
+  target: z.object({ membershipId: z.string(), name: z.string().nullable() }).nullable(),
+  reason: z.string(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.iso.datetime({ offset: true }).nullable(),
+  decisionNote: z.string(),
+  resultMembershipId: z.string().nullable(),
+})
+
+function toRequest(request: z.infer<typeof backendRequestSchema>): StaffRequest {
+  return staffRequestSchema.parse({
+    ...request,
+    department: { id: request.department.id, name: request.department.name },
+    candidate: request.candidate && { ...request.candidate, role: uiRoleFromBackend(request.candidate.role) },
+    target: request.target && { id: request.target.membershipId, name: request.target.name ?? "—" },
+  })
+}
+
+function ref(department: z.infer<typeof backendDepartmentSchema> | null) {
+  return department && { id: department.id, name: department.name }
+}
+
 const httpStaffRepository: StaffRepository = {
   async listStaff() {
-    return contractPending("список сотрудников")
+    const auth = await getRenderAuth()
+    const [staff, names, user] = await Promise.all([
+      apiRequest("/api/v1/staff/", { auth, schema: paginatedSchema(backendStaffSchema) }),
+      loadMemberNames(),
+      getCurrentUser(),
+    ])
+    return staff.results.map((member) => ({
+      id: member.id,
+      login: member.login,
+      fullName: member.fullName || member.login,
+      role: uiRoleFromBackend(member.role),
+      company: { id: auth.tenant ?? "", name: user.companyName },
+      department: ref(member.department),
+      status: member.status,
+      createdBy: member.createdBy ? { id: member.createdBy, name: names.get(member.createdBy) ?? "—" } : null,
+      createdAt: member.createdAt,
+    }))
   },
+
   async getCreateOptions() {
-    return contractPending("создание аккаунтов")
+    const options = await apiRequest("/api/v1/staff/create-options/", { auth: await getRenderAuth(), schema: backendCreateOptionsSchema })
+    // Порядок важности: сначала роль, ради которой чаще всего создают аккаунт
+    const order = ["head_of_sales", "manager", "lead_caller", "operations", "viewer", "director"] as const
+    const roles = [...new Set(options.creatableRoles.map(uiRoleFromBackend))].toSorted(
+      (a, b) => order.indexOf(a as (typeof order)[number]) - order.indexOf(b as (typeof order)[number])
+    )
+    const fixed = options.departments.find((department) => department.id === options.fixedDepartmentId) ?? null
+    return createOptionsSchema.parse({
+      creatableRole: roles[0] ?? null,
+      roles,
+      mode: options.mode,
+      departments: options.fixedDepartmentId ? [] : options.departments.map((department) => ({ id: department.id, name: department.name })),
+      fixedDepartment: ref(fixed),
+      loginIsOptional: true,
+    })
   },
-  async createAccount() {
-    return contractPending("создание аккаунта")
+
+  async createAccount(input) {
+    const role = input.role ? backendRoleFromUi(input.role) : null
+    if (!role) throw new ApiError("validation", "Выберите роль", { fieldErrors: { role: ["Выберите роль"] } })
+    const [firstName, ...rest] = input.fullName.trim().split(/\s+/)
+    const created = await apiRequest("/api/v1/staff/", {
+      method: "POST",
+      auth: await getActionAuth(),
+      body: { firstName, lastName: rest.join(" "), role, login: input.login ?? "", departmentId: input.departmentId },
+      schema: z.object({ member: backendStaffSchema, temporaryPassword: z.string() }),
+    })
+    const user = await getCurrentUser()
+    const member = created.member
+    return createdAccountSchema.parse({
+      member: {
+        id: member.id,
+        login: member.login,
+        fullName: member.fullName || member.login,
+        role: uiRoleFromBackend(member.role),
+        company: { id: "", name: user.companyName },
+        department: ref(member.department),
+        status: member.status,
+        createdBy: { id: user.id, name: user.fullName },
+        createdAt: member.createdAt,
+      },
+      temporaryPassword: created.temporaryPassword,
+    })
+  },
+
+  async listRequests() {
+    const page = await apiRequest("/api/v1/staff/requests/", { auth: await getRenderAuth(), schema: paginatedSchema(backendRequestSchema) })
+    return page.results.map(toRequest)
+  },
+
+  async requestHire(input) {
+    const role = input.role ? backendRoleFromUi(input.role) : null
+    if (!role) throw new ApiError("validation", "Выберите роль", { fieldErrors: { role: ["Выберите роль"] } })
+    const [firstName, ...rest] = input.fullName.trim().split(/\s+/)
+    const created = await apiRequest("/api/v1/staff/requests/", {
+      method: "POST",
+      auth: await getActionAuth(),
+      body: { kind: "hire", firstName, lastName: rest.join(" "), role, login: input.login ?? "" },
+      schema: backendRequestSchema,
+    })
+    return toRequest(created)
+  },
+
+  async approveRequest(requestId) {
+    const approved = await apiRequest(`/api/v1/staff/requests/${encodeURIComponent(requestId)}/approve/`, {
+      method: "POST",
+      auth: await getActionAuth(),
+      schema: z.object({ request: backendRequestSchema, temporaryPassword: z.string().optional() }),
+    })
+    // Логин созданного аккаунта — в списке сотрудников; в ответе заявки он есть, если его задал РОП
+    let login = approved.request.candidate?.login ?? null
+    if (approved.temporaryPassword && !login) {
+      const staff = await apiRequest("/api/v1/staff/", { auth: await getActionAuth(), schema: paginatedSchema(backendStaffSchema) })
+      login = staff.results.find((member) => member.id === approved.request.resultMembershipId)?.login ?? null
+    }
+    return approvedRequestSchema.parse({ request: toRequest(approved.request), login, temporaryPassword: approved.temporaryPassword ?? null })
+  },
+
+  async rejectRequest(requestId, note) {
+    const rejected = await apiRequest(`/api/v1/staff/requests/${encodeURIComponent(requestId)}/reject/`, {
+      method: "POST",
+      auth: await getActionAuth(),
+      body: { note },
+      schema: backendRequestSchema,
+    })
+    return toRequest(rejected)
+  },
+
+  async cancelRequest(requestId) {
+    const cancelled = await apiRequest(`/api/v1/staff/requests/${encodeURIComponent(requestId)}/cancel/`, {
+      method: "POST",
+      auth: await getActionAuth(),
+      schema: backendRequestSchema,
+    })
+    return toRequest(cancelled)
+  },
+
+  async createDepartment(name) {
+    const created = await apiRequest("/api/v1/departments/", {
+      method: "POST",
+      auth: await getActionAuth(),
+      body: { name },
+      schema: backendDepartmentSchema,
+    })
+    return { id: created.id, name: created.name }
   },
 }
 

@@ -108,6 +108,17 @@ from modules.organizations.infrastructure.models import Department, Membership, 
 
 data = json.loads(sys.stdin.read())
 User = get_user_model()
+for account in data["platform_admins"]:
+    # Администратор платформы: признак аккаунта, а не роль в компании — членств у него нет
+    user, created = User.objects.using("default").get_or_create(
+        username=account["login"], defaults={"email": account["login"] + "@crm.local"}
+    )
+    first, _, last = account["fullName"].partition(" ")
+    user.first_name, user.last_name, user.is_platform_admin = first, last, True
+    user.set_password(account["password"])
+    user.save(using="default")
+    Membership.objects.using("default").filter(user=user).update(is_active=False)
+    print(("создан " if created else "обновлён ") + account["login"] + " (администратор платформы)")
 for account in data["accounts"]:
     org = Organization.objects.using("default").get(slug=account["tenant"])
     department = None
@@ -242,8 +253,13 @@ def main() -> None:
         for a in accounts
         if a["companyId"] in TENANTS and a["role"] in BACKEND_ROLES
     ]
+    platform_admins = [
+        {"login": a["login"], "password": a["password"], "fullName": a["fullName"]}
+        for a in accounts
+        if a["role"] == "platform_admin"
+    ]
     print(compose(backend, "exec", "-T", "api", "python", "manage.py", "shell", "-c", DJANGO_USERS,
-                  stdin=json.dumps({"accounts": payload})).strip())
+                  stdin=json.dumps({"accounts": payload, "platform_admins": platform_admins})).strip())
 
     passwords = {a["login"]: a["password"] for a in payload if a["active"]}
     for company_id, (slug, _) in TENANTS.items():
@@ -255,7 +271,7 @@ def main() -> None:
             api.login(login, passwords[login])
         print(f"данные компании {slug}:")
         seed_business_data(api, owners, director)
-    print("Готово. Логины и пароли — в mocks/demo-accounts.seed.ts (администратор платформы не создаётся).")
+    print("Готово. Логины и пароли — в mocks/demo-accounts.seed.ts.")
 
 
 if __name__ == "__main__":

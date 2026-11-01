@@ -205,27 +205,44 @@
 
 Не подключено (нужны контракты): «Срез на планёрку» и отправка в Telegram, задание планов (форма и история), график отсутствий с типами, выгрузки без телефонов, итоги one-to-one (P2), калибровка оценок ИИ.
 
-### Сотрудники и аккаунты — `features/staff` (предложение, не согласовано)
+### Сотрудники, отделы и заявки на найм — `features/staff` (подключено, 01.11.2026)
 
-Публичной регистрации нет. Аккаунты создаются только внутри системы по иерархии; **роль нового аккаунта назначает сервер по роли создателя**, в запросе её нет:
+Публичной регистрации нет. Аккаунты создаются внутри системы по иерархии; какие роли можно выдать, сервер отдаёт в `create-options`.
 
-| Создатель | Создаёт | Компания и отдел |
-|-----------|---------|------------------|
-| Администратор платформы | Директора | Новая компания (`company_name`) |
-| Директор (`owner`) | РОПа (`manager`) | Своя компания, отдел из своей компании |
-| РОП (`manager`) | Менеджера (`sales_rep`) | Своя компания и **свой** отдел (переданный отдел игнорируется) |
+| Кто | Что может | Как |
+|-----|-----------|-----|
+| Администратор платформы | Компанию и её первого директора | `POST /api/v1/platform/companies/` (см. «Платформа») |
+| Директор | РОПов и других сотрудников своей компании, отделы | сразу: `POST /api/v1/staff/`, `POST /api/v1/departments/` |
+| РОП | Менеджера (`sales_rep`) или лидоруба своего отдела; увольнение сотрудника своего отдела | только **заявкой** директору: `POST /api/v1/staff/requests/` |
 | Менеджер, наблюдатель | — | 403 |
 
-Предлагаемые endpoint:
-- `GET /api/v1/staff/` (X-Tenant) — сотрудники в области пользователя: директор — компания, РОП — свой отдел. `{ count, results: [{ id, login, full_name, role, company { id, name }, department { id, name } | null, status: active|invited|deactivated, created_by { id, name } | null, created_at }] }`.
-- `GET /api/v1/staff/create-options/` — `{ creatable_role, requires_company_name, departments[{ id, name }], fixed_department | null, login_is_optional }`.
-- `POST /api/v1/staff/` — `{ full_name, login?, department_id?, company_name? }` → 201 `{ member, temporary_password }`. **Временный пароль генерирует сервер и возвращает один раз**; повторно получить его нельзя. Ошибки: 403 `permission_denied`, 400 `validation_error` (`login` занят, `department_id` чужой, нет `company_name`).
-- `POST /api/v1/auth/password/change/` — `{ current_password, new_password }` → 204; снимает `must_change_password`. Правила пароля — на backend (сейчас интерфейс подсказывает «не короче 8 символов»).
-- Нужны позже: деактивация (`POST /api/v1/staff/{id}/deactivate/`), выдача нового временного пароля, перевод между отделами, список компаний для администратора платформы.
+Endpoint (все с `X-Tenant`):
+- `GET /api/v1/staff/` — сотрудники в области: директор — компания, РОП — свой отдел. `{ count, results: [{ id (membership), user_id, login, full_name, role (backend), department {id,name,is_active} | null, status: active|invited|deactivated, created_by (user id) | null, created_at }] }`.
+- `GET /api/v1/staff/create-options/` — `{ creatable_roles[], departments[], fixed_department_id | null, mode: "direct" | "request" }`.
+- `POST /api/v1/staff/` (директор) — `{ first_name, last_name?, role, login?, department_id? }` → 201 `{ member, temporary_password }`. Пароль генерирует сервер и возвращает один раз.
+- `GET|POST /api/v1/staff/requests/` — заявки (директор — все, РОП — своего отдела). Найм: `{ kind: "hire", first_name, last_name?, role, login? }` — отдел берётся из членства РОПа, переданный игнорируется; увольнение: `{ kind: "dismiss", membership_id, reason? }`.
+- `POST /api/v1/staff/requests/{id}/approve/` (директор) → `{ request, temporary_password? }` — найм создаёт аккаунт, увольнение отключает его; `…/reject/` `{ note? }` (директор); `…/cancel/` (автор). Повторное решение — 409.
+- `POST /api/v1/departments/` (директор) — `{ name }` → 201.
 
-Принадлежность: у каждого аккаунта — компания, отдел (кроме директора), кто создал. Область видимости РОПа — только его отдел; несколько отделов у одного РОПа — вопрос к backend.
+В интерфейсе: директор создаёт отделы на странице «Компания», РОПов и сотрудников — в «Сотрудниках» и одобряет заявки там же (пароль нового сотрудника показывается при одобрении один раз). РОП отправляет заявку и может отозвать свою. Заявка на увольнение пока доступна только через API (кнопки в списке нет). В демо-режиме заявки и отделы не сохраняются.
 
-В режиме api все эти экраны показывают «не подключено» и ничего не создают. В демо-режиме работают на хранилище в памяти сервера (`mocks/demo-accounts.ts`).
+### Платформа — `features/platform` (подключено, 01.11.2026)
+
+Только для `is_platform_admin` (проверяется backend на каждом запросе; директор компании получает 403). Без `X-Tenant`.
+- `GET /api/v1/platform/overview/?period_days=7|30|90|365` — компании, пользователи, подписки по состояниям, `revenue.assigned_monthly` — **сумма прейскурантных цен назначенных тарифов, не полученные деньги**; `revenue.received` и `overdue` — `null`: оплаты подписок не учитываются.
+- `GET /api/v1/platform/catalog/` — тарифы (`free` «Базовый», `pro` «Расширенный», `enterprise` «Корпоративный») с ценой и модулями по умолчанию; список модулей.
+- `GET /api/v1/platform/companies/?search&status=active|suspended&plan&access=active|expiring|expired|past_due|cancelled&limit&offset`.
+- `POST /api/v1/platform/companies/` — `{ name, slug, country, currency, timezone, subscription: { plan_code, starts_on, ends_on?, features?, status? }, director: { first_name, last_name?, login?, email?, phone? } }` → 201 `{ company, director: { login, temporary_password } }`. Компания, директор, подписка, отдельная база данных и стандартная воронка создаются одной операцией; при ошибке ничего не остаётся. Если на сервере выключено `TENANT_PROVISIONING_ENABLED` — 409 `provisioning_disabled`.
+- `GET|PATCH /api/v1/platform/companies/{id}/` — карточка (директора, история изменений) / `{ name?, is_active? }` (приостановить — сотрудники компании теряют доступ).
+- `PUT /api/v1/platform/companies/{id}/subscription/` — `{ plan_code, starts_on, ends_on?, features[], status }`: тариф, срок (последний день включительно) и модули.
+- `GET /api/v1/platform/errors/?status`, `PATCH …/errors/{id}/ { status }` — непредвиденные ошибки сервера (500): компонент, маршрут, тип исключения, код запроса, компания; без текста ошибки и данных запроса.
+- `GET /api/v1/platform/tickets/?status`, `GET|PATCH …/tickets/{id}/ { status?, internal_note? }`.
+
+Подписка компании проверяется на каждом запросе с `X-Tenant`: истёкшая или отменённая — 403 `subscription_inactive` (кроме `/subscription/` и `/support/`), модуль вне подписки (`/telephony/`, `/communications/`, `/payments/`, `/analytics/`, `/ai/`, `/operations/`, `/risk/`) — 403 `feature_not_in_plan`. Интерфейс показывает для этих кодов отдельные сообщения.
+
+### Поддержка — `features/support` (подключено, 01.11.2026)
+
+`GET|POST /api/v1/support/tickets/` (X-Tenant) — `{ kind: question|problem|feedback|idea, subject, body }`; сотрудник видит только свои обращения, без внутреннего комментария платформы.
 
 ### «Фокус», рабочее пространство
 

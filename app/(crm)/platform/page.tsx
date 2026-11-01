@@ -1,26 +1,21 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
-import { redirect } from "next/navigation"
 
-import { homeRouteFor } from "@/config/navigation"
-import { StaffListView, StaffSkeleton } from "@/features/staff"
-import { hasPermission } from "@/lib/permissions/roles"
-import { getCurrentUser } from "@/lib/session/current-user"
+import { PlatformOverviewView, PlatformSkeleton } from "@/features/platform"
+import { requirePlatformAdmin } from "./guard"
 
 export const metadata: Metadata = { title: "Платформа" }
 
-/** Доступ проверяется на сервере; данные и создание аккаунтов backend проверяет ещё раз */
-async function Content() {
-  const user = await getCurrentUser()
-  if (!hasPermission(user.role, "platform.manage")) redirect(homeRouteFor(user.role))
-  return <StaffListView mode="platform" />
+async function Content({ searchParams }: Pick<PageProps<"/platform">, "searchParams">) {
+  await requirePlatformAdmin()
+  return <PlatformOverviewView params={await searchParams} />
 }
 
-export default function Page() {
+export default function Page({ searchParams }: PageProps<"/platform">) {
   return (
-    <div className="mx-auto max-w-screen-lg">
-      <Suspense fallback={<StaffSkeleton />}>
-        <Content />
+    <div className="mx-auto max-w-screen-xl">
+      <Suspense fallback={<PlatformSkeleton />}>
+        <Content searchParams={searchParams} />
       </Suspense>
     </div>
   )

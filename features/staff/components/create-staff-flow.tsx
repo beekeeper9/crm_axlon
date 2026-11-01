@@ -2,17 +2,17 @@
 
 import { useActionState, useState } from "react"
 import Link from "next/link"
-import { Check, CircleAlert, Copy, KeyRound, LoaderCircle, UserPlus } from "lucide-react"
+import { CircleAlert, LoaderCircle, Send, UserPlus } from "lucide-react"
 
+import { CredentialsCard } from "@/components/shared/credentials-card"
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { siteConfig } from "@/config/site"
 import { createStaffAccount, type CreateStaffState } from "@/features/staff/actions"
 import type { CreateOptions } from "@/features/staff/schemas"
-import { ROLE_LABELS } from "@/lib/permissions/roles"
+import { ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 
 type CreateStaffFlowProps = {
   options: CreateOptions
@@ -31,33 +31,94 @@ const INITIAL_STATE: CreateStaffState = { status: "idle" }
 function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: CreateStaffFlowProps & { onCreateAnother: () => void }) {
   const [state, formAction, isPending] = useActionState(createStaffAccount, INITIAL_STATE)
   const [departmentId, setDepartmentId] = useState<string | null>(state.status === "error" ? state.values.departmentId || null : null)
+  const [role, setRole] = useState<Role | null>(options.creatableRole)
+  const isRequest = options.mode === "request"
 
   if (state.status === "created") {
-    return <CredentialsResult account={state.account} backHref={backHref} isDemo={isDemo} onCreateAnother={onCreateAnother} />
+    const { account } = state
+    return (
+      <CredentialsCard
+        title="Аккаунт создан"
+        description="Передайте эти данные сотруднику. Пароль показывается только сейчас."
+        login={account.login}
+        temporaryPassword={account.temporaryPassword}
+        rows={[
+          { label: "Сотрудник", value: account.fullName },
+          { label: "Роль", value: [account.roleLabel, account.place].filter(Boolean).join(" · ") },
+          { label: "Статус", value: "Ожидает первого входа" },
+        ]}
+        actions={
+          <>
+            <Button size="lg" variant="outline" onClick={onCreateAnother}>
+              <UserPlus data-icon="inline-start" aria-hidden />
+              Создать ещё одного
+            </Button>
+            <Link href={backHref} className={buttonVariants({ variant: "ghost", size: "lg" })}>
+              К списку сотрудников
+            </Link>
+          </>
+        }
+      />
+    )
+  }
+
+  if (state.status === "requested") {
+    return (
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold">Заявка отправлена директору</h2>
+        <p className="text-meta text-muted-foreground">
+          {state.request.fullName} · {state.request.roleLabel} · отдел «{state.request.department}». Аккаунт появится, когда директор одобрит заявку; данные для
+          входа он увидит при одобрении и передаст сотруднику.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="lg" variant="outline" onClick={onCreateAnother}>
+            <Send data-icon="inline-start" aria-hidden />
+            Ещё одна заявка
+          </Button>
+          <Link href={backHref} className={buttonVariants({ variant: "ghost", size: "lg" })}>
+            К сотрудникам и заявкам
+          </Link>
+        </div>
+      </section>
+    )
   }
 
   const errors = state.status === "error" ? state.fieldErrors : {}
   const values = state.status === "error" ? state.values : null
-  const roleLabel = options.creatableRole ? ROLE_LABELS[options.creatableRole] : null
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
-      {roleLabel && (
-        <p className="rounded-lg bg-muted/50 px-3 py-2 text-meta">
-          Будет создан аккаунт: <strong className="font-medium">{roleLabel}</strong>
-          {options.fixedDepartment && <> · отдел «{options.fixedDepartment.name}»</>}. Роль назначает система по вашим правам.
-        </p>
-      )}
-
-      {options.requiresCompanyName && (
-        <Field id="companyName" label="Компания" error={errors.companyName} hint="Для директора создаётся новая компания">
-          <Input id="companyName" name="companyName" defaultValue={values?.companyName} placeholder="ОсОО «Название»" aria-invalid={Boolean(errors.companyName)} className="h-10" />
-        </Field>
-      )}
+      <p className="rounded-lg bg-muted/50 px-3 py-2 text-meta">
+        {isRequest ? "Заявка на сотрудника" : "Новый аккаунт"}
+        {options.fixedDepartment && <> · отдел «{options.fixedDepartment.name}»</>}.{" "}
+        {isRequest ? "Аккаунт создаст директор, когда одобрит заявку." : "Роли доступны по вашим правам; сервер проверит их ещё раз."}
+      </p>
 
       <Field id="fullName" label="Имя и фамилия" error={errors.fullName}>
         <Input id="fullName" name="fullName" defaultValue={values?.fullName} autoComplete="off" autoFocus aria-invalid={Boolean(errors.fullName)} className="h-10" />
       </Field>
+
+      {options.roles.length > 0 && (
+        <Field id="role" label="Роль" error={errors.role}>
+          <input type="hidden" name="role" value={role ?? ""} />
+          {options.roles.length === 1 ? (
+            <p className="text-sm font-medium">{ROLE_LABELS[options.roles[0]]}</p>
+          ) : (
+            <Select items={options.roles.map((item) => ({ value: item, label: ROLE_LABELS[item] }))} value={role} onValueChange={(next) => setRole(next as Role)}>
+              <SelectTrigger id="role" className="h-10 w-full" aria-invalid={Boolean(errors.role)}>
+                <SelectValue placeholder="Выберите роль" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.roles.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {ROLE_LABELS[item]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
+      )}
 
       <Field
         id="login"
@@ -100,8 +161,8 @@ function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: Create
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="lg" disabled={isPending}>
-          {isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden /> : <UserPlus data-icon="inline-start" aria-hidden />}
-          Создать аккаунт
+          {isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden /> : isRequest ? <Send data-icon="inline-start" aria-hidden /> : <UserPlus data-icon="inline-start" aria-hidden />}
+          {isRequest ? "Отправить заявку директору" : "Создать аккаунт"}
         </Button>
         <Link href={backHref} className={buttonVariants({ variant: "outline", size: "lg" })}>
           Отмена
@@ -118,103 +179,5 @@ function Field({ id, label, error, hint, children }: { id: string; label: string
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
-  )
-}
-
-type CreatedAccountView = Extract<CreateStaffState, { status: "created" }>["account"]
-
-function credentialsText(account: CreatedAccountView): string {
-  return [
-    `Доступ к CRM «${siteConfig.name}»`,
-    `Сотрудник: ${account.fullName}`,
-    `Вход: ${window.location.origin}/login`,
-    `Логин: ${account.login}`,
-    `Временный пароль: ${account.temporaryPassword}`,
-    "Войдите в систему и смените временный пароль при первом входе.",
-  ].join("\n")
-}
-
-/**
- * Данные нового аккаунта. Пароль показан один раз: не сохраняется в браузере и не логируется;
- * после ухода со страницы получить его снова нельзя — только выдать новый (когда появится API сброса).
- */
-function CredentialsResult({
-  account,
-  backHref,
-  isDemo,
-  onCreateAnother,
-}: {
-  account: CreatedAccountView
-  backHref: string
-  isDemo: boolean
-  onCreateAnother: () => void
-}) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle")
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(credentialsText(account))
-      setCopyState("copied")
-    } catch {
-      setCopyState("failed")
-    }
-  }
-
-  const rows = [
-    { label: "Сотрудник", value: account.fullName },
-    { label: "Роль", value: [account.roleLabel, account.place].filter(Boolean).join(" · ") },
-    { label: "Статус", value: "Ожидает первого входа" },
-    { label: "Логин", value: account.login, mono: true },
-    { label: "Временный пароль", value: account.temporaryPassword, mono: true },
-  ]
-
-  return (
-    <section aria-labelledby="created-title" className="space-y-5">
-      <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-          <Check className="size-5" aria-hidden />
-        </span>
-        <div>
-          <h2 id="created-title" className="text-base font-semibold">
-            Аккаунт создан
-          </h2>
-          <p className="text-meta text-muted-foreground">Передайте эти данные сотруднику. Пароль показывается только сейчас.</p>
-        </div>
-      </div>
-
-      <dl className="divide-y rounded-xl bg-muted/30 ring-1 ring-success/30">
-        {rows.map((row) => (
-          <div key={row.label} className="grid grid-cols-[9.5rem_1fr] gap-3 px-4 py-2.5 text-sm max-sm:grid-cols-1 max-sm:gap-0.5">
-            <dt className="text-muted-foreground">{row.label}</dt>
-            <dd className={row.mono ? "font-mono text-base font-semibold tracking-wide break-all select-all" : "font-medium"}>{row.value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <p className="flex items-start gap-2 text-meta text-muted-foreground">
-        <KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-        При первом входе система попросит сотрудника придумать свой пароль. Временный пароль после этого перестанет работать.
-      </p>
-
-      {isDemo && <DemoNotice>Демо-режим: это тестовые учётные данные, они работают только в демо и до перезапуска сервера.</DemoNotice>}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="lg" onClick={copy}>
-          {copyState === "copied" ? <Check data-icon="inline-start" aria-hidden /> : <Copy data-icon="inline-start" aria-hidden />}
-          {copyState === "copied" ? "Скопировано" : "Скопировать данные"}
-        </Button>
-        <Button size="lg" variant="outline" onClick={onCreateAnother}>
-          <UserPlus data-icon="inline-start" aria-hidden />
-          Создать ещё одного
-        </Button>
-        <Link href={backHref} className={buttonVariants({ variant: "ghost", size: "lg" })}>
-          К списку сотрудников
-        </Link>
-      </div>
-      <p aria-live="polite" className="min-h-4 text-xs">
-        {copyState === "copied" && <span className="text-success">Текст с логином, паролем и инструкцией скопирован в буфер обмена.</span>}
-        {copyState === "failed" && <span className="text-destructive">Браузер не дал доступ к буферу обмена — выделите данные выше и скопируйте вручную.</span>}
-      </p>
-    </section>
   )
 }

@@ -18,6 +18,8 @@ export const metadata: Metadata = { title: "Выбор компании" }
 async function CompanyList({ searchParams }: Pick<PageProps<"/select-company">, "searchParams">) {
   if (isMockDataSource) redirect(routes.myDay)
   const [{ next }, me] = await Promise.all([searchParams, fetchMe(await getRenderAuth())])
+  // У администратора платформы нет компании — его рабочее место в панели платформы
+  if (me.isPlatformAdmin && me.memberships.length === 0) redirect(routes.platform)
 
   return (
     <ul className="space-y-2">

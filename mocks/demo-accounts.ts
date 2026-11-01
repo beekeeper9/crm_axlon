@@ -146,16 +146,15 @@ export type DemoCreateInput = {
   fullName: string
   login: string | null
   departmentId: string | null
-  companyName: string | null
 }
 
 export type DemoCreateResult =
   | { ok: true; account: DemoAccount; temporaryPassword: string }
-  | { ok: false; status: 403 | 400; field?: "login" | "departmentId" | "companyName"; message: string }
+  | { ok: false; status: 403 | 400; field?: "login" | "departmentId"; message: string }
 
 /**
  * Создание аккаунта по иерархии. Роль нового аккаунта, компанию и отдел определяет «сервер»:
- * администратор → директор новой компании, директор → РОП своей компании, РОП → менеджер своего отдела.
+ * директор → РОП своей компании, РОП → менеджер своего отдела. Компании создаются только на сервере.
  */
 export function demoCreateAccount(creatorId: string, input: DemoCreateInput): DemoCreateResult {
   const creator = store.accounts.get(creatorId)
@@ -167,13 +166,9 @@ export function demoCreateAccount(creatorId: string, input: DemoCreateInput): De
     return { ok: false, status: 400, field: "login", message: "Такой логин уже занят — выберите другой" }
   }
 
-  let companyId = creator.companyId
+  const companyId = creator.companyId
   let departmentId: string | null = null
-  if (creator.role === "platform_admin") {
-    if (!input.companyName?.trim()) return { ok: false, status: 400, field: "companyName", message: "Укажите название компании" }
-    companyId = `c-${randomBytes(4).toString("hex")}`
-    store.companies.set(companyId, { id: companyId, name: input.companyName.trim() })
-  } else if (creator.role === "director") {
+  if (creator.role === "director") {
     const department = input.departmentId ? store.departments.get(input.departmentId) : undefined
     if (!department || department.companyId !== creator.companyId) {
       return { ok: false, status: 400, field: "departmentId", message: "Выберите отдел своей компании" }

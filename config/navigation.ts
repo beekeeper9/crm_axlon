@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Gauge,
   Building2,
+  LifeBuoy,
   ShieldCheck,
   UsersRound,
   Database,
@@ -42,6 +43,7 @@ const item = {
   company: { title: "Компания", href: routes.company, icon: Building2, permission: "company.view" },
   staff: { title: "Сотрудники", href: routes.staff, icon: UsersRound, permission: "staff.manage" },
   platform: { title: "Платформа", href: routes.platform, icon: ShieldCheck, permission: "platform.manage" },
+  support: { title: "Поддержка", href: routes.support, icon: LifeBuoy, permission: "support.contact" },
   focus: { title: "Фокус", href: routes.focus, icon: Target },
   sales: { title: "Продажи", href: routes.sales, icon: Handshake },
   afterMeeting: { title: "После встречи", href: routes.afterMeeting, icon: UserCheck },
@@ -101,7 +103,7 @@ export const allSections: readonly NavGroup[] = [
   { title: "Контроль продаж", items: [item.cabinet, item.dailyReports, item.review] },
   { title: "Поиск", items: [item.leads, item.clientBase] },
   { title: "Материалы", items: [item.materials, item.assistant] },
-  { title: "Управление", items: [item.company, item.staff, item.platform, item.workspace] },
+  { title: "Управление", items: [item.company, item.staff, item.platform, item.workspace, item.support] },
 ]
 
 const allItems: readonly NavItem[] = Object.values(item)
