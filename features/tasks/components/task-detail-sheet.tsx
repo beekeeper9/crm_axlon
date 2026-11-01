@@ -20,8 +20,11 @@ type TaskDetailSheetProps = {
   task: Task | null
   editMode: EditMode
   isDemoChanged: boolean
+  /** Выполнение работает (в демо или через backend), даже когда правка задачи недоступна */
+  canComplete: boolean
   onOpenChange: (open: boolean) => void
-  onComplete: (task: Task, result: string) => void
+  /** Через backend — сообщение об ошибке или null при успехе */
+  onComplete: (task: Task, result: string) => void | Promise<string | null>
   onEdit: (task: Task) => void
   onTake: (task: Task) => void
 }
@@ -45,11 +48,24 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function TaskDetail({ task, editMode, isDemoChanged, onComplete, onEdit, onTake }: Omit<TaskDetailSheetProps, "task" | "onOpenChange"> & { task: Task }) {
+function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, onEdit, onTake }: Omit<TaskDetailSheetProps, "task" | "onOpenChange"> & { task: Task }) {
   const [result, setResult] = useState("")
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const isDone = task.status === "done"
   const canEdit = editMode === "demo"
   const disabledTitle = editMode === "unavailable" ? EDIT_UNAVAILABLE_HINT : undefined
+
+  function complete() {
+    const completing = onComplete(task, result.trim())
+    if (!completing) return
+    setIsCompleting(true)
+    setError(null)
+    void completing.then((message) => {
+      setIsCompleting(false)
+      setError(message)
+    })
+  }
   const type = TASK_TYPE_META[task.type]
 
   return (
@@ -108,13 +124,18 @@ function TaskDetail({ task, editMode, isDemoChanged, onComplete, onEdit, onTake 
                 onChange={(event) => setResult(event.target.value)}
                 rows={2}
                 placeholder="Что получилось: например, клиент подтвердил оплату на пятницу"
-                disabled={!canEdit}
+                disabled={!canComplete || isCompleting}
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => onComplete(task, result.trim())} disabled={!canEdit} title={disabledTitle}>
+              <Button
+                onClick={complete}
+                disabled={!canComplete || isCompleting}
+                aria-busy={isCompleting}
+                title={canComplete ? undefined : disabledTitle}
+              >
                 <CircleCheck data-icon="inline-start" aria-hidden />
-                Выполнить
+                {isCompleting ? "Сохраняем…" : "Выполнить"}
               </Button>
               <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEdit} title={disabledTitle}>
                 <Pencil data-icon="inline-start" aria-hidden />
@@ -130,7 +151,16 @@ function TaskDetail({ task, editMode, isDemoChanged, onComplete, onEdit, onTake 
           </div>
         )}
 
-        {editMode === "unavailable" && <p className="text-xs text-muted-foreground">{EDIT_UNAVAILABLE_HINT}.</p>}
+        {error && (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {editMode === "unavailable" && (
+          <p className="text-xs text-muted-foreground">
+            {canComplete ? "Правка задачи станет доступна после согласования API с backend." : `${EDIT_UNAVAILABLE_HINT}.`}
+          </p>
+        )}
         {(isDemoChanged || canEdit) && (
           <DemoNotice>
             {isDemoChanged

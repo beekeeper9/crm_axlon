@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet"
 import { TaskFormDialog } from "@/features/tasks/components/task-form-dialog"
 import { TaskRow } from "@/features/tasks/components/task-row"
+import { completeTaskAction, createDealTaskAction, type TaskActionResult } from "@/features/tasks/actions"
 import { DUE_GROUPS } from "@/features/tasks/lib/task-meta"
 import type { Task, TaskFormValues } from "@/features/tasks/schemas"
 import { companyWallTimeToIso } from "@/lib/datetime"
@@ -30,6 +31,11 @@ type TasksListProps = {
   emptyDescription: string
   /** Заголовок над списком (в карточке лида); без него — количество задач */
   heading?: string
+  /**
+   * id сделки, если создание и выполнение задач идут через backend (режим api, карточка сделки).
+   * null — демо-поведение: изменения живут только на странице
+   */
+  remoteDealId?: string | null
 }
 
 type Group = { id: string; label: string; tasks: Task[] }
@@ -64,6 +70,7 @@ export function TasksList({
   emptyTitle,
   emptyDescription,
   heading,
+  remoteDealId = null,
 }: TasksListProps) {
   const [tasks, setTasks] = useState<readonly Task[]>(initialTasks)
   const [changedIds, setChangedIds] = useState<ReadonlySet<string>>(new Set())
@@ -71,6 +78,11 @@ export function TasksList({
   const [form, setForm] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null })
 
   const canEdit = editMode === "demo"
+  // Через backend работают только создание и выполнение; права окончательно проверяет он
+  const isRemote = remoteDealId !== null && editMode !== "read-only"
+  const canWrite = canEdit || isRemote
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
+  const [listError, setListError] = useState<{ message: string; requestId: string | null } | null>(null)
   const openTask = tasks.find((task) => task.id === openTaskId) ?? null
   const groups = groupTasks(tasks, changedIds)
 
@@ -84,7 +96,46 @@ export function TasksList({
     return members.find((member) => member.id === id) ?? (id === currentUser.id ? currentUser : null)
   }
 
+  /** Ответ backend заменяет задачу целиком: статус, группа срока и просрочка — его */
+  function applyServerTask(result: TaskActionResult): string | null {
+    if (!result.ok) return result.requestId ? `${result.message} Код запроса: ${result.requestId}` : result.message
+    const task = { ...result.task, lead: result.task.lead ?? lead }
+    setTasks((current) => (current.some((item) => item.id === task.id) ? current.map((item) => (item.id === task.id ? task : item)) : [task, ...current]))
+    return null
+  }
+
+  async function saveRemote(dealId: string, values: TaskFormValues): Promise<string | null> {
+    const error = applyServerTask(
+      await createDealTaskAction(dealId, {
+        title: values.title,
+        dueDate: values.dueAt,
+        type: values.type === "email" ? "todo" : values.type,
+        priority: values.priority,
+        assigneeId: canAssign ? values.assigneeId : null,
+        description: values.description,
+      })
+    )
+    if (!error) setForm({ open: false, task: null })
+    return error
+  }
+
+  async function completeRemote(task: Task, result: string): Promise<string | null> {
+    if (busyIds.has(task.id)) return null
+    setBusyIds((current) => new Set(current).add(task.id))
+    setListError(null)
+    try {
+      return applyServerTask(await completeTaskAction(task.id, result))
+    } finally {
+      setBusyIds((current) => {
+        const next = new Set(current)
+        next.delete(task.id)
+        return next
+      })
+    }
+  }
+
   function save(values: TaskFormValues) {
+    if (isRemote && remoteDealId) return saveRemote(remoteDealId, values)
     const fields = {
       title: values.title,
       type: values.type,
@@ -116,6 +167,7 @@ export function TasksList({
   }
 
   function complete(task: Task, result: string) {
+    if (isRemote) return completeRemote(task, result)
     update(task.id, {
       status: "done",
       isOverdue: false,
@@ -138,15 +190,24 @@ export function TasksList({
         {editMode !== "read-only" && (
           <Button
             size="sm"
-            onClick={() => setForm({ open: true, task: null })}
-            disabled={!canEdit}
-            title={canEdit ? undefined : EDIT_UNAVAILABLE_HINT}
+            onClick={() => {
+              setListError(null)
+              setForm({ open: true, task: null })
+            }}
+            disabled={!canWrite}
+            title={canWrite ? undefined : EDIT_UNAVAILABLE_HINT}
           >
             <Plus data-icon="inline-start" aria-hidden />
             Новая задача
           </Button>
         )}
       </div>
+
+      {listError && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {listError.message}
+        </p>
+      )}
 
       {groups.length === 0 ? (
         <ListPanel>
@@ -169,9 +230,12 @@ export function TasksList({
                   showAssignee={showAssignee}
                   showLead={lead === null}
                   isDemoChanged={changedIds.has(task.id)}
-                  canComplete={canEdit}
+                  canComplete={canWrite && !busyIds.has(task.id)}
                   onOpen={(item) => setOpenTaskId(item.id)}
-                  onComplete={(item) => complete(item, "")}
+                  onComplete={(item) => {
+                    const completing = complete(item, "")
+                    if (completing) void completing.then((message) => message && setListError({ message, requestId: null }))
+                  }}
                 />
               ))}
             </ListGroup>
@@ -183,6 +247,7 @@ export function TasksList({
         task={openTask}
         editMode={editMode}
         isDemoChanged={openTask ? changedIds.has(openTask.id) : false}
+        canComplete={canWrite && !(openTask && busyIds.has(openTask.id))}
         onOpenChange={(open) => !open && setOpenTaskId(null)}
         onComplete={complete}
         onEdit={(task) => {
@@ -199,6 +264,7 @@ export function TasksList({
         canAssign={canAssign}
         currentUser={currentUser}
         onOpenChange={(open) => !open && setForm({ open: false, task: null })}
+        mode={isRemote ? "server" : "demo"}
         onSave={save}
       />
     </div>

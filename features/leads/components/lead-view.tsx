@@ -140,6 +140,7 @@ async function LeadWork({ lead, user }: LeadViewProps) {
           editMode={editMode}
           showAssignee={isTeamView}
           lead={leadRef}
+          remoteDealId={isMockDataSource ? null : lead.id}
           emptyTitle="Задач по лиду нет"
           emptyDescription="Поставьте задачу — так следующий шаг не потеряется."
         />

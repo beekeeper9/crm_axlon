@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { TASK_TYPE_META, isDateOnlyDue } from "@/features/tasks/lib/task-meta"
-import { taskFormSchema, taskTypeSchema, type Task, type TaskFormValues } from "@/features/tasks/schemas"
+import { taskFormSchema, taskTypeSchema, type Task, type TaskFormValues, type TaskType } from "@/features/tasks/schemas"
 import { isoToCompanyWallTime } from "@/lib/datetime"
 
 type Member = { id: string; name: string }
@@ -31,9 +31,17 @@ type TaskFormDialogProps = {
   /** Ставить задачи другим может руководитель; менеджер ставит себе */
   canAssign: boolean
   currentUser: Member
+  /**
+   * demo — задача живёт только на странице; server — уходит в backend: срок — дата (backend хранит дату),
+   * типы — только поддерживаемые, исполнитель обязателен (по умолчанию — сам пользователь)
+   */
+  mode: "demo" | "server"
   onOpenChange: (open: boolean) => void
-  onSave: (values: TaskFormValues) => void
+  /** В режиме server — сообщение об ошибке сервера или null, если задача сохранена */
+  onSave: (values: TaskFormValues) => void | Promise<string | null>
 }
+
+const SERVER_TYPES: readonly TaskType[] = ["call", "meeting", "todo"]
 
 export function TaskFormDialog({ open, onOpenChange, ...props }: TaskFormDialogProps) {
   return (
@@ -53,9 +61,13 @@ function TaskForm({
   members,
   canAssign,
   currentUser,
+  mode,
   onSave,
   onCancel,
 }: Omit<TaskFormDialogProps, "open" | "onOpenChange"> & { onCancel: () => void }) {
+  const isServer = mode === "server"
+  const [isSaving, setIsSaving] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
   const [values, setValues] = useState<TaskFormValues>(() => ({
     title: task?.title ?? "",
     type: task?.type ?? "call",
@@ -84,11 +96,27 @@ function TaskForm({
       setErrors(next)
       return
     }
-    onSave(parsed.data)
+    const saving = onSave(parsed.data)
+    if (!saving) return
+    setIsSaving(true)
+    setServerError(null)
+    void saving.then((error) => {
+      // При успехе форму закрывает родитель; при ошибке остаёмся с введёнными данными
+      if (error) {
+        setServerError(error)
+        setIsSaving(false)
+      }
+    })
   }
 
-  const assigneeOptions = [{ value: "none", label: "Без исполнителя" }, ...members.map((member) => ({ value: member.id, label: member.name }))]
-  const typeOptions = taskTypeSchema.options.map((type) => ({ value: type, label: TASK_TYPE_META[type].label }))
+  const memberOptions = members.map((member) => ({ value: member.id, label: member.name }))
+  // Backend не принимает задачу без исполнителя: по умолчанию её получает тот, кто ставит
+  const assigneeOptions = isServer
+    ? [...(members.some((member) => member.id === currentUser.id) ? [] : [{ value: currentUser.id, label: currentUser.name }]), ...memberOptions]
+    : [{ value: "none", label: "Без исполнителя" }, ...memberOptions]
+  const typeOptions = taskTypeSchema.options
+    .filter((type) => !isServer || SERVER_TYPES.includes(type))
+    .map((type) => ({ value: type, label: TASK_TYPE_META[type].label }))
 
   return (
     <form onSubmit={submit} className="grid gap-4" noValidate>
@@ -131,7 +159,7 @@ function TaskForm({
           <Label htmlFor="task-due">Срок</Label>
           <Input
             id="task-due"
-            type="datetime-local"
+            type={isServer ? "date" : "datetime-local"}
             value={values.dueAt}
             onChange={(event) => set("dueAt", event.target.value)}
             aria-invalid={Boolean(errors.dueAt)}
@@ -185,13 +213,23 @@ function TaskForm({
         {errors.description && <p className="text-xs text-destructive">{errors.description}</p>}
       </div>
 
-      <DemoNotice>Демо-режим: задача появится только на этой странице и не сохранится на сервере.</DemoNotice>
+      {isServer ? (
+        serverError && (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {serverError}
+          </p>
+        )
+      ) : (
+        <DemoNotice>Демо-режим: задача появится только на этой странице и не сохранится на сервере.</DemoNotice>
+      )}
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
           Отмена
         </Button>
-        <Button type="submit">{task ? "Сохранить" : "Создать задачу"}</Button>
+        <Button type="submit" disabled={isSaving} aria-busy={isSaving}>
+          {isSaving ? "Сохраняем…" : task ? "Сохранить" : "Создать задачу"}
+        </Button>
       </DialogFooter>
     </form>
   )

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { isMockDataSource } from "@/config/env"
 import { taskSchema, todayTasksSchema, type Task, type TaskType, type TodayTasks } from "@/features/tasks/schemas"
 import { loadMemberNames } from "@/features/team"
+import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
@@ -87,6 +88,7 @@ const backendTaskSchema = z.object({
 })
 
 const backendTasksPageSchema = paginatedSchema(backendTaskSchema)
+type BackendTask = z.infer<typeof backendTaskSchema>
 
 /** «Напомнить» и «другое» у backend — обычная задача в интерфейсе */
 const TASK_TYPES: Record<NonNullable<z.infer<typeof backendTaskSchema>["taskType"]>, TaskType> = {
@@ -97,6 +99,76 @@ const TASK_TYPES: Record<NonNullable<z.infer<typeof backendTaskSchema>["taskType
 }
 
 const BACKEND_STATUS = { open: "open", done: "completed", all: undefined } as const
+
+/** Имя по id пользователя: без права на список сотрудников известно только своё */
+export async function loadTaskPeopleNames(): Promise<(userId: string) => string> {
+  const [memberNames, user] = await Promise.all([loadMemberNames(), getCurrentUser()])
+  return (userId) => (userId === user.id ? user.fullName : memberNames.get(userId) ?? "Сотрудник")
+}
+
+export function toTask(task: BackendTask, nameOf: (userId: string) => string): Task {
+  return {
+    id: task.id,
+    title: task.title || "Без названия",
+    description: task.body,
+    type: task.taskType ? TASK_TYPES[task.taskType] : "todo",
+    priority: task.priority === "high" || task.priority === "urgent" ? "high" : "normal",
+    status: task.taskStatus === "completed" ? "done" : "open",
+    dueAt: task.dueDate,
+    isOverdue: task.isOverdue,
+    dueGroup: task.taskStatus === "open" ? (task.dueGroup ?? "no_due") : null,
+    assignee: task.assigneeUserId ? { id: task.assigneeUserId, name: nameOf(task.assigneeUserId) } : null,
+    createdBy: task.createdBy ? { id: task.createdBy, name: nameOf(task.createdBy) } : { id: "", name: "Неизвестно" },
+    lead: null,
+    completedAt: task.completedAt,
+    result: task.result,
+  }
+}
+
+/** Типы задач, которые принимает backend; «Сообщение» он не поддерживает */
+export const SERVER_TASK_TYPES = ["call", "meeting", "todo"] as const satisfies readonly TaskType[]
+const BACKEND_TASK_TYPE: Record<(typeof SERVER_TASK_TYPES)[number], string> = { call: "call", meeting: "meeting", todo: "other" }
+
+export type NewDealTask = {
+  title: string
+  /** YYYY-MM-DD: backend хранит срок как дату */
+  dueDate: string
+  type: (typeof SERVER_TASK_TYPES)[number]
+  priority: Task["priority"]
+  /** null — себе (так backend поступает и без поля) */
+  assigneeId: string | null
+  description: string | null
+}
+
+/** `POST /activities/` — задача, привязанная к сделке. Права, лимит открытых задач и исполнителя проверяет backend */
+export async function createDealTask(auth: ApiAuth, dealId: string, task: NewDealTask): Promise<BackendTask> {
+  return apiRequest("/api/v1/activities/", {
+    method: "POST",
+    auth,
+    body: {
+      kind: "task",
+      subjectType: "deal",
+      subjectId: dealId,
+      title: task.title,
+      dueDate: task.dueDate,
+      taskType: BACKEND_TASK_TYPE[task.type],
+      priority: task.priority,
+      ...(task.assigneeId ? { assigneeUserId: task.assigneeId } : {}),
+      ...(task.description ? { body: task.description } : {}),
+    },
+    schema: backendTaskSchema,
+  })
+}
+
+/** `POST /activities/{id}/complete/` — выполнить открытую задачу (409, если она уже закрыта) */
+export async function completeTask(auth: ApiAuth, taskId: string, result: string | null): Promise<BackendTask> {
+  return apiRequest(`/api/v1/activities/${encodeURIComponent(taskId)}/complete/`, {
+    method: "POST",
+    auth,
+    body: result ? { result } : {},
+    schema: backendTaskSchema,
+  })
+}
 
 /**
  * Пока подключены только задачи сделки (карточка лида): фильтров по исполнителю и поиска
@@ -109,34 +181,16 @@ const httpTasksRepository: TasksRepository = {
   },
   async listTasks({ status, assigneeId, leadId, search, limit, offset }) {
     if (!leadId || assigneeId || search) return contractPending("список задач с фильтрами")
-    const [page, memberNames, user] = await Promise.all([
+    const [page, nameOf] = await Promise.all([
       apiRequest("/api/v1/activities/", {
         auth: await getRenderAuth(),
         query: { kind: "task", subjectType: "deal", subjectId: leadId, taskStatus: BACKEND_STATUS[status], limit, offset },
         schema: backendTasksPageSchema,
       }),
-      loadMemberNames(),
-      getCurrentUser(),
+      loadTaskPeopleNames(),
     ])
-    // Без права на список сотрудников известно только собственное имя
-    const nameOf = (userId: string) => (userId === user.id ? user.fullName : memberNames.get(userId) ?? "Сотрудник")
     const visible = page.results.filter((task) => task.taskStatus !== "cancelled")
-    const tasks = visible.map((task): Task => ({
-      id: task.id,
-      title: task.title || "Без названия",
-      description: task.body,
-      type: task.taskType ? TASK_TYPES[task.taskType] : "todo",
-      priority: task.priority === "high" || task.priority === "urgent" ? "high" : "normal",
-      status: task.taskStatus === "completed" ? "done" : "open",
-      dueAt: task.dueDate,
-      isOverdue: task.isOverdue,
-      dueGroup: task.taskStatus === "open" ? (task.dueGroup ?? "no_due") : null,
-      assignee: task.assigneeUserId ? { id: task.assigneeUserId, name: nameOf(task.assigneeUserId) } : null,
-      createdBy: task.createdBy ? { id: task.createdBy, name: nameOf(task.createdBy) } : { id: "", name: "Неизвестно" },
-      lead: null,
-      completedAt: task.completedAt,
-      result: task.result,
-    }))
+    const tasks = visible.map((task) => toTask(task, nameOf))
     return { count: page.count - (page.results.length - visible.length), results: tasks }
   },
 }
