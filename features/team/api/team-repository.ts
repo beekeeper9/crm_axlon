@@ -12,11 +12,17 @@ import { demoManagers } from "@/mocks/team"
 export type TeamRepository = {
   /** Сотрудники, которых пользователь может видеть в фильтрах (область видимости — backend) */
   listMembers(): Promise<TeamMember[]>
+  /** Имена всех действующих сотрудников компании — доступны любой роли, только имена */
+  listNames(): Promise<TeamMember[]>
 }
 
 const mockTeamRepository: TeamRepository = {
   async listMembers() {
     await simulateLatency(150)
+    return teamMembersSchema.parse(demoManagers)
+  },
+  async listNames() {
+    await simulateLatency(100)
     return teamMembersSchema.parse(demoManagers)
   },
 }
@@ -31,7 +37,14 @@ const backendStaffSchema = paginatedSchema(
   })
 )
 
+/** `GET /api/v1/staff/names/`: имена коллег без контактов и ролей */
+const backendNamesSchema = paginatedSchema(z.object({ userId: z.string(), fullName: z.string() }))
+
 const httpTeamRepository: TeamRepository = {
+  async listNames() {
+    const names = await apiRequest("/api/v1/staff/names/", { auth: await getRenderAuth(), schema: backendNamesSchema })
+    return names.results.map((member) => ({ id: member.userId, name: member.fullName }))
+  },
   async listMembers() {
     const staff = await apiRequest("/api/v1/staff/", { auth: await getRenderAuth(), schema: backendStaffSchema })
     return staff.results
@@ -55,7 +68,7 @@ export async function listMembersIfAllowed(): Promise<TeamMember[]> {
   }
 }
 
-/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
+/** Имена сотрудников компании по id пользователя — для подписей «ответственный», «исполнитель» */
 export async function loadMemberNames(): Promise<Map<string, string>> {
-  return new Map((await listMembersIfAllowed()).map((member) => [member.id, member.name]))
+  return new Map((await teamRepository.listNames()).map((member) => [member.id, member.name]))
 }

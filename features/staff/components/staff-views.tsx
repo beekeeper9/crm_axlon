@@ -24,7 +24,8 @@ const STATUS_META: Record<AccountStatus, { label: string; tone: StatusTone }> = 
 }
 
 /** «Сотрудники» (директор, РОП) и «Платформа» (администратор): кого видит пользователь в своей области */
-export async function StaffListView({ mode }: { mode: "company" | "platform" }) {
+/** canHire: создавать аккаунты может только директор (и администратор платформы — директоров) */
+export async function StaffListView({ mode, canHire = false }: { mode: "company" | "platform"; canHire?: boolean }) {
   const loaded = await tryLoad(() => Promise.all([staffRepository.listStaff(), staffRepository.getCreateOptions()]))
   const isPlatform = mode === "platform"
   const newHref = isPlatform ? routes.platformNew : routes.staffNew
@@ -39,7 +40,8 @@ export async function StaffListView({ mode }: { mode: "company" | "platform" }) 
     )
   }
   const [members, options] = loaded.data
-  const createLabel = options.creatableRole ? `Добавить: ${ROLE_LABELS[options.creatableRole].toLowerCase()}` : null
+  const createLabel =
+    (isPlatform || canHire) && options.creatableRole ? `Добавить: ${ROLE_LABELS[options.creatableRole].toLowerCase()}` : null
 
   return (
     <div className="space-y-5">

@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Новый сотрудник" }
 /** Доступ проверяется на сервере; данные и создание аккаунтов backend проверяет ещё раз */
 async function Content() {
   const user = await getCurrentUser()
-  if (!hasPermission(user.role, "staff.manage")) redirect(homeRouteFor(user.role))
+  if (!hasPermission(user.role, "staff.hire")) redirect(homeRouteFor(user.role))
   return <CreateStaffView mode="company" />
 }
 

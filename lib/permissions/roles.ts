@@ -43,8 +43,10 @@ export type Permission =
   | "cabinet.view"
   /** Личное рабочее пространство «Мой день» с личным планом — у менеджера по продажам */
   | "my_day.view"
-  /** Видеть сотрудников своей области и создавать аккаунты уровнем ниже (директор → РОП, РОП → менеджер) */
+  /** Раздел «Сотрудники»: сотрудники своей области (директор — компания, РОП — свой отдел) */
   | "staff.manage"
+  /** Нанимать и увольнять (создавать и отключать аккаунты) — решение директора; РОП не может */
+  | "staff.hire"
   /** Рабочее пространство директора: компания и отделы */
   | "company.view"
   /** Панель администратора платформы: компании и аккаунты директоров */
@@ -65,7 +67,7 @@ const MANAGEMENT: readonly Permission[] = [
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_admin: ["platform.manage"],
-  director: [...MANAGEMENT, "staff.manage", "company.view"],
+  director: [...MANAGEMENT, "staff.manage", "staff.hire", "company.view"],
   head_of_sales: [...MANAGEMENT, "staff.manage"],
   manager: ["records.edit", "my_day.view"],
   /**

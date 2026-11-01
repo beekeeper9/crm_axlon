@@ -26,7 +26,7 @@ const FIELDS: readonly FieldName[] = ["fullName", "login", "departmentId", "comp
 export async function createStaffAccount(_previous: CreateStaffState, formData: FormData): Promise<CreateStaffState> {
   const user = await getCurrentUser()
   const values = Object.fromEntries(FIELDS.map((field) => [field, String(formData.get(field) ?? "")])) as Record<FieldName, string>
-  if (!hasPermission(user.role, "staff.manage") && !hasPermission(user.role, "platform.manage")) {
+  if (!hasPermission(user.role, "staff.hire") && !hasPermission(user.role, "platform.manage")) {
     return { status: "error", message: "У вашей роли нет права создавать аккаунты.", fieldErrors: {}, requestId: null, values }
   }
 
