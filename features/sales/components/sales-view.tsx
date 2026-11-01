@@ -19,7 +19,7 @@ import {
 import { DealsTable } from "@/features/sales/components/deals-table"
 import { PipelineBoard } from "@/features/sales/components/pipeline-board"
 import type { Pipeline } from "@/features/sales/schemas"
-import { teamRepository } from "@/features/team"
+import { listMembersIfAllowed } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
 import { pageInfo, pageParams } from "@/lib/api/pagination"
 import { editModeFor } from "@/lib/permissions/edit-mode"
@@ -38,7 +38,7 @@ type SalesViewProps = {
 export async function SalesView({ user, params }: SalesViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
   const loaded = await tryLoad(() =>
-    Promise.all([salesRepository.getConfig(), isTeamView ? teamRepository.listMembers() : Promise.resolve([])])
+    Promise.all([salesRepository.getConfig(), isTeamView ? listMembersIfAllowed() : Promise.resolve([])])
   )
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
   const [config, members] = loaded.data
@@ -90,7 +90,7 @@ export async function SalesView({ user, params }: SalesViewProps) {
           />
         )}
         <SearchInput label="Поиск сделок" placeholder="Имя, телефон или метка" className="w-full sm:w-64" />
-        {isTeamView && (
+        {isTeamView && members.length > 0 && (
           <FilterSelect
             label="Ответственный"
             param="manager"

@@ -42,12 +42,20 @@ const httpTeamRepository: TeamRepository = {
 
 export const teamRepository: TeamRepository = isMockDataSource ? mockTeamRepository : httpTeamRepository
 
-/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
-export async function loadMemberNames(): Promise<Map<string, string>> {
+/**
+ * Сотрудники для фильтров и выбора исполнителя. Не у каждой роли с обзором команды есть право
+ * на список сотрудников (наблюдатель получает 403) — тогда список пуст, а страница работает.
+ */
+export async function listMembersIfAllowed(): Promise<TeamMember[]> {
   try {
-    return new Map((await teamRepository.listMembers()).map((member) => [member.id, member.name]))
+    return await teamRepository.listMembers()
   } catch (error) {
-    if (error instanceof ApiError && error.kind === "forbidden") return new Map()
+    if (error instanceof ApiError && error.kind === "forbidden") return []
     throw error
   }
+}
+
+/** Имена сотрудников по id пользователя. Без права на список сотрудников (403) имена неизвестны */
+export async function loadMemberNames(): Promise<Map<string, string>> {
+  return new Map((await listMembersIfAllowed()).map((member) => [member.id, member.name]))
 }

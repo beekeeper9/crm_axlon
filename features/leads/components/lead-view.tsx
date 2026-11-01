@@ -21,7 +21,7 @@ import type { LeadDetail } from "@/features/leads/schemas"
 import { LeadCallsList } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
 import { TasksList, tasksRepository } from "@/features/tasks"
-import { teamRepository } from "@/features/team"
+import { listMembersIfAllowed } from "@/features/team"
 import type { ApiError } from "@/lib/api/errors"
 import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
@@ -121,7 +121,7 @@ async function LeadWork({ lead, user }: LeadViewProps) {
         offset: 0,
       })
     ),
-    tryLoad(() => (isTeamView ? teamRepository.listMembers() : Promise.resolve([]))),
+    tryLoad(() => (isTeamView ? listMembersIfAllowed() : Promise.resolve([]))),
   ])
   if (!members.ok) return <ApiErrorState error={members.error} bare />
   const editMode = editModeFor(user.role)

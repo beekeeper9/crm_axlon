@@ -6,7 +6,7 @@ import { Toolbar } from "@/components/shared/toolbar"
 import { routes } from "@/config/routes"
 import { salesRepository, type DealAttention } from "@/features/sales/api/sales-repository"
 import { parseDealSort, TableSection } from "@/features/sales/components/sales-view"
-import { teamRepository } from "@/features/team"
+import { listMembersIfAllowed } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
 import { pageParams } from "@/lib/api/pagination"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -31,7 +31,7 @@ type LeadsListViewProps = {
 export async function LeadsListView({ user, params }: LeadsListViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
   const loaded = await tryLoad(() =>
-    Promise.all([salesRepository.getConfig(), isTeamView ? teamRepository.listMembers() : Promise.resolve([])])
+    Promise.all([salesRepository.getConfig(), isTeamView ? listMembersIfAllowed() : Promise.resolve([])])
   )
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
   const [config, members] = loaded.data
@@ -69,7 +69,7 @@ export async function LeadsListView({ user, params }: LeadsListViewProps) {
             options={pipeline.stages.map((stage) => ({ value: stage.id, label: stage.name }))}
           />
         )}
-        {isTeamView && (
+        {isTeamView && members.length > 0 && (
           <FilterSelect
             label="Ответственный"
             param="manager"

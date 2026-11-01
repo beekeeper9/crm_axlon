@@ -1,6 +1,7 @@
 import { CircleCheck, Info, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+import { ApiErrorState } from "@/components/shared/api-error-state"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -9,6 +10,7 @@ import { focusRepository } from "@/features/focus/api/focus-repository"
 import { FocusItemRow } from "@/features/focus/components/focus-item-row"
 import { ManagerFilter } from "@/features/focus/components/manager-filter"
 import type { FocusGroup } from "@/features/focus/schemas"
+import { tryLoad } from "@/lib/api/load"
 import { formatNumber } from "@/lib/format"
 
 const GROUP_TITLE_CLASSES: Record<FocusGroup["tone"], string> = {
@@ -24,7 +26,9 @@ type FocusViewProps = {
 }
 
 export async function FocusView({ isTeamView, managerId }: FocusViewProps) {
-  const focus = await focusRepository.getFocusList({ managerId })
+  const loaded = await tryLoad(() => focusRepository.getFocusList({ managerId }))
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const focus = loaded.data
   const groups = focus.groups.filter((group) => group.items.length > 0)
   const showManager = isTeamView && managerId === null
 
