@@ -221,7 +221,9 @@ Endpoint (все с `X-Tenant`):
 - `GET /api/v1/staff/create-options/` — `{ creatable_roles[], departments[], fixed_department_id | null, mode: "direct" | "request" }`.
 - `POST /api/v1/staff/` (директор) — `{ first_name, last_name?, role, login?, department_id? }` → 201 `{ member, temporary_password }`. Пароль генерирует сервер и возвращает один раз.
 - `GET|POST /api/v1/staff/requests/` — заявки (директор — все, РОП — своего отдела). Найм: `{ kind: "hire", first_name, last_name?, role, login? }` — отдел берётся из членства РОПа, переданный игнорируется; увольнение: `{ kind: "dismiss", membership_id, reason? }`.
-- `POST /api/v1/staff/requests/{id}/approve/` (директор) → `{ request, temporary_password? }` — найм создаёт аккаунт, увольнение отключает его; `…/reject/` `{ note? }` (директор); `…/cancel/` (автор). Повторное решение — 409.
+- `POST /api/v1/staff/requests/{id}/approve/` (директор) → `{ request, temporary_password? }` — найм создаёт аккаунт, увольнение отключает его; `…/reject/` `{ note? }` (директор); `…/cancel/` (автор). Повторное решение — 409. Вторая заявка на увольнение того же сотрудника, пока первая ждёт, — 409.
+- Увольнение (одобренная заявка или `POST /api/v1/staff/{id}/deactivate/` директора): вход блокируется (токены сотрудника → 401), аккаунт и все записи сохраняются. **Открытые задачи** уволенного переходят к РОПу, подавшему заявку, или к директору, отключившему аккаунт напрямую (запись `activity.tasks_handed_over` в журнале). Сделки и клиенты остаются за сотрудником как история; директор передаёт их через `…/assign/`. Выполненные задачи и встречи не меняются.
+- Также: `PATCH /api/v1/staff/{id}/ { role?, department_id? }` (смена роли; перевод между отделами — только директор), `POST /api/v1/staff/{id}/reset-password/` → `{ temporary_password }` (директор — всем, РОП — сотрудникам своего отдела), `POST /api/v1/auth/password/change/` (своя смена). Восстановления пароля по e-mail/SMS нет — нет инфраструктуры доставки.
 - `POST /api/v1/departments/` (директор) — `{ name }` → 201.
 
 В интерфейсе: директор создаёт отделы на странице «Компания», РОПов и сотрудников — в «Сотрудниках» и одобряет заявки там же (пароль нового сотрудника показывается при одобрении один раз). РОП отправляет заявку и может отозвать свою. Заявка на увольнение пока доступна только через API (кнопки в списке нет). В демо-режиме заявки и отделы не сохраняются.
@@ -229,13 +231,17 @@ Endpoint (все с `X-Tenant`):
 ### Платформа — `features/platform` (подключено, 01.11.2026)
 
 Только для `is_platform_admin` (проверяется backend на каждом запросе; директор компании получает 403). Без `X-Tenant`.
-- `GET /api/v1/platform/overview/?period_days=7|30|90|365` — компании, пользователи, подписки по состояниям, `revenue.assigned_monthly` — **сумма прейскурантных цен назначенных тарифов, не полученные деньги**; `revenue.received` и `overdue` — `null`: оплаты подписок не учитываются.
+- `GET /api/v1/platform/overview/?period_days=7|30|90|365` — компании, пользователи, подписки по состояниям; `revenue.assigned_monthly` — **сумма прейскурантных цен назначенных тарифов, не полученные деньги**; `revenue.received` — сумма **подтверждённых** платежей за подписки с `paid_on` в периоде, по валютам; `revenue.overdue` — `null` (`overdue_unavailable_reason`): для задолженности нужны выставленные счета, их платформа не ведёт.
+- Платежи за подписки (ручной учёт, без платёжного провайдера):
+  - `GET|POST /api/v1/platform/companies/{id}/payments/` — `{ amount, currency, paid_on, reference, period_start?, period_end?, note?, confirm? }`. `reference` — номер внешней операции (банковский перевод, квитанция), уникален: повтор → 409 `duplicate_payment`. Дата в будущем → 400. Новый платёж `pending` и в выручку не входит; `confirm: true` — записать и подтвердить сразу.
+  - `POST /api/v1/platform/payments/{id}/confirm/`, `…/cancel/ { note? }` — только из `pending`; повторное решение → 409 `payment_invalid_state`.
+  - `GET /api/v1/platform/payments/?status&company_id&paid_from&paid_to` — история по всем компаниям.
 - `GET /api/v1/platform/catalog/` — тарифы (`free` «Базовый», `pro` «Расширенный», `enterprise` «Корпоративный») с ценой и модулями по умолчанию; список модулей.
 - `GET /api/v1/platform/companies/?search&status=active|suspended&plan&access=active|expiring|expired|past_due|cancelled&limit&offset`.
 - `POST /api/v1/platform/companies/` — `{ name, slug, country, currency, timezone, subscription: { plan_code, starts_on, ends_on?, features?, status? }, director: { first_name, last_name?, login?, email?, phone? } }` → 201 `{ company, director: { login, temporary_password } }`. Компания, директор, подписка, отдельная база данных и стандартная воронка создаются одной операцией; при ошибке ничего не остаётся. Если на сервере выключено `TENANT_PROVISIONING_ENABLED` — 409 `provisioning_disabled`.
 - `GET|PATCH /api/v1/platform/companies/{id}/` — карточка (директора, история изменений) / `{ name?, is_active? }` (приостановить — сотрудники компании теряют доступ).
 - `PUT /api/v1/platform/companies/{id}/subscription/` — `{ plan_code, starts_on, ends_on?, features[], status }`: тариф, срок (последний день включительно) и модули.
-- `GET /api/v1/platform/errors/?status`, `PATCH …/errors/{id}/ { status }` — непредвиденные ошибки сервера (500): компонент, маршрут, тип исключения, код запроса, компания; без текста ошибки и данных запроса.
+- `GET /api/v1/platform/errors/?status`, `PATCH …/errors/{id}/ { status }` — непредвиденные ошибки сервера (500) и окончательно упавшие фоновые задачи Celery (`method: "TASK"`, `route` — имя задачи): компонент, тип исключения, код запроса, компания (если задача получает `tenant_slug`); без текста ошибки, аргументов и данных запроса.
 - `GET /api/v1/platform/tickets/?status`, `GET|PATCH …/tickets/{id}/ { status?, internal_note? }`.
 
 Подписка компании проверяется на каждом запросе с `X-Tenant`: истёкшая или отменённая — 403 `subscription_inactive` (кроме `/subscription/` и `/support/`), модуль вне подписки (`/telephony/`, `/communications/`, `/payments/`, `/analytics/`, `/ai/`, `/operations/`, `/risk/`) — 403 `feature_not_in_plan`. Интерфейс показывает для этих кодов отдельные сообщения.
@@ -243,6 +249,43 @@ Endpoint (все с `X-Tenant`):
 ### Поддержка — `features/support` (подключено, 01.11.2026)
 
 `GET|POST /api/v1/support/tickets/` (X-Tenant) — `{ kind: question|problem|feedback|idea, subject, body }`; сотрудник видит только свои обращения, без внутреннего комментария платформы.
+
+### Ядро CRM на backend (реализовано 01.11.2026, frontend подключит отдельной задачей)
+
+Все операции — с `X-Tenant`, права проверяет backend (роль + область own/team/all). Связать работу можно только с записью, **которую пользователь видит**: сделка с клиентом, задача/звонок/заметка с клиентом/сделкой/лидом, встреча с клиентом/сделкой — иначе 404 (как будто записи нет).
+
+**Клиенты** (`/api/v1/customers/`):
+- `GET ?search&owner_id&archived=false|true|all&ordering=name|created_at|-…&limit&offset` — по умолчанию только активные. В ответе добавлены `team_id`, `archived_at`.
+- `POST`, `GET|PATCH {id}/` (оптимистическая блокировка `version` → 409). E-mail уникален в компании (409); телефон — нет.
+- `POST {id}/archive/`, `{id}/restore/` — архив: скрыт из списка, только чтение (правка → 409 `customer_archived`), новые сделки на него → 400; сделки и история сохраняются.
+- `POST {id}/assign/ { owner_user_id }` — смена ответственного: менеджер не может (403), РОП — внутри своего отдела, директор — любому активному сотруднику компании; чужой компании или отключённому → 400. Отдел нового ответственного становится отделом клиента.
+- Связанные сделки — `GET /api/v1/sales/deals/?customer_id=`; история — `GET /api/v1/activities/?subject_type=customer&subject_id=`.
+
+**Сделки** (`/api/v1/sales/deals/`) — к существующим списку (фильтры, сортировка, пагинация), созданию, карточке, правке, переводу этапа, win/lose/reopen и `stage-history/` добавлены:
+- `POST {id}/assign/ { owner_user_id }` — смена ответственного по тем же правилам, что у клиентов; работает и для закрытых сделок.
+- `GET {id}/history/` — `{ count, results: [{ action, occurred_at, actor {id,name}, changed_fields }] }`, новые сверху: `deal.created|updated|stage_changed|won|lost|reopened|reassigned`; в `changed_fields` — имена полей (`title`, `amount`, `customer`, `source`, `next_step`, `custom_fields`, `expected_close_date`, `owner`), значения не раскрываются.
+- Закрытие — только через выигрыш/проигрыш (отдельного «архива» сделок нет); перевод на этап — только `POST {id}/stage/`, этап проверяется на принадлежность воронке сделки и активность.
+
+**Воронки** (`/api/v1/sales/pipelines/`, менять может право `pipelines.manage`: директор; у РОПа оно сейчас тоже есть — открытый вопрос):
+- `PATCH {id}/ { name?, is_default: true? }` — переименовать или сделать воронкой по умолчанию.
+- `POST {id}/stages/ { name, probability, kind: open|won|lost, position? }` → 201, вставка со сдвигом.
+- `PATCH {id}/stages/{stage_id}/ { name?, probability?, is_active? }` — `is_active: false` архивирует этап: он остаётся в истории и на закрытых сделках, но переводить на него нельзя; этап с открытыми сделками архивировать нельзя (409 `stage_in_use`); в воронке всегда есть хотя бы один активный открытый этап. Тип этапа (`kind`) не меняется.
+- `PUT {id}/stage-order/ { stage_ids }` — новый порядок всех этапов (каждый ровно один раз, иначе 400).
+- Новая компания получает «Основную воронку»: Новый 10 % → Квалификация 30 % → Предложение 60 % → Выиграна → Проиграна.
+
+**Задачи и встречи** — жизненный цикл уже был: задачи — создание, правка (срок, приоритет), `reassign/`, `complete/ {result}`, `cancel/`, `reopen/`, не больше двух открытых задач на сделку (409); встречи — создание, правка, `reschedule/`, `confirm/`, `cancel/`, `complete/`, `outcome/`, участники. Изменено только правило связей (см. выше).
+
+**Планы: выполнение** — `GET /api/v1/plans/progress/?scope&scope_id&metric&period&limit&offset`. Те же права, что у списка: менеджер — свои планы, РОП — план компании, своего отдела и его сотрудников, директор — все, наблюдатель — 403. Каждая строка — план плюс `period_start`, `period_end`, `unit` (`count|money`), `currency` (для денег), `actual`, `percent` (`actual / target × 100`, одна цифра после точки; `null`, если цель 0).
+
+| Метрика | Факт | Источник |
+|---|---|---|
+| `monthly_sales` | сделки, чей **первый** платёж (не возврат) пришёлся на месяц; продажа засчитывается продавцу первого платежа | платежи по сделкам |
+| `monthly_turnover` | платежи за месяц минус возвраты, только в валюте компании | платежи |
+| `weekly_leads` | лиды, созданные за ISO-неделю | лиды (ответственный) |
+| `weekly_prepayments` | число предоплат (`kind=prepayment`, не возвраты) за неделю | платежи |
+| `daily_calls` | звонки, записанные за день (действия `call`) | действия (ответственный) |
+
+План сотрудника — его результаты; план отдела — результаты **текущих** сотрудников отдела (кто продал, а не кто внёс платёж); план компании — все. Дни — в часовом поясе компании.
 
 ### «Фокус», рабочее пространство
 
