@@ -74,7 +74,7 @@ export function ClientDetailContent({ client, actions }: { client: ClientDetail;
                       <span className="text-xs text-muted-foreground">{deal.pipelineName}</span>
                     </div>
                     <p className="text-meta text-muted-foreground">
-                      {deal.amount && deal.currency ? formatDecimalMoney(deal.amount, deal.currency) : "Без суммы"} · {formatDayMonth(deal.updatedAt)}
+                      {deal.amount && deal.currency ? formatDecimalMoney(deal.amount, deal.currency) : "Без суммы"} · обновлено {formatDayMonth(deal.updatedAt)}
                     </p>
                   </div>
                   <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden />

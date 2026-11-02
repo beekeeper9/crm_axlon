@@ -148,6 +148,8 @@ const backendDealSchema = z.object({
   stageId: z.string(),
   ownerUserId: z.string(),
   nextStep: z.string().nullable(),
+  /** Последнее изменение записи; старый backend поля не отдаёт */
+  updatedAt: z.iso.datetime({ offset: true }).nullable().optional(),
 })
 
 const backendDealsPageSchema = paginatedSchema(backendDealSchema)
@@ -165,7 +167,7 @@ const BACKEND_ORDERING: Record<DealSort, string> = {
 }
 
 /**
- * Список сделок backend отдаёт без клиента, даты смены этапа, даты обновления и срока
+ * Список сделок backend отдаёт без клиента, даты смены этапа и срока
  * следующего шага — эти поля остаются пустыми, а не придумываются (см. docs/API_CONTRACT.md).
  */
 function toDeal(deal: BackendDeal, memberNames: ReadonlyMap<string, string>): Deal {
@@ -180,7 +182,7 @@ function toDeal(deal: BackendDeal, memberNames: ReadonlyMap<string, string>): De
     manager: { id: deal.ownerUserId, name: memberNames.get(deal.ownerUserId) ?? "Сотрудник" },
     nextAction: deal.nextStep ? { title: deal.nextStep, dueAt: null, isOverdue: false } : null,
     stageEnteredAt: null,
-    updatedAt: null,
+    updatedAt: deal.updatedAt ?? null,
     tags: [],
   }
 }

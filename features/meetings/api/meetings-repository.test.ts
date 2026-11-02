@@ -51,11 +51,14 @@ describe("toMeeting", () => {
 describe("httpMeetingsRepository.listMeetings", () => {
   beforeEach(() => apiRequest.mockReset())
 
-  it("поиск, которого нет у backend, не подменяется неотфильтрованным списком", async () => {
-    await expect(
-      meetingsRepository.listMeetings({ period: null, status: null, hostId: null, leadId: null, search: "окна", outcomeRequired: false, limit: 20, offset: 0 })
-    ).rejects.toMatchObject({ kind: "contract_pending" })
-    expect(apiRequest).not.toHaveBeenCalled()
+  it("поиск и «без итога» уходят в backend одним запросом", async () => {
+    apiRequest.mockResolvedValueOnce({ count: 0, results: [] })
+    await meetingsRepository.listMeetings({ period: "today", status: null, hostId: null, leadId: null, search: "окна", outcomeRequired: true, limit: 20, offset: 0 })
+    expect(apiRequest).toHaveBeenCalledTimes(1)
+    const [, options] = apiRequest.mock.calls[0] as [string, { query: Record<string, unknown> }]
+    expect(options.query).toMatchObject({ search: "окна", outcomeRequired: "true", limit: 20, offset: 0 })
+    // Период не сужает «без итога»: нужны все прошедшие встречи без итога
+    expect(options.query.dateFrom).toBeUndefined()
   })
 
   it("фильтры уходят в backend: ведущий → owner_id, лид → сделка", async () => {
@@ -68,15 +71,15 @@ describe("httpMeetingsRepository.listMeetings", () => {
   })
 })
 
-describe("«Без итога» без произвольного лимита", () => {
+describe("«Подтверждена» без произвольного лимита", () => {
   it("загружает все страницы и считает по всем встречам", async () => {
     apiRequest.mockReset()
     const page = (offset: number, n: number) =>
-      Array.from({ length: n }, (_, i) => ({ ...base, id: `m-${offset + i}`, subjectId: null, subjectType: null, scheduledEnd: "2026-01-01T10:00:00+06:00" }))
+      Array.from({ length: n }, (_, i) => ({ ...base, id: `m-${offset + i}`, subjectId: null, subjectType: null, confirmedAt: "2026-01-01T10:00:00+06:00" }))
     apiRequest.mockImplementation(async (_path: string, { query }: { query: { offset: number } }) =>
       query.offset === 0 ? { count: 250, results: page(0, 200) } : { count: 250, results: page(200, 50) }
     )
-    const result = await meetingsRepository.listMeetings({ period: null, status: null, hostId: null, leadId: null, search: null, outcomeRequired: true, limit: 20, offset: 0 })
+    const result = await meetingsRepository.listMeetings({ period: null, status: "confirmed", hostId: null, leadId: null, search: null, outcomeRequired: false, limit: 20, offset: 0 })
     expect(apiRequest).toHaveBeenCalledTimes(2)
     expect(result.count).toBe(250)
     expect(result.results).toHaveLength(20)

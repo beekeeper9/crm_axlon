@@ -5,7 +5,7 @@ import { meetingFormatSchema, meetingSchema, type Meeting, type MeetingPeriod, t
 import { loadPeopleNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
-import { ApiError, contractPending } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors"
 import { PAGE_LIMIT_MAX, paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { companyDateOf } from "@/lib/datetime"
@@ -167,18 +167,21 @@ export async function fetchAllMeetings(auth: ApiAuth, query: BackendMeetingsQuer
 const MAX_PAGES = 50
 
 /**
- * `GET /meetings/`: видимость решает backend. Поиска по тексту у него нет. «Подтверждена» и
- * «без итога» — запланированные встречи, уточнённые по полям ответа: для них загружаются все
+ * `GET /meetings/`: видимость, поиск (`search`) и «без итога» (`outcome_required`) решает backend.
+ * «Подтверждена» — запланированные встречи, уточнённые по полям ответа: для неё загружаются все
  * страницы, поэтому список и счётчик полные, а не первые N встреч.
  */
 const httpMeetingsRepository: MeetingsRepository = {
   async listMeetings({ period, status, hostId, leadId, search, outcomeRequired, limit, offset }) {
-    if (search) return contractPending("поиск по встречам")
     const auth = await getRenderAuth()
-    const refined = outcomeRequired || status === "confirmed"
-    const range = outcomeRequired ? ([null, 0] as const) : period ? PERIOD_RANGE[period] : null
+    // «Подтверждена» — запланированная с отметкой подтверждения: уточняется по ответу (все страницы)
+    const refined = status === "confirmed"
+    const range = outcomeRequired ? null : period ? PERIOD_RANGE[period] : null
     const query: BackendMeetingsQuery = {
-      status: refined ? "scheduled" : (status ?? undefined),
+      status: refined ? "scheduled" : outcomeRequired ? undefined : (status ?? undefined),
+      // Встречи без итога отбирает backend: запланированные, время которых уже прошло
+      outcomeRequired: outcomeRequired ? "true" : undefined,
+      search: search ?? undefined,
       ownerId: hostId ?? undefined,
       ...(leadId ? { subjectType: "deal", subjectId: leadId } : {}),
       dateFrom: range && range[0] !== null ? companyDay(range[0]) : undefined,
@@ -191,9 +194,7 @@ const httpMeetingsRepository: MeetingsRepository = {
       const subjects = await subjectNames(auth, page.results)
       return { count: page.count, results: page.results.map((meeting) => toMeeting(meeting, nameOf, subjects, now)) }
     }
-    const matching = (await fetchAllMeetings(auth, query)).filter((meeting) =>
-      outcomeRequired ? Date.parse(meeting.scheduledEnd) < now : meeting.confirmedAt !== null
-    )
+    const matching = (await fetchAllMeetings(auth, query)).filter((meeting) => meeting.confirmedAt !== null)
     const visible = matching.slice(offset, offset + limit)
     const subjects = await subjectNames(auth, visible)
     return { count: matching.length, results: visible.map((meeting) => toMeeting(meeting, nameOf, subjects, now)) }

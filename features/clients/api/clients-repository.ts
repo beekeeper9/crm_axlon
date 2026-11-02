@@ -87,6 +87,7 @@ const backendClientDealSchema = z.object({
   stageId: z.string(),
   closedAt: z.iso.datetime({ offset: true }).nullable(),
   createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }).nullable().optional(),
 })
 
 const backendActivitySchema = z.object({
@@ -128,7 +129,7 @@ async function clientDeals(auth: ApiAuth, customerId: string, stages: Map<string
       stageKind: deal.status === "open" ? (stage?.kind ?? "open") : deal.status,
       amount: deal.amount,
       currency: deal.currency,
-      updatedAt: deal.closedAt ?? deal.createdAt,
+      updatedAt: deal.updatedAt ?? deal.closedAt ?? deal.createdAt,
     }
   })
 }

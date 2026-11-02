@@ -47,7 +47,7 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
         ...common,
         period: onlyOutcome ? null : period,
         status: statusResult.success ? statusResult.data : null,
-        search: isMockDataSource ? getParam(params, "q") : null,
+        search: getParam(params, "q"),
         outcomeRequired: onlyOutcome,
       }),
       meetingsRepository.listMeetings({ ...common, period: null, status: null, search: null, outcomeRequired: true, limit: 1 }),
@@ -96,8 +96,7 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
             }))}
           />
         )}
-        {/* Поиска по встречам у backend нет: поле только в демо-режиме */}
-        {isMockDataSource && <SearchInput label="Поиск встреч" placeholder="Клиент или заметка" className="w-full sm:w-64" />}
+        <SearchInput label="Поиск встреч" placeholder={isMockDataSource ? "Клиент или заметка" : "Название, заметка или место"} className="w-full sm:w-64" />
         <FilterSelect
           label="Статус"
           param="status"

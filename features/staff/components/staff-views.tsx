@@ -224,7 +224,7 @@ export async function CompanyView({ companyName }: { companyName: string }) {
         })}
       </div>
       <p className="text-meta text-muted-foreground">
-        Показатели отдела — в <Link href={routes.team} className="text-primary hover:underline">Кабинете РОПа</Link>. Отдельные аналитические экраны директора — следующий этап.
+        Показатели отдела — в <Link href={routes.team} className="text-primary hover:underline">Кабинете РОПа</Link>. План-факт, планы и выгрузка — там же.
       </p>
     </div>
   )

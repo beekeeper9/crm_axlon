@@ -60,18 +60,17 @@ const httpAfterMeetingRepository: AfterMeetingRepository = {
     const auth = await getRenderAuth()
     const owner = hostId ?? undefined
     const [pending, held, nameOf] = await Promise.all([
-      fetchAllMeetings(auth, { status: "scheduled", ownerId: owner, subjectType: "deal", dateTo: companyDay(0) }),
+      fetchAllMeetings(auth, { outcomeRequired: "true", ownerId: owner, subjectType: "deal" }),
       fetchAllMeetings(auth, { status: "held", ownerId: owner, subjectType: "deal", dateFrom: companyDay(-LOOKBACK_DAYS), dateTo: companyDay(0) }),
       loadPeopleNames(),
     ])
-    const now = Date.now()
     const latestByDeal = new Map<string, { meeting: BackendMeeting; state: AfterMeetingState }>()
     for (const meeting of held.toSorted((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))) {
       if (meeting.subjectId) latestByDeal.set(meeting.subjectId, { meeting, state: "awaiting_decision" })
     }
     // Встреча без итога важнее состоявшейся: перекрывает её по той же сделке
     for (const meeting of pending) {
-      if (meeting.subjectId && Date.parse(meeting.scheduledEnd) < now) latestByDeal.set(meeting.subjectId, { meeting, state: "outcome_required" })
+      if (meeting.subjectId) latestByDeal.set(meeting.subjectId, { meeting, state: "outcome_required" })
     }
 
     const deals = new Map(

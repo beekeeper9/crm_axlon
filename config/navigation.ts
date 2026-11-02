@@ -103,11 +103,17 @@ export const assistantNavItem: NavItem = item.assistant
 export const allSections: readonly NavGroup[] = [
   { title: "Рабочее", items: [item.myDay, item.meetings, item.tasks, item.calls] },
   { title: "Продажи", items: [item.sales, item.afterMeeting, item.focus] },
-  { title: "Контроль продаж", items: [item.cabinet, item.dailyReports, item.review] },
+  // «Отчёты дня» и «Работа над ошибками» ждут backend (отчёты и разборы ИИ) — в режиме api скрыты
+  { title: "Контроль продаж", items: isMockDataSource ? [item.cabinet, item.dailyReports, item.review] : [item.cabinet] },
   { title: "Поиск", items: [item.prospects, item.leads, item.clientBase] },
   // ИИ-помощник — отдельный модуль; в режиме api пункт скрыт, пока модуль не подключён
   { title: "Материалы", items: isMockDataSource ? [item.materials, item.assistant] : [item.materials] },
-  { title: "Управление", items: [item.company, item.staff, item.platform, item.workspace, item.support] },
+  {
+    title: "Управление",
+    items: isMockDataSource
+      ? [item.company, item.staff, item.platform, item.workspace, item.support]
+      : [item.company, item.staff, item.platform, item.support],
+  },
 ]
 
 const allItems: readonly NavItem[] = Object.values(item)

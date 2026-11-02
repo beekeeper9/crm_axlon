@@ -36,8 +36,10 @@ describe("httpTasksRepository.listTasks", () => {
     expect(apiRequest).not.toHaveBeenCalled()
   })
 
-  it("поиск, которого нет у backend, не выдаётся за результат", async () => {
-    await expect(tasksRepository.listTasks({ ...query, search: "звонок" })).rejects.toMatchObject({ kind: "contract_pending" })
+  it("поиск уходит в backend", async () => {
+    apiRequest.mockResolvedValueOnce({ count: 0, results: [] })
+    await tasksRepository.listTasks({ ...query, search: "звонок" })
+    expect(apiRequest).toHaveBeenCalledWith("/api/v1/activities/", expect.objectContaining({ query: expect.objectContaining({ search: "звонок" }) }))
   })
 
   it("общий список: фильтр по исполнителю, название сделки, отменённые скрыты", async () => {

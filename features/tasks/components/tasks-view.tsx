@@ -51,7 +51,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
         status,
         assigneeId,
         leadId: null,
-        search: isMockDataSource ? getParam(params, "q") : null,
+        search: getParam(params, "q"),
         due: DUE_FILTERS.find((item) => item.value === getParam(params, "due"))?.value ?? null,
         important: getParam(params, "priority") === "high",
         ...pageParams(1, TASKS_LIMIT),
@@ -75,8 +75,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
             isActive: tab.value === status,
           }))}
         />
-        {/* Поиска по задачам у backend нет: поле только в демо-режиме */}
-        {isMockDataSource && <SearchInput label="Поиск задач" placeholder="Задача или клиент" className="w-full sm:w-64" />}
+        <SearchInput label="Поиск задач" placeholder={isMockDataSource ? "Задача или клиент" : "Текст задачи"} className="w-full sm:w-64" />
         <FilterSelect label="Срок" param="due" allLabel="Любой срок" options={DUE_FILTERS.map((item) => ({ ...item }))} />
         <FilterSelect label="Приоритет" param="priority" allLabel="Любой приоритет" options={[{ value: "high", label: "Важные" }]} />
         {isTeamView ? (
@@ -84,12 +83,13 @@ export async function TasksView({ user, params }: TasksViewProps) {
             label="Исполнитель"
             param="assignee"
             allLabel="Все исполнители"
+            // Backend всегда назначает задачу автору: «без исполнителя» есть только в демо-данных
             options={[
-              { value: UNASSIGNED, label: "Без исполнителя" },
+              ...(isMockDataSource ? [{ value: UNASSIGNED, label: "Без исполнителя" }] : []),
               ...members.map((member) => ({ value: member.id, label: member.name })),
             ]}
           />
-        ) : (
+        ) : isMockDataSource ? (
           <SegmentedLinks
             label="Чьи задачи"
             variant="pill"
@@ -98,7 +98,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
               { key: "none", label: "Без исполнителя", href: href({ assignee: UNASSIGNED }), isActive: assigneeId === UNASSIGNED },
             ]}
           />
-        )}
+        ) : null}
       </Toolbar>
 
       <TasksList

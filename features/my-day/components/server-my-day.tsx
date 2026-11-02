@@ -87,9 +87,6 @@ export async function ServerMyDayView({ userId }: { userId: string }) {
         </Suspense>
       </WidgetErrorBoundary>
 
-      <p className="text-meta text-muted-foreground">
-        Заработок, показатели по дням и направлениям появятся, когда backend начнёт их отдавать.
-      </p>
     </div>
   )
 }

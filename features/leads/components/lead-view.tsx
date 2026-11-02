@@ -95,7 +95,8 @@ export function LeadView({ lead, user }: LeadViewProps) {
             tabs={[
               { value: "work", label: "Работа", content: <Deferred><LeadWork lead={lead} user={user} /></Deferred> },
               { value: "history", label: "История", content: <Deferred><LeadTimeline leadId={lead.id} /></Deferred> },
-              { value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> },
+              // Звонки по сделке backend не фильтрует (телефония подключается отдельно) — вкладка только в демо
+              ...(isMockDataSource ? [{ value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> }] : []),
               {
                 value: "payment",
                 label: "Оплата",

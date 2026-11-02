@@ -2,7 +2,9 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
+import { isMockDataSource } from "@/config/env"
 import { homeRouteFor } from "@/config/navigation"
+import { routes } from "@/config/routes"
 import { MemberCardSkeleton, MemberCardView } from "@/features/team-cabinet"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
@@ -14,6 +16,8 @@ type MemberPageProps = PageProps<"/team/[managerId]">
 async function MemberContent({ params }: Pick<MemberPageProps, "params">) {
   const [user, { managerId }] = await Promise.all([getCurrentUser(), params])
   if (!hasPermission(user.role, "cabinet.view")) redirect(homeRouteFor(user.role))
+  // Карточки менеджера у backend пока нет — в режиме api ведём в кабинет
+  if (!isMockDataSource) redirect(routes.team)
   return <MemberCardView managerId={managerId} />
 }
 

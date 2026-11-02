@@ -220,7 +220,7 @@ async function dealRefs(auth: ApiAuth, tasks: readonly BackendTask[]): Promise<M
 
 /**
  * `GET /activities/?kind=task`: видимость (свои, команда, все) решает backend.
- * Поиска по тексту у backend нет, а задачи всегда назначены (без исполнителя — себе),
+ * Поиск — по названию и описанию задачи (`search`). Задачи всегда назначены (без исполнителя — себе),
  * поэтому «Без исполнителя» честно пусто. Отменённые задачи не показываются: в интерфейсе нет такого статуса.
  */
 const httpTasksRepository: TasksRepository = {
@@ -228,7 +228,6 @@ const httpTasksRepository: TasksRepository = {
     return contractPending("задачи пользователя на сегодня")
   },
   async listTasks({ status, assigneeId, leadId, search, due = null, important = false, limit, offset }) {
-    if (search) return contractPending("поиск по задачам")
     const today = due === "today" ? companyDateOf(new Date().toISOString()) : undefined
     if (assigneeId === UNASSIGNED) return { count: 0, results: [] }
     const auth = await getRenderAuth()
@@ -245,6 +244,7 @@ const httpTasksRepository: TasksRepository = {
           ...(today ? { dueFrom: today, dueTo: today } : {}),
           // Backend фильтрует по одному приоритету; «важные» в интерфейсе — это high
           ...(important ? { priority: "high" } : {}),
+          search: search ?? undefined,
           limit,
           offset,
         },

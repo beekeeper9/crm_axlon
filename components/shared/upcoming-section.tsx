@@ -1,9 +1,12 @@
+import { redirect } from "next/navigation"
 import { Check, Construction } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Card } from "@/components/ui/card"
-import { findNavItem } from "@/config/navigation"
+import { isMockDataSource } from "@/config/env"
+import { findNavItem, homeRouteFor } from "@/config/navigation"
 import type { AppRoute } from "@/config/routes"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 type UpcomingSectionProps = {
   href: AppRoute
@@ -14,9 +17,11 @@ type UpcomingSectionProps = {
 
 /**
  * Честная заглушка раздела: говорит, что раздел в разработке, и что в нём будет.
- * Не изображает работающую функциональность.
+ * Только в демо-режиме: с реальными данными недоступный раздел скрыт из меню,
+ * а прямой переход ведёт на стартовую страницу роли.
  */
-export function UpcomingSection({ href, description, plannedFeatures }: UpcomingSectionProps) {
+export async function UpcomingSection({ href, description, plannedFeatures }: UpcomingSectionProps) {
+  if (!isMockDataSource) redirect(homeRouteFor((await getCurrentUser()).role))
   const item = findNavItem(href)
   const Icon = item?.icon ?? Construction
 
