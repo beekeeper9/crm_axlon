@@ -39,6 +39,10 @@ export type StaffRepository = {
   rejectRequest(requestId: string, note: string): Promise<StaffRequest>
   cancelRequest(requestId: string): Promise<StaffRequest>
   createDepartment(name: string): Promise<{ id: string; name: string }>
+  /** Отключить аккаунт: вход блокируется, открытые задачи и сделки переходят к тому, кто отключил */
+  deactivate(membershipId: string): Promise<void>
+  /** Новый временный пароль (показывается один раз; старый и открытые сессии перестают работать) */
+  resetPassword(membershipId: string): Promise<string>
 }
 
 /** Заявок и новых отделов в демо-режиме нет: они существуют только на сервере */
@@ -81,7 +85,7 @@ const mockStaffRepository: StaffRepository = {
     return createOptionsSchema.parse({
       creatableRole: role,
       roles: role ? [role] : [],
-      mode: user.role === "head_of_sales" ? "request" : "direct",
+      mode: "direct",
       departments: user.role === "director" && account?.companyId ? demoDepartmentsOf(account.companyId).map(({ id, name }) => ({ id, name })) : [],
       fixedDepartment: user.role === "head_of_sales" && department ? { id: department.id, name: department.name } : null,
       loginIsOptional: true,
@@ -110,6 +114,8 @@ const mockStaffRepository: StaffRepository = {
   rejectRequest: demoOnlyServer,
   cancelRequest: demoOnlyServer,
   createDepartment: demoOnlyServer,
+  deactivate: demoOnlyServer,
+  resetPassword: demoOnlyServer,
 }
 
 const backendDepartmentSchema = z.object({ id: z.string(), name: z.string(), isActive: z.boolean() })
@@ -132,6 +138,8 @@ const backendCreateOptionsSchema = z.object({
   departments: z.array(backendDepartmentSchema),
   fixedDepartmentId: z.string().nullable(),
   mode: z.enum(["direct", "request"]),
+  /** РОП может создавать менеджеров своего отдела напрямую (backend с 02.11.2026) */
+  canCreateDirectly: z.boolean().optional(),
 })
 
 const backendRequestSchema = z.object({
@@ -195,7 +203,7 @@ const httpStaffRepository: StaffRepository = {
     return createOptionsSchema.parse({
       creatableRole: roles[0] ?? null,
       roles,
-      mode: options.mode,
+      mode: options.canCreateDirectly ? "direct" : options.mode,
       departments: options.fixedDepartmentId ? [] : options.departments.map((department) => ({ id: department.id, name: department.name })),
       fixedDepartment: ref(fixed),
       loginIsOptional: true,
@@ -290,6 +298,23 @@ const httpStaffRepository: StaffRepository = {
       schema: backendDepartmentSchema,
     })
     return { id: created.id, name: created.name }
+  },
+
+  async deactivate(membershipId) {
+    await apiRequest(`/api/v1/staff/${encodeURIComponent(membershipId)}/deactivate/`, {
+      method: "POST",
+      auth: await getActionAuth(),
+      schema: z.unknown(),
+    })
+  },
+
+  async resetPassword(membershipId) {
+    const result = await apiRequest(`/api/v1/staff/${encodeURIComponent(membershipId)}/reset-password/`, {
+      method: "POST",
+      auth: await getActionAuth(),
+      schema: z.object({ temporaryPassword: z.string() }),
+    })
+    return result.temporaryPassword
   },
 }
 

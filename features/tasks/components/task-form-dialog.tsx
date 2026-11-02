@@ -72,7 +72,7 @@ function TaskForm({
     title: task?.title ?? "",
     type: task?.type ?? "call",
     // Для срока без времени время не придумываем: его выберет пользователь
-    dueAt: task?.dueAt && !isDateOnlyDue(task.dueAt) ? isoToCompanyWallTime(task.dueAt) : "",
+    dueAt: !task?.dueAt ? "" : isServer ? task.dueAt.slice(0, 10) : isDateOnlyDue(task.dueAt) ? "" : isoToCompanyWallTime(task.dueAt),
     priority: task?.priority ?? "normal",
     assigneeId: task ? (task.assignee?.id ?? null) : currentUser.id,
     description: task?.description ?? "",
@@ -142,7 +142,8 @@ function TaskForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="task-type">Тип</Label>
-          <Select items={typeOptions} value={values.type} onValueChange={(type) => type && set("type", taskTypeSchema.parse(type))}>
+          {/* Тип сохранённой задачи backend не меняет */}
+          <Select items={typeOptions} value={values.type} disabled={isServer && task !== null} onValueChange={(type) => type && set("type", taskTypeSchema.parse(type))}>
             <SelectTrigger id="task-type" className="w-full">
               <SelectValue />
             </SelectTrigger>

@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import { FlaskConical } from "lucide-react"
 
@@ -10,6 +11,7 @@ import { isMockDataSource } from "@/config/env"
 import { homeRouteFor } from "@/config/navigation"
 import { routes } from "@/config/routes"
 import { siteConfig } from "@/config/site"
+import { NotificationsBell } from "@/features/notifications"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -43,7 +45,8 @@ export async function AppHeader() {
       <PrimaryNav role={user.role} />
       {/* Администратор платформы управляет доступом, а не продажами: каталог CRM ему не нужен */}
       {!isPlatformAdmin && <AllSectionsMenu role={user.role} />}
-      {!isPlatformAdmin && <AssistantLink />}
+      {/* ИИ-помощник делает отдельный модуль; пока он не подключён, кнопка есть только в демо */}
+      {!isPlatformAdmin && isMockDataSource && <AssistantLink />}
 
       <div className="ml-auto flex items-center gap-2">
         {isMockDataSource && (
@@ -54,6 +57,11 @@ export async function AppHeader() {
             <FlaskConical className="size-3.5" aria-hidden />
             Демо-данные
           </span>
+        )}
+        {!isPlatformAdmin && (
+          <Suspense fallback={<Skeleton className="size-8 rounded-md" />}>
+            <NotificationsBell />
+          </Suspense>
         )}
         <UserMenu user={user} isDemoData={isMockDataSource} />
       </div>

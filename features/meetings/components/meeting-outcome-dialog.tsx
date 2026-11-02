@@ -16,26 +16,40 @@ import { formatDateTime } from "@/lib/format"
 const RESULTS: readonly { value: MeetingOutcomeFormValues["result"]; label: string; icon: LucideIcon; tone: string }[] = [
   { value: "held", label: "Состоялась", icon: CircleCheckBig, tone: "has-checked:border-success has-checked:bg-success/10 [&_svg]:text-success" },
   { value: "no_show", label: "Не дошёл", icon: UserX, tone: "has-checked:border-destructive has-checked:bg-destructive/10 [&_svg]:text-destructive" },
-  { value: "rescheduled", label: "Новая дата", icon: CalendarClock, tone: "has-checked:border-warning has-checked:bg-warning/10 [&_svg]:text-warning" },
+  { value: "rescheduled", label: "Перенос", icon: CalendarClock, tone: "has-checked:border-warning has-checked:bg-warning/10 [&_svg]:text-warning" },
 ]
 
 type MeetingOutcomeDialogProps = {
   meeting: Meeting | null
   onOpenChange: (open: boolean) => void
-  onSave: (meeting: Meeting, values: MeetingOutcomeFormValues) => void
+  /** Через backend — сообщение об ошибке или null при успехе */
+  onSave: (meeting: Meeting, values: MeetingOutcomeFormValues) => void | Promise<string | null>
+  isServer?: boolean
 }
 
-export function MeetingOutcomeDialog({ meeting, onOpenChange, onSave }: MeetingOutcomeDialogProps) {
+export function MeetingOutcomeDialog({ meeting, onOpenChange, onSave, isServer = false }: MeetingOutcomeDialogProps) {
   return (
     <Dialog open={meeting !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {meeting && <OutcomeForm key={meeting.id} meeting={meeting} onCancel={() => onOpenChange(false)} onSave={onSave} />}
+        {meeting && <OutcomeForm key={meeting.id} meeting={meeting} isServer={isServer} onCancel={() => onOpenChange(false)} onSave={onSave} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function OutcomeForm({ meeting, onCancel, onSave }: { meeting: Meeting; onCancel: () => void; onSave: MeetingOutcomeDialogProps["onSave"] }) {
+function OutcomeForm({
+  meeting,
+  isServer,
+  onCancel,
+  onSave,
+}: {
+  meeting: Meeting
+  isServer: boolean
+  onCancel: () => void
+  onSave: MeetingOutcomeDialogProps["onSave"]
+}) {
+  const [isSaving, setIsSaving] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
   const [result, setResult] = useState<MeetingOutcomeFormValues["result"] | null>(null)
   const [rescheduledTo, setRescheduledTo] = useState("")
   const [comment, setComment] = useState("")
@@ -52,7 +66,15 @@ function OutcomeForm({ meeting, onCancel, onSave }: { meeting: Meeting; onCancel
       setErrors(Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message])))
       return
     }
-    onSave(meeting, parsed.data)
+    const saving = onSave(meeting, parsed.data)
+    if (!saving) return
+    setIsSaving(true)
+    setServerError(null)
+    void saving.then((error) => {
+      // При успехе диалог закрывает родитель
+      setServerError(error)
+      setIsSaving(false)
+    })
   }
 
   return (
@@ -95,7 +117,7 @@ function OutcomeForm({ meeting, onCancel, onSave }: { meeting: Meeting; onCancel
 
       {result === "rescheduled" && (
         <div className="grid gap-2">
-          <Label htmlFor="meeting-new-date">Новая дата и время</Label>
+          <Label htmlFor="meeting-new-date">Новая дата и время (если известна)</Label>
           <Input
             id="meeting-new-date"
             type="datetime-local"
@@ -104,6 +126,7 @@ function OutcomeForm({ meeting, onCancel, onSave }: { meeting: Meeting; onCancel
             aria-invalid={Boolean(errors.rescheduledTo)}
           />
           {errors.rescheduledTo && <p className="text-xs text-destructive">{errors.rescheduledTo}</p>}
+          <p className="text-xs text-muted-foreground">Не договорились о дате — оставьте пустым: встреча будет «перенос без даты» и попадёт в хвосты.</p>
         </div>
       )}
 
@@ -118,13 +141,20 @@ function OutcomeForm({ meeting, onCancel, onSave }: { meeting: Meeting; onCancel
         />
       </div>
 
-      <DemoNotice>Демо-режим: итог сохранится только на этой странице.</DemoNotice>
+      {serverError && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {serverError}
+        </p>
+      )}
+      {!isServer && <DemoNotice>Демо-режим: итог сохранится только на этой странице.</DemoNotice>}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           Отмена
         </Button>
-        <Button type="submit">Записать итог</Button>
+        <Button type="submit" disabled={isSaving}>
+          {isSaving ? "Сохраняем…" : "Записать итог"}
+        </Button>
       </DialogFooter>
     </form>
   )

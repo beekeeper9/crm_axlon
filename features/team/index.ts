@@ -1,2 +1,2 @@
-export { listMembersIfAllowed, loadMemberNames, teamRepository } from "./api/team-repository"
+export { listMembersIfAllowed, loadMemberNames, loadPeopleNames, teamRepository } from "./api/team-repository"
 export type { TeamMember } from "./schemas"

@@ -9,7 +9,7 @@ import { leadRoute } from "@/config/routes"
 import { CLIENT_CONFIRMATION_META, MEETING_FORMAT_META, MEETING_STATUS_META } from "@/features/meetings/lib/meeting-meta"
 import type { Meeting } from "@/features/meetings/schemas"
 import { formatTime } from "@/lib/format"
-import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
+import type { EditMode } from "@/lib/permissions/edit-mode"
 
 type MeetingRowProps = {
   meeting: Meeting
@@ -18,9 +18,11 @@ type MeetingRowProps = {
   isDemoChanged: boolean
   editMode: EditMode
   onRecordOutcome: (meeting: Meeting) => void
+  /** Действия через backend (подтвердить, перенести, отменить) */
+  actions?: React.ReactNode
 }
 
-export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editMode, onRecordOutcome }: MeetingRowProps) {
+export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editMode, onRecordOutcome, actions }: MeetingRowProps) {
   const status = MEETING_STATUS_META[meeting.status]
   const confirmation = CLIENT_CONFIRMATION_META[meeting.clientConfirmation]
   const format = MEETING_FORMAT_META[meeting.format]
@@ -37,7 +39,9 @@ export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editM
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {showLead ? (
+          {showLead && !meeting.lead.id ? (
+            <span className="font-medium">{meeting.lead.name}</span>
+          ) : showLead ? (
             <Link href={leadRoute(meeting.lead.id)} className="font-medium hover:text-primary hover:underline">
               {meeting.lead.name}
             </Link>
@@ -85,14 +89,14 @@ export function MeetingRow({ meeting, showLead, showPeople, isDemoChanged, editM
           size="sm"
           variant="outline"
           className="shrink-0 self-start"
-          disabled={editMode !== "demo"}
-          title={editMode === "demo" ? undefined : EDIT_UNAVAILABLE_HINT}
+          // Итог записывается и в демо, и через backend; права проверяет backend
           onClick={() => onRecordOutcome(meeting)}
         >
           <ClipboardCheck data-icon="inline-start" aria-hidden />
           Записать итог
         </Button>
       )}
+      {actions}
     </li>
   )
 }

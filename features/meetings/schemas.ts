@@ -46,10 +46,7 @@ export const meetingOutcomeFormSchema = z
     rescheduledTo: z.string(),
     comment: z.string().trim().max(2000, "Не длиннее 2000 символов"),
   })
-  .refine((value) => value.result !== "rescheduled" || value.rescheduledTo.length > 0, {
-    message: "Укажите новую дату встречи",
-    path: ["rescheduledTo"],
-  })
+  // Перенос без даты допустим: это явное состояние, которое попадает в хвосты CRM
 
 export const meetingFormSchema = z.object({
   leadId: z.string({ error: "Выберите клиента" }).min(1, "Выберите клиента"),

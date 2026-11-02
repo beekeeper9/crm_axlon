@@ -6,7 +6,7 @@ import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 /**
  * Клиент — человек или компания, у которых может быть несколько сделок (лидов), в том числе закрытых.
  * Сделка отвечает на вопрос «что продаём сейчас», клиент — «кто это и что с ним уже было».
- * ПРЕДЛОЖЕНИЕ: отдельной сущности клиента в согласованном контракте пока нет.
+ * В режиме api — `/api/v1/customers/` и сделки клиента `/api/v1/sales/deals/?customer_id=`.
  */
 
 const refSchema = z.object({ id: z.string(), name: z.string() })
@@ -35,6 +35,8 @@ export const clientSummarySchema = z.object({
   /** Текущая открытая сделка, если есть */
   currentDeal: z.object({ id: z.string(), stageName: z.string() }).nullable(),
   lastInteractionAt: z.iso.datetime({ offset: true }).nullable(),
+  /** Клиент в архиве: исключён из активной работы, только чтение (backend `archived_at`) */
+  isArchived: z.boolean().default(false),
 })
 
 export const clientDetailSchema = clientSummarySchema.extend({

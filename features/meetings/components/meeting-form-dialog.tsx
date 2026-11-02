@@ -22,7 +22,9 @@ type MeetingFormDialogProps = {
   hosts: readonly Option[]
   currentUser: Option
   onOpenChange: (open: boolean) => void
-  onSave: (values: MeetingFormValues) => void
+  /** Через backend — сообщение об ошибке или null при успехе */
+  onSave: (values: MeetingFormValues) => void | Promise<string | null>
+  isServer?: boolean
 }
 
 export function MeetingFormDialog({ open, onOpenChange, ...props }: MeetingFormDialogProps) {
@@ -79,7 +81,10 @@ function MeetingForm({
   currentUser,
   onSave,
   onCancel,
+  isServer = false,
 }: Omit<MeetingFormDialogProps, "open" | "onOpenChange"> & { onCancel: () => void }) {
+  const [isSaving, setIsSaving] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
   const [values, setValues] = useState<MeetingFormValues>({
     leadId: lead?.id ?? "",
     startsAt: "",
@@ -104,7 +109,14 @@ function MeetingForm({
       setErrors(next)
       return
     }
-    onSave(parsed.data)
+    const saving = onSave(parsed.data)
+    if (!saving) return
+    setIsSaving(true)
+    setServerError(null)
+    void saving.then((error) => {
+      setServerError(error)
+      setIsSaving(false)
+    })
   }
 
   const hostOptions = (hosts.some((host) => host.id === currentUser.id) ? hosts : [currentUser, ...hosts]).map((host) => ({
@@ -180,15 +192,26 @@ function MeetingForm({
         <Textarea id="meeting-notes" rows={3} value={values.notes} onChange={(event) => set("notes", event.target.value)} />
       </div>
 
-      <DemoNotice>
-        Демо-режим: встреча появится только на этой странице. Напоминания клиенту отправляет backend — здесь они не уходят.
-      </DemoNotice>
+      {serverError && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {serverError}
+        </p>
+      )}
+      {isServer ? (
+        <p className="text-meta text-muted-foreground">Длительность — 60 минут; изменить время можно переносом.</p>
+      ) : (
+        <DemoNotice>
+          Демо-режим: встреча появится только на этой странице. Напоминания клиенту отправляет backend — здесь они не уходят.
+        </DemoNotice>
+      )}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           Отмена
         </Button>
-        <Button type="submit">Назначить</Button>
+        <Button type="submit" disabled={isSaving}>
+          {isSaving ? "Сохраняем…" : "Назначить"}
+        </Button>
       </DialogFooter>
     </form>
   )

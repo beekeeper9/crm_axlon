@@ -6,7 +6,7 @@ import { z } from "zod"
 import { routes } from "@/config/routes"
 import { staffRepository } from "@/features/staff/api/staff-repository"
 import { createStaffFormSchema, type ApprovedRequest } from "@/features/staff/schemas"
-import { API_ERROR_MESSAGES, ApiError } from "@/lib/api/errors"
+import { ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { hasPermission, ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -39,18 +39,18 @@ const BACKEND_MESSAGES: Record<string, string> = {
 
 function friendly(error: ApiError): string {
   if (error.kind === "contract_pending") return "В демо-режиме это действие не сохраняется на сервере."
-  return BACKEND_MESSAGES[error.message] ?? (error.kind === "validation" || error.kind === "conflict" ? error.message : API_ERROR_MESSAGES[error.kind])
+  return BACKEND_MESSAGES[error.message] ?? (error.kind === "validation" || error.kind === "conflict" ? error.message : apiErrorMessage(error))
 }
 
 /**
- * Создание аккаунта (директор) или заявка на найм (РОП) — режим отдаёт сервер в create-options.
+ * Создание аккаунта: директор — в компании, РОП — менеджера своего отдела (напрямую, без заявки;
+ * отдел backend подставляет сам). Если сервер для роли разрешает только заявку — отправляется заявка.
  * Право проверяется здесь и ещё раз на backend; интерфейс лишь не показывает форму тем, кому нельзя.
  */
 export async function createStaffAccount(_previous: CreateStaffState, formData: FormData): Promise<CreateStaffState> {
   const user = await getCurrentUser()
   const values = Object.fromEntries(FIELDS.map((field) => [field, String(formData.get(field) ?? "")])) as Record<FieldName, string>
-  const asRequest = user.role === "head_of_sales"
-  if (!hasPermission(user.role, "staff.hire") && !asRequest) {
+  if (!hasPermission(user.role, "staff.hire")) {
     return { status: "error", message: "У вашей роли нет права создавать аккаунты.", fieldErrors: {}, requestId: null, values }
   }
 
@@ -68,6 +68,7 @@ export async function createStaffAccount(_previous: CreateStaffState, formData: 
   }
 
   try {
+    const asRequest = (await staffRepository.getCreateOptions()).mode === "request"
     if (asRequest) {
       const request = await staffRepository.requestHire(input)
       revalidatePath(routes.staff)
@@ -149,4 +150,19 @@ export async function createDepartmentAction(name: string): Promise<RequestActio
   const parsed = departmentNameSchema.safeParse(name)
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Укажите название", requestId: null }
   return run(() => staffRepository.createDepartment(parsed.data))
+}
+
+/** Отключить сотрудника. Backend решает, можно ли (директор — компания, РОП — менеджеры отдела) */
+export async function deactivateStaffAction(membershipId: string): Promise<RequestActionResult> {
+  if (!hasPermission((await getCurrentUser()).role, "staff.hire")) return { ok: false, message: "У вашей роли нет права отключать сотрудников.", requestId: null }
+  return run(async () => {
+    await staffRepository.deactivate(membershipId)
+    return null
+  })
+}
+
+/** Новый временный пароль сотруднику — показывается один раз и нигде не сохраняется */
+export async function resetStaffPasswordAction(membershipId: string): Promise<RequestActionResult<string>> {
+  if (!hasPermission((await getCurrentUser()).role, "staff.manage")) return { ok: false, message: "У вашей роли нет права сбрасывать пароли.", requestId: null }
+  return run(() => staffRepository.resetPassword(membershipId))
 }

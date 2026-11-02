@@ -122,6 +122,17 @@ export const API_ERROR_MESSAGES: Record<ApiErrorKind, string> = {
   contract_pending: "Этот раздел ещё не подключён к серверу.",
 }
 
+/** Отказы, у которых важна причина, а не вид: подписка и модули тарифа (коды backend) */
+const CODE_MESSAGES: Record<string, string> = {
+  subscription_inactive: "Подписка компании неактивна. Обратитесь к директору или в поддержку платформы.",
+  feature_not_in_plan: "Этот модуль не входит в тариф компании. Чтобы подключить его, директору нужно обратиться в поддержку.",
+}
+
+/** Сообщение для пользователя: сначала по коду ошибки backend, иначе по её виду */
+export function apiErrorMessage(error: ApiError): string {
+  return (error.code && CODE_MESSAGES[error.code]) || API_ERROR_MESSAGES[error.kind]
+}
+
 /**
  * Для API-реализаций, чей endpoint ещё не согласован с backend.
  * Честно сообщает об этом вместо выдуманного запроса.

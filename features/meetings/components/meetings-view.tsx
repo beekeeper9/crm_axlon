@@ -7,6 +7,7 @@ import { SearchInput } from "@/components/shared/search-input"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { meetingsRepository } from "@/features/meetings/api/meetings-repository"
 import { MeetingsList } from "@/features/meetings/components/meetings-list"
@@ -46,7 +47,7 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
         ...common,
         period: onlyOutcome ? null : period,
         status: statusResult.success ? statusResult.data : null,
-        search: getParam(params, "q"),
+        search: isMockDataSource ? getParam(params, "q") : null,
         outcomeRequired: onlyOutcome,
       }),
       meetingsRepository.listMeetings({ ...common, period: null, status: null, search: null, outcomeRequired: true, limit: 1 }),
@@ -95,7 +96,8 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
             }))}
           />
         )}
-        <SearchInput label="Поиск встреч" placeholder="Клиент или заметка" className="w-full sm:w-64" />
+        {/* Поиска по встречам у backend нет: поле только в демо-режиме */}
+        {isMockDataSource && <SearchInput label="Поиск встреч" placeholder="Клиент или заметка" className="w-full sm:w-64" />}
         <FilterSelect
           label="Статус"
           param="status"

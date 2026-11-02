@@ -9,6 +9,8 @@ import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { leadRoute } from "@/config/routes"
+import { DealActions } from "@/features/leads/components/deal-actions"
+import { DealPayments } from "@/features/leads/components/deal-payments"
 import { LeadStageControl } from "@/features/leads/components/lead-stage-control"
 import {
   LeadFields,
@@ -20,6 +22,7 @@ import { LeadTabs } from "@/features/leads/components/lead-tabs"
 import type { LeadDetail } from "@/features/leads/schemas"
 import { LeadCallsList } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
+import { salesRepository } from "@/features/sales"
 import { TasksList, tasksRepository } from "@/features/tasks"
 import { listMembersIfAllowed } from "@/features/team"
 import type { ApiError } from "@/lib/api/errors"
@@ -72,7 +75,15 @@ export function LeadView({ lead, user }: LeadViewProps) {
         stages={lead.pipeline.stages}
         stageId={lead.stageId}
         editMode={editModeFor(user.role)}
+        serverDealId={isMockDataSource ? null : lead.id}
+        isOpenDeal={lead.status === "open"}
       />
+
+      {!isMockDataSource && hasPermission(user.role, "records.edit") && (
+        <Suspense fallback={<Skeleton className="h-8 w-80" />}>
+          <DealActionsSection lead={lead} user={user} />
+        </Suspense>
+      )}
 
       {/* Порядок в разметке — порядок на телефоне: сейчас → клиент → вкладки.
           На широком экране «Клиент и сделка» уходит в правую колонку на всю высоту. */}
@@ -85,8 +96,17 @@ export function LeadView({ lead, user }: LeadViewProps) {
               { value: "work", label: "Работа", content: <Deferred><LeadWork lead={lead} user={user} /></Deferred> },
               { value: "history", label: "История", content: <Deferred><LeadTimeline leadId={lead.id} /></Deferred> },
               { value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> },
-              // Оплаты по сделке в режиме api ещё не загружаются: пустая вкладка выглядела бы как «оплат нет»
-              ...(isMockDataSource ? [{ value: "payment", label: "Оплата", content: <LeadPayment lead={lead} /> }] : []),
+              {
+                value: "payment",
+                label: "Оплата",
+                content: isMockDataSource ? (
+                  <LeadPayment lead={lead} />
+                ) : (
+                  <Deferred>
+                    <DealPayments dealId={lead.id} customerId={lead.customerId} currency={lead.currency} canRecord={hasPermission(user.role, "records.edit")} />
+                  </Deferred>
+                ),
+              },
               { value: "data", label: "Данные", content: <LeadFields lead={lead} /> },
             ]}
           />
@@ -94,6 +114,17 @@ export function LeadView({ lead, user }: LeadViewProps) {
       </div>
     </div>
   )
+}
+
+/** Справочники для действий со сделкой: причины отказа и (для руководителя) сотрудники */
+async function DealActionsSection({ lead, user }: LeadViewProps) {
+  const canAssign = hasPermission(user.role, "records.assign")
+  const [config, members] = await Promise.all([
+    tryLoad(() => salesRepository.getConfig()),
+    tryLoad(() => (canAssign ? listMembersIfAllowed() : Promise.resolve([]))),
+  ])
+  if (!config.ok) return <ApiErrorState error={config.error} bare />
+  return <DealActions lead={lead} lossReasons={config.data.lossReasons} members={members.ok ? members.data : []} />
 }
 
 /** Каждая вкладка загружается независимо: медленная история не задерживает остальную карточку */

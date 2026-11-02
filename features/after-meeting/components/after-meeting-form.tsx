@@ -23,7 +23,8 @@ type FieldErrors = Partial<Record<keyof AfterMeetingFormValues, string>>
 type AfterMeetingFormProps = {
   item: AfterMeetingItem
   editMode: EditMode
-  onSubmit: (values: AfterMeetingFormValues) => void
+  /** Через backend — сообщение об ошибке или null при успехе */
+  onSubmit: (values: AfterMeetingFormValues) => void | Promise<string | null>
 }
 
 /** Обработка лида после встречи: итог (если не записан), договорённости и следующий шаг */
@@ -39,7 +40,10 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
     nextDueAt: "",
   })
   const [errors, setErrors] = useState<FieldErrors>({})
-  const canEdit = editMode === "demo"
+  const isServer = editMode === "unavailable"
+  const canEdit = editMode === "demo" || isServer
+  const [isSaving, setIsSaving] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
 
   function set<K extends keyof AfterMeetingFormValues>(key: K, value: AfterMeetingFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }))
@@ -55,7 +59,14 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
       setErrors(next)
       return
     }
-    onSubmit(parsed.data)
+    const saving = onSubmit(parsed.data)
+    if (!saving) return
+    setIsSaving(true)
+    setServerError(null)
+    void saving.then((error) => {
+      setServerError(error)
+      setIsSaving(false)
+    })
   }
 
   if (editMode === "read-only") {
@@ -157,12 +168,19 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
         </div>
       </fieldset>
 
-      {canEdit ? (
-        <DemoNotice>Демо-режим: итог и задача сохранятся только на этой странице, на сервер ничего не уйдёт.</DemoNotice>
-      ) : (
-        <p className="text-xs text-muted-foreground">{EDIT_UNAVAILABLE_HINT}.</p>
+      {serverError && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {serverError}
+        </p>
       )}
-      <Button type="submit" disabled={!canEdit}>
+      {editMode === "demo" ? (
+        <DemoNotice>Демо-режим: итог и задача сохранятся только на этой странице, на сервер ничего не уйдёт.</DemoNotice>
+      ) : !canEdit ? (
+        <p className="text-xs text-muted-foreground">{EDIT_UNAVAILABLE_HINT}.</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Итог запишется во встречу, следующий шаг — задачей и в карточку сделки.</p>
+      )}
+      <Button type="submit" disabled={!canEdit || isSaving}>
         <CircleCheckBig data-icon="inline-start" aria-hidden />
         {values.nextTitle ? "Сохранить итог и поставить задачу" : "Сохранить итог"}
       </Button>

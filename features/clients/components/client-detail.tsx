@@ -16,7 +16,7 @@ function telHref(phone: string): string {
 }
 
 /** Содержимое панели клиента: контакты, все сделки (переход в карточку лида) и последние события */
-export function ClientDetailContent({ client }: { client: ClientDetail }) {
+export function ClientDetailContent({ client, actions }: { client: ClientDetail; actions?: React.ReactNode }) {
   return (
     <>
       <SheetHeader className="pr-10">
@@ -28,6 +28,12 @@ export function ClientDetailContent({ client }: { client: ClientDetail }) {
       </SheetHeader>
 
       <div className="space-y-5 px-4 pb-6">
+        {client.isArchived && (
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-meta text-muted-foreground">
+            Клиент в архиве: только просмотр. Сделки и история сохранены.
+          </p>
+        )}
+        {actions}
         <section className="space-y-1.5" aria-label="Контакты">
           {client.phones.map((phone) => (
             <a key={phone} href={telHref(phone)} className="flex items-center gap-2 text-sm tabular-nums hover:text-primary">
@@ -62,13 +68,13 @@ export function ClientDetailContent({ client }: { client: ClientDetail }) {
               <li key={deal.id}>
                 <Link href={leadRoute(deal.id)} className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-accent/50">
                   <div className="min-w-0 flex-1 space-y-1">
+                    <p className="truncate text-sm font-medium">{deal.title}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone={STAGE_TONES[deal.stageKind]}>{deal.stageName}</StatusBadge>
                       <span className="text-xs text-muted-foreground">{deal.pipelineName}</span>
                     </div>
                     <p className="text-meta text-muted-foreground">
-                      {deal.amount && deal.currency ? formatDecimalMoney(deal.amount, deal.currency) : "Без суммы"} · обновлено{" "}
-                      {formatDayMonth(deal.updatedAt)}
+                      {deal.amount && deal.currency ? formatDecimalMoney(deal.amount, deal.currency) : "Без суммы"} · {formatDayMonth(deal.updatedAt)}
                     </p>
                   </div>
                   <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden />

@@ -43,25 +43,31 @@ type FocusItemRowProps = {
 }
 
 export function FocusItemRow({ item, showManager, isDemoData }: FocusItemRowProps) {
-  const priority = PRIORITY_META[item.priority]
+  const priority = item.priority ? PRIORITY_META[item.priority] : null
   const ChannelIcon = item.lastInteraction ? CHANNEL_ICONS[item.lastInteraction.channel] : null
 
   return (
     <li className="relative flex flex-col gap-3 overflow-hidden rounded-lg border bg-card py-3 pr-3 pl-5 sm:flex-row sm:gap-4">
-      <span className={cn("absolute inset-y-0 left-0 w-1", priority.barClass)} aria-hidden />
-      <span className="sr-only">{priority.label}.</span>
+      {priority && (
+        <>
+          <span className={cn("absolute inset-y-0 left-0 w-1", priority.barClass)} aria-hidden />
+          <span className="sr-only">{priority.label}.</span>
+        </>
+      )}
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link
-            href={leadRoute(item.lead.id)}
+            href={item.href ?? leadRoute(item.lead.id)}
             className="font-semibold hover:text-primary hover:underline focus-visible:text-primary focus-visible:outline-none"
           >
             {item.lead.name}
           </Link>
-          <span className="text-xs text-muted-foreground">
-            {item.stageName} · {item.pipelineName}
-          </span>
+          {item.stageName && (
+            <span className="text-xs text-muted-foreground">
+              {item.stageName} · {item.pipelineName}
+            </span>
+          )}
           <span className="inline-flex items-center rounded-md bg-warning/12 px-1.5 py-0.5 text-xs font-medium text-warning">
             {item.reason.label}
             {item.reason.since && ` с ${formatDayMonth(item.reason.since)}`}
@@ -109,21 +115,24 @@ export function FocusItemRow({ item, showManager, isDemoData }: FocusItemRowProp
         )}
       </div>
 
-      <div className="flex shrink-0 items-start gap-1">
-        <Button variant="outline" size="sm" disabled title="Станет доступно после подключения backend">
-          <AlarmClock data-icon="inline-start" aria-hidden />
-          Отложить
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled
-          title="Станет доступно после подключения backend"
-          aria-label="Убрать из фокуса"
-        >
-          <X aria-hidden />
-        </Button>
-      </div>
+      {/* «Отложить» и «Убрать» — только в демо: у backend нет таких операций, запись уходит, когда проблема решена */}
+      {isDemoData && (
+        <div className="flex shrink-0 items-start gap-1">
+          <Button variant="outline" size="sm" disabled title="Станет доступно после подключения backend">
+            <AlarmClock data-icon="inline-start" aria-hidden />
+            Отложить
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled
+            title="Станет доступно после подключения backend"
+            aria-label="Убрать из фокуса"
+          >
+            <X aria-hidden />
+          </Button>
+        </div>
+      )}
     </li>
   )
 }

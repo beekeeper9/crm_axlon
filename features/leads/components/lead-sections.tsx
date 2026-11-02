@@ -59,38 +59,41 @@ export function LeadNowPanel({ lead, isDemoData }: { lead: LeadDetail; isDemoDat
         </div>
       </div>
 
-      <div className="border-t px-4 py-3">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
-            <Sparkles className="size-3.5" aria-hidden />
-            Что по сделке?
-          </p>
-          {ai && (
-            <span className="text-xs text-muted-foreground">
-              {isDemoData ? "пример текста · демо" : `обновлено ${formatDateTime(ai.generatedAt)}`}
-            </span>
-          )}
-        </div>
-        {ai ? (
-          <div className="space-y-2">
-            <p className="text-sm leading-relaxed text-foreground/90">{ai.summary}</p>
-            {ai.nextSteps.length > 0 && (
-              <ul className="space-y-1">
-                {ai.nextSteps.map((step) => (
-                  <li key={step} className="flex items-start gap-2 text-meta text-muted-foreground">
-                    <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-primary/80" aria-hidden />
-                    {step}
-                  </li>
-                ))}
-              </ul>
+      {/* Сводку ИИ делает отдельный модуль; без него блок не показывается, чтобы не обещать пустое */}
+      {(isDemoData || ai) && (
+        <div className="border-t px-4 py-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <Sparkles className="size-3.5" aria-hidden />
+              Что по сделке?
+            </p>
+            {ai && (
+              <span className="text-xs text-muted-foreground">
+                {isDemoData ? "пример текста · демо" : `обновлено ${formatDateTime(ai.generatedAt)}`}
+              </span>
             )}
           </div>
-        ) : (
-          <p className="text-meta text-muted-foreground">
-            Сводка появится, когда по лиду накопятся звонки, переписка или встречи и будет подключён ИИ-сервис.
-          </p>
-        )}
-      </div>
+          {ai ? (
+            <div className="space-y-2">
+              <p className="text-sm leading-relaxed text-foreground/90">{ai.summary}</p>
+              {ai.nextSteps.length > 0 && (
+                <ul className="space-y-1">
+                  {ai.nextSteps.map((step) => (
+                    <li key={step} className="flex items-start gap-2 text-meta text-muted-foreground">
+                      <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-primary/80" aria-hidden />
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <p className="text-meta text-muted-foreground">
+              Сводка появится, когда по лиду накопятся звонки, переписка или встречи и будет подключён ИИ-сервис.
+            </p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

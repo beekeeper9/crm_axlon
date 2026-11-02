@@ -8,7 +8,7 @@ export const MEETING_STATUS_META: Record<MeetingStatus, { label: string; tone: S
   confirmed: { label: "Подтверждена", tone: "info" },
   held: { label: "Состоялась", tone: "success" },
   no_show: { label: "Не дошёл", tone: "danger" },
-  rescheduled: { label: "Перенос", tone: "warning" },
+  rescheduled: { label: "Перенос без даты", tone: "warning" },
   cancelled: { label: "Отменена", tone: "neutral" },
 }
 

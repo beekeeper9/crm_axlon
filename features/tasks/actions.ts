@@ -7,11 +7,14 @@ import {
   SERVER_TASK_TYPES,
   completeTask,
   createDealTask,
-  loadTaskPeopleNames,
+  changeTaskState,
+  reassignTask,
   toTask,
+  updateTask,
 } from "@/features/tasks/api/tasks-repository"
+import { loadPeopleNames } from "@/features/team"
 import { taskPrioritySchema, type Task } from "@/features/tasks/schemas"
-import { API_ERROR_MESSAGES, ApiError } from "@/lib/api/errors"
+import { API_ERROR_MESSAGES, ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { getActionAuth } from "@/lib/auth/token-store"
 
 export type TaskActionResult =
@@ -29,7 +32,7 @@ const newDealTaskSchema = z.object({
 
 export type NewDealTaskInput = z.input<typeof newDealTaskSchema>
 
-type Operation = "create" | "complete"
+type Operation = "create" | "complete" | "update"
 
 /** Что именно отказал сервер — по виду ошибки и операции; без технических подробностей */
 function failure(error: unknown, operation: Operation): TaskActionResult {
@@ -40,7 +43,9 @@ function failure(error: unknown, operation: Operation): TaskActionResult {
     conflict:
       operation === "create"
         ? "У сделки уже две открытые задачи — больше ставить нельзя. Выполните одну из них, чтобы поставить новую."
-        : "Задача уже выполнена или отменена. Обновите страницу, чтобы увидеть актуальный статус.",
+        : operation === "update"
+          ? "Задачу уже изменили или закрыли. Обновите страницу, чтобы увидеть актуальную версию."
+          : "Задача уже выполнена или отменена. Обновите страницу, чтобы увидеть актуальный статус.",
     not_found:
       operation === "create"
         ? "Сделка недоступна: возможно, её передали другому сотруднику."
@@ -50,7 +55,8 @@ function failure(error: unknown, operation: Operation): TaskActionResult {
     validation: "Сервер не принял задачу: проверьте название, срок и исполнителя.",
     unauthorized: "Сессия истекла. Обновите страницу и войдите снова.",
   }
-  return { ok: false, message: messages[error.kind] ?? API_ERROR_MESSAGES[error.kind], requestId }
+  const byCode = error.code === "subscription_inactive" || error.code === "feature_not_in_plan"
+  return { ok: false, message: byCode ? apiErrorMessage(error) : (messages[error.kind] ?? apiErrorMessage(error)), requestId }
 }
 
 const DEMO_ONLY: TaskActionResult = {
@@ -69,7 +75,7 @@ export async function createDealTaskAction(dealId: string, input: NewDealTaskInp
       ...parsed.data,
       description: parsed.data.description || null,
     })
-    return { ok: true, task: toTask(created, await loadTaskPeopleNames()) }
+    return { ok: true, task: toTask(created, await loadPeopleNames()) }
   } catch (error) {
     return failure(error, "create")
   }
@@ -80,8 +86,42 @@ export async function completeTaskAction(taskId: string, result: string): Promis
   const trimmed = result.trim().slice(0, 2000)
   try {
     const completed = await completeTask(await getActionAuth(), taskId, trimmed || null)
-    return { ok: true, task: toTask(completed, await loadTaskPeopleNames()) }
+    return { ok: true, task: toTask(completed, await loadPeopleNames()) }
   } catch (error) {
     return failure(error, "complete")
+  }
+}
+
+const taskChangesSchema = newDealTaskSchema.omit({ type: true })
+
+/** Правка задачи и, если сменился исполнитель, передача. Права окончательно проверяет backend */
+export async function updateTaskAction(
+  taskId: string,
+  input: z.input<typeof taskChangesSchema>,
+  previousAssigneeId: string | null
+): Promise<TaskActionResult> {
+  if (isMockDataSource) return DEMO_ONLY
+  const parsed = taskChangesSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? API_ERROR_MESSAGES.validation, requestId: null }
+  try {
+    const auth = await getActionAuth()
+    let saved = await updateTask(auth, taskId, { ...parsed.data, description: parsed.data.description || null })
+    if (parsed.data.assigneeId && parsed.data.assigneeId !== previousAssigneeId) {
+      saved = await reassignTask(auth, taskId, parsed.data.assigneeId)
+    }
+    return { ok: true, task: toTask(saved, await loadPeopleNames()) }
+  } catch (error) {
+    return failure(error, "update")
+  }
+}
+
+/** Отменить открытую задачу или вернуть выполненную в работу */
+export async function changeTaskStateAction(taskId: string, action: "cancel" | "reopen"): Promise<TaskActionResult> {
+  if (isMockDataSource) return DEMO_ONLY
+  try {
+    const task = await changeTaskState(await getActionAuth(), taskId, action)
+    return { ok: true, task: toTask(task, await loadPeopleNames()) }
+  } catch (error) {
+    return failure(error, "update")
   }
 }

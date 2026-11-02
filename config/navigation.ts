@@ -10,6 +10,7 @@ import {
   Database,
   FileBarChart,
   Handshake,
+  Inbox,
   ListChecks,
   MessageSquareWarning,
   Phone,
@@ -21,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { isMockDataSource } from "@/config/env"
 import { routes, type AppRoute } from "@/config/routes"
 import { hasPermission, type Permission, type Role } from "@/lib/permissions/roles"
 
@@ -53,6 +55,7 @@ const item = {
   dailyReports: { title: "Отчёты дня", href: routes.dailyReports, icon: FileBarChart },
   review: { title: "Работа над ошибками", href: routes.review, icon: MessageSquareWarning },
   leads: { title: "Список", href: routes.leads, icon: ClipboardList },
+  prospects: { title: "Входящие лиды", href: routes.prospects, icon: Inbox },
   clientBase: { title: "База клиентов", href: routes.clientBase, icon: Database },
   materials: { title: "Материалы", href: routes.materials, icon: BookOpen },
   assistant: { title: "ИИ-помощник", href: routes.assistant, icon: Sparkles },
@@ -69,7 +72,7 @@ const item = {
  * менеджер начинает с «Моего дня» и работы со своими сделками,
  * руководитель — с «Кабинета РОПа» и контроля встреч, задач и звонков.
  */
-const personalNavigation: readonly NavItem[] = [item.myDay, item.focus, item.sales, item.afterMeeting, item.meetings, item.tasks]
+const personalNavigation: readonly NavItem[] = [item.myDay, item.focus, item.prospects, item.sales, item.afterMeeting, item.meetings, item.tasks]
 const teamNavigation: readonly NavItem[] = [item.cabinet, item.sales, item.meetings, item.tasks, item.calls, item.staff]
 const directorNavigation: readonly NavItem[] = [item.company, item.cabinet, item.sales, item.staff]
 const platformNavigation: readonly NavItem[] = [item.platform]
@@ -101,8 +104,9 @@ export const allSections: readonly NavGroup[] = [
   { title: "Рабочее", items: [item.myDay, item.meetings, item.tasks, item.calls] },
   { title: "Продажи", items: [item.sales, item.afterMeeting, item.focus] },
   { title: "Контроль продаж", items: [item.cabinet, item.dailyReports, item.review] },
-  { title: "Поиск", items: [item.leads, item.clientBase] },
-  { title: "Материалы", items: [item.materials, item.assistant] },
+  { title: "Поиск", items: [item.prospects, item.leads, item.clientBase] },
+  // ИИ-помощник — отдельный модуль; в режиме api пункт скрыт, пока модуль не подключён
+  { title: "Материалы", items: isMockDataSource ? [item.materials, item.assistant] : [item.materials] },
   { title: "Управление", items: [item.company, item.staff, item.platform, item.workspace, item.support] },
 ]
 

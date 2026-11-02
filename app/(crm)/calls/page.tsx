@@ -17,7 +17,7 @@ async function CallsContent({ searchParams }: Pick<CallsPageProps, "searchParams
 export default function CallsPage({ searchParams }: CallsPageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader title="Звонки" description="История разговоров с клиентами, разбор и транскрипции" />
+      <PageHeader title="Звонки" description="История разговоров с клиентами" />
       <Suspense fallback={<CallsViewSkeleton />}>
         <CallsContent searchParams={searchParams} />
       </Suspense>

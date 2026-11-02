@@ -65,6 +65,14 @@ export const leadDetailSchema = z.object({
   customFields: z.array(z.object({ id: z.string(), label: z.string(), value: z.string().nullable() })),
   /** Другие сделки этого клиента */
   related: z.array(z.object({ id: z.string(), title: z.string(), pipelineName: z.string(), stageName: z.string() })),
+  /** Поля для изменений через backend (в демо-данных их нет) */
+  status: z.enum(["open", "won", "lost"]).default("open"),
+  version: z.int().nullable().default(null),
+  customerId: z.string().nullable().default(null),
+  nextStep: z.string().nullable().default(null),
+  expectedCloseDate: z.iso.date().nullable().default(null),
+  closedAt: z.iso.datetime({ offset: true }).nullable().default(null),
+  lostReason: z.string().nullable().default(null),
 })
 
 export const activityKindSchema = z.enum(["call", "chat", "note", "stage", "task", "meeting", "payment"])

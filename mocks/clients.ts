@@ -33,6 +33,8 @@ function buildClient(name: string): ClientDetail {
     email: detail?.client?.email ?? null,
     city: detail?.client?.city ?? null,
     manager: (current ?? latest)?.manager ?? null,
+    // В демо архив — клиенты без открытых сделок
+    isArchived: open.length === 0,
     openDealsCount: open.length,
     dealsCount: deals.length,
     currentDeal: current && { id: current.id, stageName: stages.get(current.stageId)?.stage.name ?? "" },

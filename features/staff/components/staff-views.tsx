@@ -14,6 +14,7 @@ import { staffRepository } from "@/features/staff/api/staff-repository"
 import { CreateStaffFlow } from "@/features/staff/components/create-staff-flow"
 import { DepartmentForm } from "@/features/staff/components/department-form"
 import { StaffRequests } from "@/features/staff/components/staff-requests"
+import { StaffRowActions } from "@/features/staff/components/staff-row-actions"
 import type { AccountStatus, StaffMember } from "@/features/staff/schemas"
 import { tryLoad } from "@/lib/api/load"
 import { formatDayMonth, formatNumber, pluralize } from "@/lib/format"
@@ -26,7 +27,19 @@ const STATUS_META: Record<AccountStatus, { label: string; tone: StatusTone }> = 
 }
 
 /** «Сотрудники»: директор видит компанию и решает по заявкам, РОП — свой отдел и свои заявки */
-export async function StaffListView({ canHire, currentUserId }: { canHire: boolean; currentUserId: string }) {
+export async function StaffListView({
+  canHire,
+  canDecide,
+  currentUserId,
+  currentLogin,
+}: {
+  canHire: boolean
+  /** Решения по заявкам — директор */
+  canDecide: boolean
+  currentUserId: string
+  /** Свою строку не отключают и не сбрасывают (id в списке — членство, поэтому по логину) */
+  currentLogin: string
+}) {
   const loaded = await tryLoad(() => Promise.all([staffRepository.listStaff(), staffRepository.getCreateOptions(), staffRepository.listRequests()]))
   const title = "Сотрудники"
 
@@ -49,7 +62,7 @@ export async function StaffListView({ canHire, currentUserId }: { canHire: boole
         title={title}
         description={
           options.fixedDepartment
-            ? `Отдел «${options.fixedDepartment.name}» · ${count}. Найм и увольнение подтверждает директор`
+            ? `Отдел «${options.fixedDepartment.name}» · ${count}. Менеджеров отдела вы добавляете и отключаете сами`
             : `${count} в вашей области`
         }
         actions={
@@ -61,19 +74,37 @@ export async function StaffListView({ canHire, currentUserId }: { canHire: boole
           )
         }
       />
-      <StaffRequests requests={requests} canDecide={canHire} currentUserId={currentUserId} />
+      <StaffRequests requests={requests} canDecide={canDecide} currentUserId={currentUserId} />
       {members.length === 0 ? (
         <ListPanel>
           <EmptyState icon={Users} title="Пока никого нет" description={isRequest ? "Отправьте директору заявку на первого сотрудника отдела." : "Создайте первый аккаунт — данные для входа появятся сразу после создания."} />
         </ListPanel>
       ) : (
-        <StaffTable members={members} />
+        <StaffTable
+          members={members}
+          currentLogin={currentLogin}
+          canManage={(member) => !isMockDataSource && member.status !== "deactivated" && (canDecide || MANAGED_BY_HEAD.has(member.role))}
+          canHire={canHire}
+        />
       )}
     </div>
   )
 }
 
-function StaffTable({ members }: { members: readonly StaffMember[] }) {
+/** Кем РОП управляет сам: сотрудниками своего отдела ниже себя (остальное — директор) */
+const MANAGED_BY_HEAD: ReadonlySet<StaffMember["role"]> = new Set(["manager", "lead_caller"])
+
+function StaffTable({
+  members,
+  currentLogin,
+  canManage,
+  canHire,
+}: {
+  members: readonly StaffMember[]
+  currentLogin: string
+  canManage: (member: StaffMember) => boolean
+  canHire: boolean
+}) {
   return (
     <ListPanel>
       <div className="overflow-x-auto">
@@ -83,7 +114,10 @@ function StaffTable({ members }: { members: readonly StaffMember[] }) {
               <th scope="col" className="h-9 px-4 font-medium">Сотрудник</th>
               <th scope="col" className="h-9 px-3 font-medium">Роль и отдел</th>
               <th scope="col" className="h-9 px-3 font-medium">Статус</th>
-              <th scope="col" className="h-9 px-4 text-right font-medium">Создан</th>
+              <th scope="col" className="h-9 px-3 text-right font-medium">Создан</th>
+              <th scope="col" className="h-9 px-4 text-right font-medium">
+                <span className="sr-only">Действия</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -100,9 +134,12 @@ function StaffTable({ members }: { members: readonly StaffMember[] }) {
                 <td className="px-3 py-2.5">
                   <StatusBadge tone={STATUS_META[member.status].tone}>{STATUS_META[member.status].label}</StatusBadge>
                 </td>
-                <td className="px-4 py-2.5 text-right text-meta text-muted-foreground">
+                <td className="px-3 py-2.5 text-right text-meta text-muted-foreground">
                   {formatDayMonth(member.createdAt)}
                   {member.createdBy && <span className="block text-xs">{member.createdBy.name}</span>}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  {member.login !== currentLogin && canManage(member) && <StaffRowActions member={member} canDeactivate={canHire} />}
                 </td>
               </tr>
             ))}

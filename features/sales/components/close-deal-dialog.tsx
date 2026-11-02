@@ -27,11 +27,14 @@ export type CloseDealResult = {
 }
 
 type CloseDealDialogProps = {
-  deal: Deal | null
+  deal: Pick<Deal, "id" | "title"> | null
   wonStage: PipelineStage | undefined
   lostStage: PipelineStage | undefined
   lossReasons: readonly LossReason[]
   isDemo: boolean
+  /** Через backend: идёт сохранение и текст ошибки сервера */
+  isPending?: boolean
+  failure?: string | null
   onOpenChange: (open: boolean) => void
   onConfirm: (result: CloseDealResult) => void
 }
@@ -55,16 +58,20 @@ function CloseDealForm({
   lostStage,
   lossReasons,
   isDemo,
+  isPending = false,
+  failure = null,
   onOpenChange,
   onConfirm,
-}: Omit<CloseDealDialogProps, "deal"> & { deal: Deal }) {
+}: Omit<CloseDealDialogProps, "deal"> & { deal: Pick<Deal, "id" | "title"> }) {
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [reasonId, setReasonId] = useState<string | null>(null)
   const [comment, setComment] = useState("")
   const [showErrors, setShowErrors] = useState(false)
 
   const targetStage = outcome === "won" ? wonStage : outcome === "lost" ? lostStage : undefined
-  const reasonMissing = outcome === "lost" && !reasonId
+  // Без справочника причин (компания его не настроила) причина — обязательный комментарий
+  const hasCatalogue = lossReasons.length > 0
+  const reasonMissing = outcome === "lost" && (hasCatalogue ? !reasonId : !comment.trim())
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -116,12 +123,12 @@ function CloseDealForm({
         {showErrors && !outcome && <p className="text-xs text-destructive">Выберите результат сделки</p>}
         {outcome === "won" && (
           <p className="text-xs text-muted-foreground">
-            По правилам компании сделку можно закрыть успешно только с оплатой — это проверит сервер.
+            Продажей сделка станет после первой оплаты в реестре — внесите её во вкладке «Оплата».
           </p>
         )}
       </fieldset>
 
-      {outcome === "lost" && (
+      {outcome === "lost" && hasCatalogue && (
         <div className="grid gap-2">
           <Label htmlFor="loss-reason">Причина отказа</Label>
           <Select items={lossReasons.map((reason) => ({ value: reason.id, label: reason.label }))} value={reasonId} onValueChange={setReasonId}>
@@ -141,23 +148,30 @@ function CloseDealForm({
       )}
 
       <div className="grid gap-2">
-        <Label htmlFor="close-comment">Комментарий</Label>
+        <Label htmlFor="close-comment">{outcome === "lost" && !hasCatalogue ? "Причина отказа" : "Комментарий"}</Label>
         <Textarea
           id="close-comment"
           value={comment}
           onChange={(event) => setComment(event.target.value)}
           placeholder="Например: выбрал вариант дешевле, вернуться через полгода"
           rows={3}
+          aria-invalid={showErrors && outcome === "lost" && !hasCatalogue && reasonMissing}
         />
+        {showErrors && outcome === "lost" && !hasCatalogue && reasonMissing && <p className="text-xs text-destructive">Опишите причину отказа</p>}
       </div>
 
+      {failure && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {failure}
+        </p>
+      )}
       {isDemo && <DemoNotice>Демо-режим: сделка уйдёт с доски только на этой странице, ничего не сохранится.</DemoNotice>}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
           Отмена
         </Button>
-        <Button type="submit" variant={outcome === "lost" ? "destructive" : "default"}>
+        <Button type="submit" variant={outcome === "lost" ? "destructive" : "default"} disabled={isPending}>
           {outcome === "lost" ? "Закрыть как нереализованную" : "Закрыть сделку"}
         </Button>
       </DialogFooter>

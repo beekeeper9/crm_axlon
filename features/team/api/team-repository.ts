@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/errors"
 import { paginatedSchema } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
+import { getCurrentUser } from "@/lib/session/current-user"
 import { simulateLatency } from "@/mocks/latency"
 import { demoManagers } from "@/mocks/team"
 
@@ -71,4 +72,10 @@ export async function listMembersIfAllowed(): Promise<TeamMember[]> {
 /** Имена сотрудников компании по id пользователя — для подписей «ответственный», «исполнитель» */
 export async function loadMemberNames(): Promise<Map<string, string>> {
   return new Map((await teamRepository.listNames()).map((member) => [member.id, member.name]))
+}
+
+/** Имя по id пользователя: без права на список сотрудников известно только своё */
+export async function loadPeopleNames(): Promise<(userId: string) => string> {
+  const [memberNames, user] = await Promise.all([loadMemberNames(), getCurrentUser()])
+  return (userId) => (userId === user.id ? user.fullName : memberNames.get(userId) ?? "Сотрудник")
 }

@@ -45,8 +45,10 @@ export type Permission =
   | "my_day.view"
   /** Раздел «Сотрудники»: сотрудники своей области (директор — компания, РОП — свой отдел) */
   | "staff.manage"
-  /** Нанимать и увольнять (создавать и отключать аккаунты) — решение директора; РОП не может */
+  /** Создавать и отключать аккаунты: директор — в компании, РОП — менеджеров своего отдела */
   | "staff.hire"
+  /** Решать по заявкам на найм и увольнение — директор */
+  | "staff.approve"
   /** Рабочее пространство директора: компания и отделы */
   | "company.view"
   /** Панель администратора платформы: компании, подписки, ошибки и обращения */
@@ -69,8 +71,8 @@ const MANAGEMENT: readonly Permission[] = [
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_admin: ["platform.manage"],
-  director: [...MANAGEMENT, "staff.manage", "staff.hire", "company.view", "support.contact"],
-  head_of_sales: [...MANAGEMENT, "staff.manage", "support.contact"],
+  director: [...MANAGEMENT, "staff.manage", "staff.hire", "staff.approve", "company.view", "support.contact"],
+  head_of_sales: [...MANAGEMENT, "staff.manage", "staff.hire", "support.contact"],
   manager: ["records.edit", "my_day.view", "support.contact"],
   /**
    * Роли P0 backend. Их рабочие пространства в продукте ещё не описаны — пока минимальный набор:

@@ -7,7 +7,7 @@ import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { TICKET_KINDS } from "@/features/platform/schemas"
 import { sendTicket } from "@/features/support/api"
-import { API_ERROR_MESSAGES, ApiError } from "@/lib/api/errors"
+import { ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { getActionAuth } from "@/lib/auth/token-store"
 
 const ticketFormSchema = z.object({
@@ -33,6 +33,6 @@ export async function sendTicketAction(input: z.input<typeof ticketFormSchema>):
     return { ok: true }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error
-    return { ok: false, message: API_ERROR_MESSAGES[error.kind], fieldErrors: {}, requestId: error.requestId ?? null }
+    return { ok: false, message: apiErrorMessage(error), fieldErrors: {}, requestId: error.requestId ?? null }
   }
 }

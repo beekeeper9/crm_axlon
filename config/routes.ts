@@ -10,6 +10,7 @@ export const routes = {
   dailyReports: "/daily-reports",
   review: "/review",
   leads: "/leads",
+  prospects: "/prospects",
   clientBase: "/client-base",
   materials: "/materials",
   assistant: "/assistant",
@@ -38,6 +39,11 @@ export function teamMemberRoute(managerId: string): string {
 
 export function leadRoute(leadId: string): string {
   return `${routes.leads}/${encodeURIComponent(leadId)}`
+}
+
+/** Карточка входящего лида (до конвертации в клиента) */
+export function prospectRoute(prospectId: string): string {
+  return `${routes.prospects}/${encodeURIComponent(prospectId)}`
 }
 
 /** Карточка компании в панели администратора платформы */

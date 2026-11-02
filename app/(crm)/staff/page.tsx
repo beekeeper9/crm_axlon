@@ -13,7 +13,12 @@ export const metadata: Metadata = { title: "Сотрудники" }
 async function Content() {
   const user = await getCurrentUser()
   if (!hasPermission(user.role, "staff.manage")) redirect(homeRouteFor(user.role))
-  return <StaffListView canHire={hasPermission(user.role, "staff.hire")} currentUserId={user.id} />
+  return <StaffListView
+      canHire={hasPermission(user.role, "staff.hire")}
+      canDecide={hasPermission(user.role, "staff.approve")}
+      currentUserId={user.id}
+      currentLogin={user.login}
+    />
 }
 
 export default function Page() {

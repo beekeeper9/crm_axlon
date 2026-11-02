@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button } from "@/components/ui/button"
+import { moveDealStageAction } from "@/features/sales/actions"
 import { CloseDealDialog, type CloseDealResult } from "@/features/sales/components/close-deal-dialog"
 import { DealCard } from "@/features/sales/components/deal-card"
 import { findDeal, moveDeal } from "@/features/sales/lib/board-state"
@@ -30,25 +32,44 @@ type LastChange = {
 }
 
 export function PipelineBoard({ board, pipeline, lossReasons, showManager, editMode }: PipelineBoardProps) {
-  const [columns, setColumns] = useState(board.columns)
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [failure, setFailure] = useState<string | null>(null)
+  const [demoColumns, setColumns] = useState(board.columns)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [closingDeal, setClosingDeal] = useState<Deal | null>(null)
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
 
-  const canEdit = editMode === "demo"
+  // Через backend доска — всегда ответ сервера: после смены этапа приходят новые props
+  const isServer = editMode === "unavailable"
+  const columns = isServer ? board.columns : demoColumns
+  const canEdit = editMode === "demo" || (isServer && !isPending)
   const stagesById = new Map(pipeline.stages.map((stage) => [stage.id, stage]))
   const openStages = pipeline.stages.filter((stage) => stage.kind === "open")
+
+  function moveOnServer(dealId: string, stageId: string, loss: { lossReasonId: string | null; comment: string } | null) {
+    startTransition(async () => {
+      const result = await moveDealStageAction(dealId, stageId, loss)
+      setFailure(result.ok ? null : result.message)
+      if (result.ok) {
+        setClosingDeal(null)
+        router.refresh()
+      }
+    })
+  }
 
   function applyMove(dealId: string, stageId: string) {
     const deal = findDeal(columns, dealId)
     const stage = stagesById.get(stageId)
     if (!deal || !stage || deal.stageId === stageId) return
+    if (isServer) return moveOnServer(dealId, stageId, null)
     setLastChange({ dealTitle: deal.title, stageName: stage.name, previous: columns })
     setColumns(moveDeal(columns, dealId, stageId))
   }
 
-  function handleClose({ dealId, stageId }: CloseDealResult) {
+  function handleClose({ dealId, stageId, lossReasonId, comment }: CloseDealResult) {
+    if (isServer) return moveOnServer(dealId, stageId, stagesById.get(stageId)?.kind === "lost" ? { lossReasonId, comment } : null)
     applyMove(dealId, stageId)
     setClosingDeal(null)
   }
@@ -57,6 +78,12 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
     <div className="space-y-3">
       <BoardSummary columns={columns} editMode={editMode} hasChange={lastChange !== null} />
       <div aria-live="polite">
+        {isPending && <p className="text-meta text-muted-foreground">Сохраняем…</p>}
+        {failure && !closingDeal && (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {failure}
+          </p>
+        )}
         {lastChange && (
           <DemoNotice className="items-center">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -157,7 +184,13 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
         lostStage={pipeline.stages.find((stage) => stage.kind === "lost")}
         lossReasons={lossReasons}
         isDemo={editMode === "demo"}
-        onOpenChange={(open) => !open && setClosingDeal(null)}
+        isPending={isPending}
+        failure={closingDeal ? failure : null}
+        onOpenChange={(open) => {
+          if (open) return
+          setClosingDeal(null)
+          setFailure(null)
+        }}
         onConfirm={handleClose}
       />
     </div>
@@ -196,7 +229,7 @@ function BoardSummary({ columns, editMode, hasChange }: BoardSummaryProps) {
       {!hasChange && (
         <p className="max-md:hidden">
           {editMode === "demo" && "Перетащите карточку на другой этап или выберите этап в меню «⋯»"}
-          {editMode === "unavailable" && "Смена этапа станет доступна после согласования API с backend"}
+          {editMode === "unavailable" && "Перетащите карточку на другой этап или выберите этап в меню «⋯» — изменение сохранится на сервере"}
           {editMode === "read-only" && "Только просмотр"}
         </p>
       )}

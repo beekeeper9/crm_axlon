@@ -4,7 +4,9 @@
  * Тексты ИИ — вымышленные примеры, не результат работы модели.
  * Используются только в режиме NEXT_PUBLIC_DATA_SOURCE=mock.
  */
-import type { LeadActivity, LeadDetail } from "@/features/leads/schemas"
+import type { z } from "zod"
+
+import { leadDetailSchema, type LeadActivity } from "@/features/leads/schemas"
 import { addDecimals, subtractDecimal } from "@/lib/decimal"
 import { demoDeals, demoSalesConfig } from "@/mocks/crm"
 import { demoAt } from "@/mocks/team"
@@ -95,7 +97,7 @@ function createdAt(stageEnteredAt: string): string {
 
 const PAYMENT_STAGES = new Set(["s-prepaid", "c-docs", "c-process"])
 
-export function demoLeadDetail(leadId: string): LeadDetail | null {
+export function demoLeadDetail(leadId: string): z.input<typeof leadDetailSchema> | null {
   const deal = demoDeals.find((item) => item.id === leadId)
   if (!deal) return null
   const pipeline = demoSalesConfig.pipelines.find((item) => item.id === deal.pipelineId)

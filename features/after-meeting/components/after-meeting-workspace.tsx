@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowUpRight, CheckCheck, CircleCheck, Phone, Sparkles, Undo2 } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -9,6 +10,7 @@ import { ListGroup, ListPanel } from "@/components/shared/list-panel"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { leadRoute } from "@/config/routes"
+import { processAfterMeetingAction } from "@/features/after-meeting/actions"
 import { AfterMeetingForm } from "@/features/after-meeting/components/after-meeting-form"
 import type { AfterMeetingFormValues, AfterMeetingItem, AfterMeetingQueue } from "@/features/after-meeting/schemas"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -41,7 +43,19 @@ export function AfterMeetingWorkspace({ queue, editMode, showHost, isDemoData }:
   const selected = allItems.find((item) => item.id === effectiveId) ?? null
   const remaining = allItems.filter((item) => !processed.has(item.id)).length
 
-  function submit(item: AfterMeetingItem, values: AfterMeetingFormValues) {
+  const router = useRouter()
+
+  function submit(item: AfterMeetingItem, values: AfterMeetingFormValues): void | Promise<string | null> {
+    // Через backend очередь — ответ сервера: после обработки запись уходит или меняет группу
+    if (editMode === "unavailable") {
+      return processAfterMeetingAction({ meetingId: item.meeting.id, dealId: item.lead.id }, values).then((error) => {
+        if (!error) {
+          setSelectedId(null)
+          router.refresh()
+        }
+        return error
+      })
+    }
     setProcessed((current) => new Map(current).set(item.id, { values }))
     const next = allItems.find((candidate) => candidate.id !== item.id && !processed.has(candidate.id))
     setSelectedId(isWide ? (next?.id ?? item.id) : null)
@@ -163,7 +177,7 @@ type ItemDetailProps = {
   processed: Processed | null
   editMode: EditMode
   isDemoData: boolean
-  onSubmit: (values: AfterMeetingFormValues) => void
+  onSubmit: (values: AfterMeetingFormValues) => void | Promise<string | null>
   onUndo: () => void
 }
 

@@ -191,3 +191,30 @@ export async function apiRequest<TSchema extends z.ZodType>(
   }
   return parsed.data
 }
+
+export type DownloadedFile = { body: ArrayBuffer; contentType: string; filename: string | null }
+
+/**
+ * Файл от backend (например, выгрузка отчёта): те же авторизация, обновление токена и разбор
+ * ошибок, что у apiRequest, но тело не JSON и не переводится в camelCase.
+ */
+export async function apiDownload(path: string, { auth }: { auth: ApiAuth }): Promise<DownloadedFile> {
+  const tokens = await auth.tokens.read()
+  if (!tokens) throw new ApiError("unauthorized", "Нет токена доступа")
+  const request = (accessToken: string) => send(path, { method: "GET", accessToken, tenant: auth.tenant })
+  let response = await request(tokens.access)
+  if (response.status === 401 && auth.refreshOnUnauthorized !== false) {
+    const refreshed = await refreshStoredTokens(auth.tokens)
+    if (!refreshed) throw new ApiError("unauthorized", "Сессия истекла", { status: 401 })
+    response = await request(refreshed.access)
+  }
+  if (!response.ok) {
+    throw apiErrorFromResponse(response.status, await readJson(response), parseRetryAfter(response.headers.get("Retry-After")))
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? ""
+  return {
+    body: await response.arrayBuffer(),
+    contentType: response.headers.get("Content-Type") ?? "application/octet-stream",
+    filename: /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? null,
+  }
+}

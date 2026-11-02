@@ -8,6 +8,7 @@ import { ListPanel } from "@/components/shared/list-panel"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import {
   DEAL_SORTS,
@@ -16,6 +17,7 @@ import {
   type DealsFilter,
   type DealsListQuery,
 } from "@/features/sales/api/sales-repository"
+import { NewDealButton } from "@/features/sales/components/new-deal-button"
 import { DealsTable } from "@/features/sales/components/deals-table"
 import { PipelineBoard } from "@/features/sales/components/pipeline-board"
 import type { Pipeline } from "@/features/sales/schemas"
@@ -66,15 +68,20 @@ export async function SalesView({ user, params }: SalesViewProps) {
     <div className="space-y-3">
       <Toolbar
         end={
-          <SegmentedLinks
-            label="Вид"
-            variant="pill"
-            iconOnly
-            items={[
-              { key: "board", label: "Доска", icon: Columns3, href: href({ view: null, sort: null }), isActive: view === "board" },
-              { key: "table", label: "Таблица", icon: Rows3, href: href({ view: "table" }), isActive: view === "table" },
-            ]}
-          />
+          <>
+            {!isMockDataSource && hasPermission(user.role, "records.edit") && (
+              <NewDealButton pipelineId={pipeline.id} pipelineName={pipeline.name} />
+            )}
+            <SegmentedLinks
+              label="Вид"
+              variant="pill"
+              iconOnly
+              items={[
+                { key: "board", label: "Доска", icon: Columns3, href: href({ view: null, sort: null }), isActive: view === "board" },
+                { key: "table", label: "Таблица", icon: Rows3, href: href({ view: "table" }), isActive: view === "table" },
+              ]}
+            />
+          </>
         }
       >
         {config.pipelines.length > 1 && (

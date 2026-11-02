@@ -45,15 +45,20 @@ export async function FocusView({ isTeamView, managerId }: FocusViewProps) {
 
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Info className="size-3.5" aria-hidden />
-        «Отложить» и «Убрать из фокуса» заработают после подключения backend.
+        {isMockDataSource
+          ? "«Отложить» и «Убрать из фокуса» заработают после подключения backend."
+          : "Список собирает сервер по правилам компании: что просрочено, без следующего шага или без движения. Запись уходит из фокуса, когда проблема решена."}
       </p>
+      {focus.truncated && (
+        <p className="text-meta text-warning">Показаны не все записи: сервер ограничил ответ. Начните со старых — они вверху.</p>
+      )}
 
       {groups.length === 0 ? (
         <Card>
           <EmptyState
             icon={Target}
             title="В фокусе пусто"
-            description="Приоритетных лидов сейчас нет. Новые появятся, когда ИИ и правила компании отметят их."
+            description="Просроченных задач, забытых лидов и сделок без шага сейчас нет."
           />
         </Card>
       ) : (

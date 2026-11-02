@@ -1,7 +1,8 @@
 import { z } from "zod"
 
 /**
- * Предлагаемая форма звонка. НЕ согласована с backend.
+ * Форма звонка в интерфейсе. В режиме api её собирает calls-repository из `/telephony/calls/`;
+ * транскрипта, анализа и оценки там нет — они приходят null.
  * Факты звонка (кто, когда, сколько) и результат анализа ИИ — разные блоки:
  * анализ может отсутствовать, опаздывать или быть неточным, интерфейс показывает это честно.
  */
@@ -14,15 +15,21 @@ export const callSchema = z.object({
   id: z.string(),
   at: z.iso.datetime({ offset: true }),
   direction: callDirectionSchema,
-  /** missed — входящий без ответа или исходящий без соединения */
-  status: z.enum(["answered", "missed"]),
+  /** missed — входящий без ответа или исходящий без соединения; in_progress — звонок ещё идёт */
+  status: z.enum(["answered", "missed", "in_progress"]),
   durationSec: z.int().nonnegative(),
   phone: z.string(),
   /** null — номер не привязан к лиду */
   lead: refSchema.nullable(),
+  /** Клиент, если звонок привязан к клиенту, а не к сделке */
+  client: refSchema.nullable().optional(),
   manager: refSchema,
   /** Есть ли запись разговора. Как её проигрывать (ссылка, права) — вопрос к backend */
   hasRecording: z.boolean(),
+  /** Ссылка на запись у провайдера (backend хранит только ссылку) */
+  recordingUrl: z.string().nullable().optional(),
+  /** Заметка, которую оставили при записи звонка */
+  notes: z.string().nullable().optional(),
   transcript: z.array(z.object({ speaker: z.enum(["manager", "client"]), text: z.string() })).nullable(),
   analysis: z
     .object({

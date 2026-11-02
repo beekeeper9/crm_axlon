@@ -26,6 +26,7 @@ function toItem([id, leadName, stage, manager, priority, reason, since, interact
   return {
     id,
     lead: { id: `lead-${id}`, name: leadName },
+    href: null,
     pipelineName: "Продажи",
     stageName: stage,
     priority,
@@ -101,6 +102,7 @@ const groups: FocusGroup[] = [
 const allItems = groups.flatMap((group) => group.items)
 
 export const demoFocusList: FocusList = {
+  truncated: false,
   awaitingReply: awaiting.length,
   managers: demoManagers.map((manager) => ({
     ...manager,

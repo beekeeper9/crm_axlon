@@ -12,9 +12,13 @@ import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Toolbar } from "@/components/shared/toolbar"
 import { UrlSheet } from "@/components/shared/url-sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { clientsRepository, type ClientStatus } from "@/features/clients/api/clients-repository"
+import { ClientActions } from "@/features/clients/components/client-actions"
 import { ClientDetailContent } from "@/features/clients/components/client-detail"
+import { NewClientButton } from "@/features/clients/components/new-client-button"
+import { NEW_CLIENT_ID } from "@/features/clients/lib/new-client"
 import { teamRepository } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
 import { pageInfo, pageParams } from "@/lib/api/pagination"
@@ -27,7 +31,7 @@ const CLIENTS_PAGE_SIZE = 25
 
 const STATUS_FILTERS: readonly { value: ClientStatus | null; label: string }[] = [
   { value: null, label: "Все" },
-  { value: "active", label: "Есть сделка в работе" },
+  { value: "active", label: "Активные" },
   { value: "archive", label: "Архив" },
 ]
 
@@ -75,6 +79,9 @@ export async function ClientsView({ user, params }: ClientsViewProps) {
             isActive: item.value === status,
           }))}
         />
+        {!isMockDataSource && hasPermission(user.role, "records.edit") && (
+          <NewClientButton openHref={hrefWithParams(routes.clientBase, params, { client: NEW_CLIENT_ID })} />
+        )}
         {isTeamView && (
           <FilterSelect
             label="Ответственный"
@@ -128,7 +135,7 @@ export async function ClientsView({ user, params }: ClientsViewProps) {
                       {client.currentDeal ? (
                         <span>{client.currentDeal.stageName}</span>
                       ) : (
-                        <span className="text-muted-foreground">Архив</span>
+                        <span className="text-muted-foreground">{client.isArchived ? "В архиве" : "Нет сделок в работе"}</span>
                       )}
                       <p className="text-xs text-muted-foreground">
                         {formatNumber(client.openDealsCount)} в работе из {formatNumber(client.dealsCount)}
@@ -160,7 +167,19 @@ export async function ClientsView({ user, params }: ClientsViewProps) {
 
       {openClient && (
         <UrlSheet closeHref={clientHref(null)}>
-          <ClientDetailContent client={openClient} />
+          <ClientDetailContent
+            client={openClient}
+            actions={
+              isMockDataSource ? null : (
+                <ClientActions
+                  clientId={openClient.id}
+                  isArchived={openClient.isArchived}
+                  managerId={openClient.manager?.id ?? null}
+                  members={hasPermission(user.role, "records.assign") ? members : []}
+                />
+              )
+            }
+          />
         </UrlSheet>
       )}
     </div>

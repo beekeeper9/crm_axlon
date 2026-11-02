@@ -2,12 +2,13 @@ import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
 import { taskSchema, todayTasksSchema, type Task, type TaskType, type TodayTasks } from "@/features/tasks/schemas"
-import { loadMemberNames } from "@/features/team"
+import { loadPeopleNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 import { contractPending } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
+import { companyDateOf } from "@/lib/datetime"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { simulateLatency } from "@/mocks/latency"
 import { demoOwnScope } from "@/mocks/scope"
@@ -22,6 +23,10 @@ export type TasksQuery = PageParams & {
   assigneeId: string | null
   leadId: string | null
   search: string | null
+  /** Срок: просроченные, на сегодня, без срока (считает backend по дню компании) */
+  due?: "overdue" | "today" | "no_due" | null
+  /** Только важные (high и urgent на backend) */
+  important?: boolean
 }
 
 export type TasksRepository = {
@@ -32,8 +37,12 @@ export type TasksRepository = {
 
 const tasksPageSchema = paginatedSchema(taskSchema)
 
-function matches(task: Task, { status, assigneeId, leadId, search }: TasksQuery): boolean {
+function matches(task: Task, { status, assigneeId, leadId, search, due = null, important = false }: TasksQuery): boolean {
   if (status !== "all" && task.status !== status) return false
+  if (important && task.priority !== "high") return false
+  if (due === "overdue" && !task.isOverdue) return false
+  if (due === "today" && task.dueGroup !== "today") return false
+  if (due === "no_due" && task.dueAt !== null) return false
   if (assigneeId === UNASSIGNED && task.assignee !== null) return false
   if (assigneeId && assigneeId !== UNASSIGNED && task.assignee?.id !== assigneeId) return false
   if (leadId && task.lead?.id !== leadId) return false
@@ -100,12 +109,6 @@ const TASK_TYPES: Record<NonNullable<z.infer<typeof backendTaskSchema>["taskType
 
 const BACKEND_STATUS = { open: "open", done: "completed", all: undefined } as const
 
-/** Имя по id пользователя: без права на список сотрудников известно только своё */
-export async function loadTaskPeopleNames(): Promise<(userId: string) => string> {
-  const [memberNames, user] = await Promise.all([loadMemberNames(), getCurrentUser()])
-  return (userId) => (userId === user.id ? user.fullName : memberNames.get(userId) ?? "Сотрудник")
-}
-
 export function toTask(task: BackendTask, nameOf: (userId: string) => string): Task {
   return {
     id: task.id,
@@ -160,6 +163,38 @@ export async function createDealTask(auth: ApiAuth, dealId: string, task: NewDea
   })
 }
 
+export type TaskChanges = {
+  title: string
+  dueDate: string
+  priority: Task["priority"]
+  description: string | null
+}
+
+/** `PATCH /activities/{id}/` — название, срок, приоритет и описание; тип задачи backend не меняет */
+export async function updateTask(auth: ApiAuth, taskId: string, changes: TaskChanges): Promise<BackendTask> {
+  return apiRequest(`/api/v1/activities/${encodeURIComponent(taskId)}/`, {
+    method: "PATCH",
+    auth,
+    body: { title: changes.title, dueDate: changes.dueDate, priority: changes.priority, body: changes.description ?? "" },
+    schema: backendTaskSchema,
+  })
+}
+
+/** `POST /activities/{id}/reassign/` — передать задачу; кому можно, решает backend */
+export async function reassignTask(auth: ApiAuth, taskId: string, assigneeId: string): Promise<BackendTask> {
+  return apiRequest(`/api/v1/activities/${encodeURIComponent(taskId)}/reassign/`, {
+    method: "POST",
+    auth,
+    body: { assigneeUserId: assigneeId },
+    schema: backendTaskSchema,
+  })
+}
+
+/** `POST /activities/{id}/cancel/` и `/reopen/` — отменить открытую или вернуть закрытую задачу */
+export async function changeTaskState(auth: ApiAuth, taskId: string, action: "cancel" | "reopen"): Promise<BackendTask> {
+  return apiRequest(`/api/v1/activities/${encodeURIComponent(taskId)}/${action}/`, { method: "POST", auth, body: {}, schema: backendTaskSchema })
+}
+
 /** `POST /activities/{id}/complete/` — выполнить открытую задачу (409, если она уже закрыта) */
 export async function completeTask(auth: ApiAuth, taskId: string, result: string | null): Promise<BackendTask> {
   return apiRequest(`/api/v1/activities/${encodeURIComponent(taskId)}/complete/`, {
@@ -170,27 +205,59 @@ export async function completeTask(auth: ApiAuth, taskId: string, result: string
   })
 }
 
+const dealTitleSchema = z.object({ id: z.string(), title: z.string() })
+
+/** Названия сделок для ссылок из общего списка: уникальные id одной страницы */
+async function dealRefs(auth: ApiAuth, tasks: readonly BackendTask[]): Promise<Map<string, string>> {
+  const ids = [...new Set(tasks.filter((task) => task.subjectType === "deal").map((task) => task.subjectId))]
+  const deals = await Promise.all(
+    ids.map((id) =>
+      apiRequest(`/api/v1/sales/deals/${encodeURIComponent(id)}/`, { auth, schema: dealTitleSchema }).catch(() => null)
+    )
+  )
+  return new Map(deals.filter((deal) => deal !== null).map((deal) => [deal.id, deal.title]))
+}
+
 /**
- * Пока подключены только задачи сделки (карточка лида): фильтров по исполнителю и поиска
- * у backend нет, а молча показать неотфильтрованный список было бы неправдой.
- * Отменённые задачи не показываются: в интерфейсе нет такого статуса.
+ * `GET /activities/?kind=task`: видимость (свои, команда, все) решает backend.
+ * Поиска по тексту у backend нет, а задачи всегда назначены (без исполнителя — себе),
+ * поэтому «Без исполнителя» честно пусто. Отменённые задачи не показываются: в интерфейсе нет такого статуса.
  */
 const httpTasksRepository: TasksRepository = {
   async getTodayTasks() {
     return contractPending("задачи пользователя на сегодня")
   },
-  async listTasks({ status, assigneeId, leadId, search, limit, offset }) {
-    if (!leadId || assigneeId || search) return contractPending("список задач с фильтрами")
+  async listTasks({ status, assigneeId, leadId, search, due = null, important = false, limit, offset }) {
+    if (search) return contractPending("поиск по задачам")
+    const today = due === "today" ? companyDateOf(new Date().toISOString()) : undefined
+    if (assigneeId === UNASSIGNED) return { count: 0, results: [] }
+    const auth = await getRenderAuth()
     const [page, nameOf] = await Promise.all([
       apiRequest("/api/v1/activities/", {
-        auth: await getRenderAuth(),
-        query: { kind: "task", subjectType: "deal", subjectId: leadId, taskStatus: BACKEND_STATUS[status], limit, offset },
+        auth,
+        query: {
+          kind: "task",
+          ...(leadId ? { subjectType: "deal", subjectId: leadId } : {}),
+          assigneeId: assigneeId ?? undefined,
+          taskStatus: BACKEND_STATUS[status],
+          ...(due === "overdue" ? { overdue: "true" } : {}),
+          ...(due === "no_due" ? { noDueDate: "true" } : {}),
+          ...(today ? { dueFrom: today, dueTo: today } : {}),
+          // Backend фильтрует по одному приоритету; «важные» в интерфейсе — это high
+          ...(important ? { priority: "high" } : {}),
+          limit,
+          offset,
+        },
         schema: backendTasksPageSchema,
       }),
-      loadTaskPeopleNames(),
+      loadPeopleNames(),
     ])
     const visible = page.results.filter((task) => task.taskStatus !== "cancelled")
-    const tasks = visible.map((task) => toTask(task, nameOf))
+    const titles = leadId ? new Map<string, string>() : await dealRefs(auth, visible)
+    const tasks = visible.map((task) => {
+      const title = task.subjectType === "deal" ? titles.get(task.subjectId) : undefined
+      return { ...toTask(task, nameOf), lead: title ? { id: task.subjectId, name: title } : null }
+    })
     return { count: page.count - (page.results.length - visible.length), results: tasks }
   },
 }

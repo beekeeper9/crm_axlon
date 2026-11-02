@@ -3,9 +3,9 @@ import { z } from "zod"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 
 /**
- * Предлагаемая форма данных «Фокуса». НЕ согласована с backend.
- * Какие лиды попадают в фокус и почему — решает backend (правила компании и ИИ);
- * frontend только показывает группы, причины и рекомендации.
+ * Данные «Фокуса». В режиме api их собирает focus-repository из `GET /operations/findings/`.
+ * Какие записи попадают в фокус и почему — решает backend (правила компании);
+ * frontend только показывает группы, причины и (если есть) рекомендации.
  */
 
 export const focusPrioritySchema = z.enum(["high", "medium", "low"])
@@ -13,9 +13,12 @@ export const focusPrioritySchema = z.enum(["high", "medium", "low"])
 export const focusItemSchema = z.object({
   id: z.string(),
   lead: z.object({ id: z.string(), name: z.string() }),
+  /** Куда ведёт строка; null — карточка сделки по lead.id */
+  href: z.string().nullable().default(null),
   pipelineName: z.string(),
   stageName: z.string(),
-  priority: focusPrioritySchema,
+  /** null — backend приоритет не задаёт (правила дают только причину и возраст) */
+  priority: focusPrioritySchema.nullable(),
   /** Почему лид в фокусе, например «тёплый» с даты пометки */
   reason: z.object({ label: z.string(), since: z.iso.date().nullable() }),
   lastInteraction: z
@@ -45,7 +48,10 @@ export const focusGroupSchema = z.object({
 })
 
 export const focusListSchema = z.object({
-  awaitingReply: z.int().nonnegative(),
+  /** Сколько клиентов ждут ответа; null — источник (чаты) не подключён */
+  awaitingReply: z.int().nonnegative().nullable(),
+  /** Backend отдал не все записи (ограничение размера ответа) */
+  truncated: z.boolean().default(false),
   /** Менеджеры для фильтра руководителя, с количеством лидов в фокусе */
   managers: z.array(z.object({ id: z.string(), name: z.string(), count: z.int().nonnegative() })),
   groups: z.array(focusGroupSchema),

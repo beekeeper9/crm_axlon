@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet"
 import { TaskFormDialog } from "@/features/tasks/components/task-form-dialog"
 import { TaskRow } from "@/features/tasks/components/task-row"
-import { completeTaskAction, createDealTaskAction, type TaskActionResult } from "@/features/tasks/actions"
+import { changeTaskStateAction, completeTaskAction, createDealTaskAction, updateTaskAction, type TaskActionResult } from "@/features/tasks/actions"
 import { DUE_GROUPS } from "@/features/tasks/lib/task-meta"
 import type { Task, TaskFormValues } from "@/features/tasks/schemas"
 import { companyWallTimeToIso } from "@/lib/datetime"
@@ -78,8 +78,9 @@ export function TasksList({
   const [form, setForm] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null })
 
   const canEdit = editMode === "demo"
-  // Через backend работают только создание и выполнение; права окончательно проверяет он
-  const isRemote = remoteDealId !== null && editMode !== "read-only"
+  // Через backend работают создание (только в карточке сделки) и выполнение; права окончательно проверяет он
+  const isRemote = !canEdit && editMode !== "read-only"
+  const canCreate = canEdit || (isRemote && remoteDealId !== null)
   const canWrite = canEdit || isRemote
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
   const [listError, setListError] = useState<{ message: string; requestId: string | null } | null>(null)
@@ -104,9 +105,23 @@ export function TasksList({
     return null
   }
 
-  async function saveRemote(dealId: string, values: TaskFormValues): Promise<string | null> {
+  async function saveRemote(dealId: string | null, values: TaskFormValues): Promise<string | null> {
+    const editing = form.task
+    if (!editing && !dealId) return "Задача создаётся в карточке сделки."
     const error = applyServerTask(
-      await createDealTaskAction(dealId, {
+      editing
+        ? await updateTaskAction(
+            editing.id,
+            {
+              title: values.title,
+              dueDate: values.dueAt,
+              priority: values.priority,
+              assigneeId: canAssign ? values.assigneeId : null,
+              description: values.description,
+            },
+            editing.assignee?.id ?? null
+          )
+        : await createDealTaskAction(dealId ?? "", {
         title: values.title,
         dueDate: values.dueAt,
         type: values.type === "email" ? "todo" : values.type,
@@ -135,7 +150,7 @@ export function TasksList({
   }
 
   function save(values: TaskFormValues) {
-    if (isRemote && remoteDealId) return saveRemote(remoteDealId, values)
+    if (isRemote) return saveRemote(remoteDealId, values)
     const fields = {
       title: values.title,
       type: values.type,
@@ -194,8 +209,8 @@ export function TasksList({
               setListError(null)
               setForm({ open: true, task: null })
             }}
-            disabled={!canWrite}
-            title={canWrite ? undefined : EDIT_UNAVAILABLE_HINT}
+            disabled={!canCreate}
+            title={canCreate ? undefined : remoteDealId === null && isRemote ? "Задача создаётся в карточке сделки" : EDIT_UNAVAILABLE_HINT}
           >
             <Plus data-icon="inline-start" aria-hidden />
             Новая задача
@@ -255,6 +270,20 @@ export function TasksList({
           setForm({ open: true, task })
         }}
         onTake={(task) => update(task.id, { assignee: currentUser })}
+        onChangeState={
+          isRemote
+            ? async (task, action) => {
+                const result = await changeTaskStateAction(task.id, action)
+                // Отменённая задача уходит из списка: в интерфейсе нет такого статуса
+                if (result.ok && action === "cancel") {
+                  setTasks((current) => current.filter((item) => item.id !== task.id))
+                  setOpenTaskId(null)
+                  return null
+                }
+                return applyServerTask(result)
+              }
+            : undefined
+        }
       />
       <TaskFormDialog
         open={form.open}

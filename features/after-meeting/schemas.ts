@@ -3,8 +3,8 @@ import { z } from "zod"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 
 /**
- * Предлагаемая форма очереди «После встречи». НЕ согласована с backend.
- * В какую группу попадает лид, решает backend по правилам компании; frontend только показывает.
+ * Очередь «После встречи». Отдельного endpoint очереди у backend нет: в режиме api
+ * after-meeting-repository собирает её из встреч и сделок по правилам, описанным в группах.
  */
 
 const refSchema = z.object({ id: z.string(), name: z.string() })

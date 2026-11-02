@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Mic, MicOff, PhoneIncoming, PhoneMissed, PhoneOutgoing, Sparkles, Star } from "lucide-react"
 
-import { leadRoute } from "@/config/routes"
+import { leadRoute, routes } from "@/config/routes"
 import type { Call } from "@/features/calls/schemas"
 import { formatDateTime, formatDuration } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ export function CallDirectionIcon({ call, className }: { call: Call; className?:
 }
 
 export function callTitle(call: Call): string {
+  if (call.status === "in_progress") return call.direction === "incoming" ? "Входящий · идёт" : "Исходящий · идёт"
   if (call.status === "missed") return call.direction === "incoming" ? "Пропущенный входящий" : "Исходящий без ответа"
   return `${call.direction === "incoming" ? "Входящий" : "Исходящий"} · ${formatDuration(call.durationSec)}`
 }
@@ -42,6 +43,10 @@ export function CallFacts({ call }: { call: Call }) {
         <Link href={leadRoute(call.lead.id)} className="text-primary hover:underline">
           {call.lead.name}
         </Link>
+      ) : call.client ? (
+        <Link href={`${routes.clientBase}?client=${encodeURIComponent(call.client.id)}`} className="text-primary hover:underline">
+          {call.client.name}
+        </Link>
       ) : (
         <span className="text-muted-foreground">Номер не привязан к лиду</span>
       ),
@@ -52,7 +57,12 @@ export function CallFacts({ call }: { call: Call }) {
     { label: "Звонок", value: callTitle(call) },
     {
       label: "Запись",
-      value: call.hasRecording ? (
+      value: call.recordingUrl ? (
+        <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+          <Mic className="size-3.5" aria-hidden />
+          Открыть запись
+        </a>
+      ) : call.hasRecording ? (
         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
           <Mic className="size-3.5" aria-hidden />
           Есть; прослушивание появится после подключения телефонии
@@ -65,6 +75,7 @@ export function CallFacts({ call }: { call: Call }) {
       ),
     },
   ]
+  if (call.notes) rows.push({ label: "Заметка", value: call.notes })
   return (
     <dl className="divide-y rounded-lg ring-1 ring-border">
       {rows.map((row) => (

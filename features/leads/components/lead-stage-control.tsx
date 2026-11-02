@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { Check, Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -8,6 +9,7 @@ import { DemoNotice } from "@/components/shared/demo-notice"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import type { PipelineStage } from "@/features/sales"
+import { moveDealStageAction } from "@/features/sales/actions"
 import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
 
 type LeadStageControlProps = {
@@ -15,16 +17,44 @@ type LeadStageControlProps = {
   stages: readonly PipelineStage[]
   stageId: string
   editMode: EditMode
+  /** Режим api: этап меняется на сервере у этой сделки */
+  serverDealId?: string | null
+  /** Статус сделки от backend; после «Открыть снова» он open, хотя этап может остаться закрывающим */
+  isOpenDeal?: boolean
 }
 
 /** Путь по воронке: пройденные этапы, текущий и следующие. Этапы берутся из настроек воронки. */
-export function LeadStageControl({ pipelineName, stages, stageId: initialStageId, editMode }: LeadStageControlProps) {
-  const [stageId, setStageId] = useState(initialStageId)
+export function LeadStageControl({
+  pipelineName,
+  stages,
+  stageId: initialStageId,
+  editMode,
+  serverDealId = null,
+  isOpenDeal,
+}: LeadStageControlProps) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [failure, setFailure] = useState<string | null>(null)
+  const [demoStageId, setStageId] = useState(initialStageId)
+  const isServer = serverDealId !== null && editMode === "unavailable"
+  // Через backend текущий этап — всегда ответ сервера (после router.refresh приходит новый)
+  const stageId = isServer ? initialStageId : demoStageId
   const openStages = stages.filter((stage) => stage.kind === "open")
   const current = stages.find((stage) => stage.id === stageId)
   const currentIndex = openStages.findIndex((stage) => stage.id === stageId)
-  const isClosed = current !== undefined && current.kind !== "open"
-  const canEdit = editMode === "demo"
+  const isOnClosingStage = current !== undefined && current.kind !== "open"
+  const isClosed = isServer && isOpenDeal !== undefined ? !isOpenDeal : isOnClosingStage
+  const needsStage = !isClosed && isOnClosingStage
+  const canEdit = (editMode === "demo" || isServer) && !isClosed && !isPending
+
+  function select(nextStageId: string) {
+    if (!isServer || !serverDealId) return setStageId(nextStageId)
+    startTransition(async () => {
+      const result = await moveDealStageAction(serverDealId, nextStageId)
+      setFailure(result.ok ? null : result.message)
+      if (result.ok) router.refresh()
+    })
+  }
 
   return (
     <div className="space-y-2">
@@ -43,9 +73,9 @@ export function LeadStageControl({ pipelineName, stages, stageId: initialStageId
               <button
                 type="button"
                 disabled={!canEdit || isCurrent}
-                title={editMode === "unavailable" ? EDIT_UNAVAILABLE_HINT : stage.name}
+                title={editMode === "unavailable" && !isServer ? EDIT_UNAVAILABLE_HINT : stage.name}
                 aria-current={isCurrent ? "step" : undefined}
-                onClick={() => setStageId(stage.id)}
+                onClick={() => select(stage.id)}
                 className={cn(
                   "group/stage flex w-full flex-col gap-1.5 rounded-md px-1 py-1 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none enabled:hover:bg-muted/60 disabled:cursor-default",
                   isCurrent ? "font-medium text-foreground" : "text-muted-foreground"
@@ -67,7 +97,13 @@ export function LeadStageControl({ pipelineName, stages, stageId: initialStageId
           )
         })}
       </ol>
-      {stageId !== initialStageId && (
+      {needsStage && <p className="text-meta text-warning">Сделка открыта снова — выберите этап, на котором продолжается работа.</p>}
+      {failure && (
+        <p role="alert" className="text-sm text-destructive">
+          {failure}
+        </p>
+      )}
+      {!isServer && stageId !== initialStageId && (
         <DemoNotice className="items-center">
           <span className="flex flex-wrap items-center gap-x-2">
             Этап изменён только на этой странице (демо-режим), на сервере ничего не сохранено.

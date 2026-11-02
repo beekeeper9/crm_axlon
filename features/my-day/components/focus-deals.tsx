@@ -11,14 +11,16 @@ import { cn } from "@/lib/utils"
 /** Сколько сделок показываем на главной; полный список — в «Фокусе» */
 const LIMIT = 5
 
-const PRIORITY_ORDER: Record<FocusItem["priority"], number> = { high: 0, medium: 1, low: 2 }
+const PRIORITY_ORDER: Record<NonNullable<FocusItem["priority"]>, number> = { high: 0, medium: 1, low: 2 }
+// Без приоритета от backend порядок сохраняется (старые проблемы — первыми)
+const rank = (item: FocusItem) => (item.priority ? PRIORITY_ORDER[item.priority] : 3)
 
 /** «Сделки в приоритете»: короткий список из «Фокуса» с причиной и следующим шагом. Отбор делает backend */
 export async function FocusDeals({ userId }: { userId: string }) {
   const result = await tryLoad(() => focusRepository.getFocusList({ managerId: userId }))
   if (!result.ok) return <ApiErrorState error={result.error} />
   const all = result.data.groups.flatMap((group) => group.items)
-  const items = all.toSorted((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]).slice(0, LIMIT)
+  const items = all.toSorted((a, b) => rank(a) - rank(b)).slice(0, LIMIT)
 
   return (
     <section aria-labelledby="focus-deals" className="overflow-hidden rounded-xl bg-card ring-1 ring-border">

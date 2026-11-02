@@ -27,6 +27,8 @@ type TaskDetailSheetProps = {
   onComplete: (task: Task, result: string) => void | Promise<string | null>
   onEdit: (task: Task) => void
   onTake: (task: Task) => void
+  /** Через backend: отменить открытую или вернуть выполненную задачу; сообщение об ошибке или null */
+  onChangeState?: (task: Task, action: "cancel" | "reopen") => Promise<string | null>
 }
 
 export function TaskDetailSheet({ task, onOpenChange, ...props }: TaskDetailSheetProps) {
@@ -48,12 +50,22 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, onEdit, onTake }: Omit<TaskDetailSheetProps, "task" | "onOpenChange"> & { task: Task }) {
+function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, onEdit, onTake, onChangeState }: Omit<TaskDetailSheetProps, "task" | "onOpenChange"> & { task: Task }) {
   const [result, setResult] = useState("")
   const [isCompleting, setIsCompleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isDone = task.status === "done"
-  const canEdit = editMode === "demo"
+
+  function changeState(action: "cancel" | "reopen") {
+    if (!onChangeState) return
+    setIsCompleting(true)
+    setError(null)
+    void onChangeState(task, action).then((message) => {
+      setError(message)
+      setIsCompleting(false)
+    })
+  }
+  const canEdit = editMode === "demo" || (editMode === "unavailable" && canComplete)
   const disabledTitle = editMode === "unavailable" ? EDIT_UNAVAILABLE_HINT : undefined
 
   function complete() {
@@ -141,8 +153,13 @@ function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, on
                 <Pencil data-icon="inline-start" aria-hidden />
                 Изменить
               </Button>
+              {onChangeState && (
+                <Button variant="ghost" onClick={() => changeState("cancel")} disabled={isCompleting}>
+                  Отменить задачу
+                </Button>
+              )}
               {task.assignee === null && (
-                <Button variant="outline" onClick={() => onTake(task)} disabled={!canEdit} title={disabledTitle}>
+                <Button variant="outline" onClick={() => onTake(task)} disabled={editMode !== "demo"} title={disabledTitle}>
                   <Hand data-icon="inline-start" aria-hidden />
                   Взять себе
                 </Button>
@@ -151,17 +168,19 @@ function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, on
           </div>
         )}
 
+        {isDone && onChangeState && (
+          <Button variant="outline" onClick={() => changeState("reopen")} disabled={isCompleting}>
+            Вернуть в работу
+          </Button>
+        )}
+
         {error && (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         )}
-        {editMode === "unavailable" && (
-          <p className="text-xs text-muted-foreground">
-            {canComplete ? "Правка задачи станет доступна после согласования API с backend." : `${EDIT_UNAVAILABLE_HINT}.`}
-          </p>
-        )}
-        {(isDemoChanged || canEdit) && (
+        {editMode === "unavailable" && !canComplete && <p className="text-xs text-muted-foreground">{EDIT_UNAVAILABLE_HINT}.</p>}
+        {(isDemoChanged || editMode === "demo") && (
           <DemoNotice>
             {isDemoChanged
               ? "Эта задача изменена в демо-режиме: изменения не сохранены и пропадут после обновления страницы."

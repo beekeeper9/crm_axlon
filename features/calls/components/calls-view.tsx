@@ -25,6 +25,7 @@ import {
   RatingStars,
 } from "@/features/calls/components/call-parts"
 import type { Call } from "@/features/calls/schemas"
+import { LogCallButton } from "@/features/calls/components/log-call-button"
 import { teamRepository } from "@/features/team"
 import { companyDateOf } from "@/lib/datetime"
 import { tryLoad } from "@/lib/api/load"
@@ -69,12 +70,13 @@ export async function CallsView({ user, params }: CallsViewProps) {
     Promise.all([
       callsRepository.listCalls({
         ...kind.query,
-        managerId: isTeamView ? getParam(params, "manager") : user.id,
+        // В режиме api видимость решает backend, а фильтров по сотруднику и тексту у него нет
+        managerId: isMockDataSource ? (isTeamView ? getParam(params, "manager") : user.id) : null,
         leadId: null,
-        search: getParam(params, "q"),
+        search: isMockDataSource ? getParam(params, "q") : null,
         ...paging,
       }),
-      isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
+      isTeamView && isMockDataSource ? teamRepository.listMembers() : Promise.resolve([]),
       openCallId ? callsRepository.getCall(openCallId) : Promise.resolve(null),
     ])
   )
@@ -85,7 +87,7 @@ export async function CallsView({ user, params }: CallsViewProps) {
   return (
     <div className="space-y-3">
       <Toolbar>
-        <SearchInput label="Поиск звонков" placeholder="Клиент или номер" className="w-full sm:w-64" />
+        {isMockDataSource && <SearchInput label="Поиск звонков" placeholder="Клиент или номер" className="w-full sm:w-64" />}
         <SegmentedLinks
           label="Тип звонка"
           variant="pill"
@@ -96,7 +98,7 @@ export async function CallsView({ user, params }: CallsViewProps) {
             isActive: item.value === kind.value,
           }))}
         />
-        {isTeamView && (
+        {isTeamView && isMockDataSource && (
           <FilterSelect
             label="Менеджер"
             param="manager"
@@ -104,11 +106,24 @@ export async function CallsView({ user, params }: CallsViewProps) {
             options={members.map((member) => ({ value: member.id, label: member.name }))}
           />
         )}
+        {!isMockDataSource && hasPermission(user.role, "records.edit") && (
+          <div className="sm:ml-auto">
+            <LogCallButton />
+          </div>
+        )}
       </Toolbar>
 
       {result.results.length === 0 ? (
         <ListPanel>
-          <EmptyState icon={PhoneOff} title="Звонков нет" description="Измените фильтры. Звонки появятся здесь после подключения телефонии." />
+          <EmptyState
+            icon={PhoneOff}
+            title="Звонков нет"
+            description={
+              isMockDataSource
+                ? "Измените фильтры. Звонки появятся здесь после подключения телефонии."
+                : "Измените фильтры или запишите состоявшийся звонок. Автоматически звонки появятся после подключения телефонии."
+            }
+          />
         </ListPanel>
       ) : (
         <ListPanel>
@@ -127,7 +142,7 @@ export async function CallsView({ user, params }: CallsViewProps) {
                         scroll={false}
                         className="block truncate text-sm font-medium after:absolute after:inset-0 focus-visible:outline-none"
                       >
-                        {call.lead?.name ?? call.phone}
+                        {call.lead?.name ?? call.client?.name ?? call.phone}
                       </Link>
                       <p className="truncate text-meta text-muted-foreground">
                         {callTitle(call)}
@@ -158,19 +173,22 @@ function CallDetail({ call }: { call: Call }) {
   return (
     <>
       <SheetHeader className="pr-10">
-        <SheetTitle className="text-base">{call.lead?.name ?? call.phone}</SheetTitle>
+        <SheetTitle className="text-base">{call.lead?.name ?? call.client?.name ?? call.phone}</SheetTitle>
         <SheetDescription>
           {callTitle(call)} · {formatDateTime(call.at)}
         </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">
         <CallFacts call={call} />
-        <CallAnalysis call={call} isDemoData={isMockDataSource} />
+        {/* Разбор и транскрипт телефония не отдаёт (ИИ-модуль — отдельная задача): в режиме api блоков нет */}
+        {isMockDataSource && <CallAnalysis call={call} isDemoData />}
         <CallRating call={call} />
-        <section className="space-y-2" aria-labelledby={`transcript-${call.id}`}>
-          <h3 id={`transcript-${call.id}`} className="text-xs font-medium text-muted-foreground">Транскрипция</h3>
-          <CallTranscript call={call} />
-        </section>
+        {(isMockDataSource || call.transcript) && (
+          <section className="space-y-2" aria-labelledby={`transcript-${call.id}`}>
+            <h3 id={`transcript-${call.id}`} className="text-xs font-medium text-muted-foreground">Транскрипция</h3>
+            <CallTranscript call={call} />
+          </section>
+        )}
       </div>
     </>
   )
@@ -205,7 +223,7 @@ export async function LeadCallsList({ leadId }: { leadId: string }) {
             </p>
             {call.rating && <RatingStars score={call.rating.score} />}
           </div>
-          {call.status === "answered" && <CallAnalysis call={call} isDemoData={isMockDataSource} />}
+          {call.status === "answered" && isMockDataSource && <CallAnalysis call={call} isDemoData />}
           {call.rating?.comment && <p className="text-meta text-muted-foreground">Комментарий руководителя: {call.rating.comment}</p>}
           {call.transcript && (
             <details className="rounded-lg bg-muted/40 px-3 py-2">

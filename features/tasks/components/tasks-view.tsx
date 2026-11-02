@@ -4,6 +4,7 @@ import { SearchInput } from "@/components/shared/search-input"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Toolbar } from "@/components/shared/toolbar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { teamRepository } from "@/features/team"
 import { tasksRepository, UNASSIGNED, type TasksQuery } from "@/features/tasks/api/tasks-repository"
@@ -23,6 +24,12 @@ const STATUS_TABS: readonly { value: TasksQuery["status"]; label: string }[] = [
   { value: "done", label: "Выполненные" },
   { value: "all", label: "Все" },
 ]
+
+const DUE_FILTERS = [
+  { value: "overdue", label: "Просроченные" },
+  { value: "today", label: "На сегодня" },
+  { value: "no_due", label: "Без срока" },
+] as const
 
 type TasksViewProps = {
   user: CurrentUser
@@ -44,7 +51,9 @@ export async function TasksView({ user, params }: TasksViewProps) {
         status,
         assigneeId,
         leadId: null,
-        search: getParam(params, "q"),
+        search: isMockDataSource ? getParam(params, "q") : null,
+        due: DUE_FILTERS.find((item) => item.value === getParam(params, "due"))?.value ?? null,
+        important: getParam(params, "priority") === "high",
         ...pageParams(1, TASKS_LIMIT),
       }),
       isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
@@ -66,7 +75,10 @@ export async function TasksView({ user, params }: TasksViewProps) {
             isActive: tab.value === status,
           }))}
         />
-        <SearchInput label="Поиск задач" placeholder="Задача или клиент" className="w-full sm:w-64" />
+        {/* Поиска по задачам у backend нет: поле только в демо-режиме */}
+        {isMockDataSource && <SearchInput label="Поиск задач" placeholder="Задача или клиент" className="w-full sm:w-64" />}
+        <FilterSelect label="Срок" param="due" allLabel="Любой срок" options={DUE_FILTERS.map((item) => ({ ...item }))} />
+        <FilterSelect label="Приоритет" param="priority" allLabel="Любой приоритет" options={[{ value: "high", label: "Важные" }]} />
         {isTeamView ? (
           <FilterSelect
             label="Исполнитель"
@@ -90,7 +102,7 @@ export async function TasksView({ user, params }: TasksViewProps) {
       </Toolbar>
 
       <TasksList
-        key={JSON.stringify([status, assigneeId, getParam(params, "q")])}
+        key={JSON.stringify([status, assigneeId, getParam(params, "q"), getParam(params, "due"), getParam(params, "priority")])}
         initialTasks={result.results}
         members={members}
         currentUser={{ id: user.id, name: user.fullName }}

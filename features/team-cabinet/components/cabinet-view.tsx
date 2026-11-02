@@ -4,9 +4,11 @@ import { ApiErrorState } from "@/components/shared/api-error-state"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import { teamCabinetRepository } from "@/features/team-cabinet/api/team-cabinet-repository"
 import { FunnelTab, PlanFactTab, QualityTab } from "@/features/team-cabinet/components/analysis-tabs"
+import { ServerCabinetView } from "@/features/team-cabinet/components/server-cabinet"
 import { TodayTab } from "@/features/team-cabinet/components/today-tab"
 import { qualityPeriodSchema } from "@/features/team-cabinet/schemas"
 import { tryLoad } from "@/lib/api/load"
@@ -27,6 +29,7 @@ type Tab = (typeof TABS)[number]["value"]
  * Загружаются данные только открытой вкладки.
  */
 export async function CabinetView({ params }: { params: SearchParamsRecord }) {
+  if (!isMockDataSource) return <ServerCabinetView params={params} />
   const tabParam = getParam(params, "tab")
   const tab: Tab = TABS.find((item) => item.value === tabParam)?.value ?? "today"
   const periodResult = qualityPeriodSchema.safeParse(getParam(params, "period"))

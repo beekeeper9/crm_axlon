@@ -150,9 +150,11 @@
 
 Не хватает полей (нужно решение): **документы** (файлы, договоры), **переписка** (мессенджеры), **запись звонка** (ссылка на аудио и права на прослушивание), **редактирование полей** и схема настраиваемых полей компании (типы, обязательность), **история изменений этапов** с автором, **связанные контакты** (несколько людей у одной сделки).
 
+**Подключено (02.11.2026, `features/sales/actions.ts`, `features/sales/api/deal-mutations.ts`):** создание (`POST /sales/deals/`; кнопка «Новая сделка» на «Продажах»), правка (`PATCH /sales/deals/{id}/` с `version`; 409 → «сделку изменил кто-то другой»), смена этапа на доске и в карточке (`POST …/stage/` с `stage_id`; этап won/lost закрывает сделку, для lost — `loss_reason_id` из `GET /sales/loss-reasons/` и комментарий `reason`), повторное открытие (`POST …/reopen/`), передача (`POST …/assign/` `{owner_user_id}`), история (`GET …/history/` — действие, кто, когда, названия изменённых полей без значений), другие сделки клиента (`GET /sales/deals/?customer_id`), оплаты (`GET /payments/?deal_id`, внесение `POST /payments/` с `kind`, `paid_on`, `is_refund` и ключом `reference` против дублей). Итоги «оплачено / осталось» на frontend не считаются: продажи, оборот, получено и долг — `GET /payments/metrics/`. Блок «Что по сделке?» (сводка ИИ) в режиме api не показывается.
+
 ### Задачи — `features/tasks/schemas.ts`
 
-**Подключено (задачи сделки на карточке, только чтение):** `GET /activities/?kind=task&subject_type=deal&subject_id={id}` (P0). Видимость задаёт backend: менеджер — свои (владелец задачи = исполнитель), РОП — команды, руководитель — все. Перевод в интерфейс: срок — только дата (`due_date`, без времени), `is_overdue` и `due_group` (`overdue|today|this_week|later`; открытая без срока → `no_due`) считает backend по дню компании; `completed` → выполнено, `cancelled` не показывается; тип `follow_up|other` → «Задача»; приоритет `high|urgent` → «важная». Имена исполнителя и автора — из `/staff/`; менеджеру (403) известно только своё имя. Ограничение backend: не больше 2 открытых задач на сделку (409). Создание (`POST /activities/`, срок — дата, тип `call|meeting|other`, исполнитель — себе или, для РОПа и руководителя, активному сотруднику компании; 409 — лимит открытых задач) и выполнение (`POST /activities/{id}/complete/`, 409 — задача уже закрыта) подключены через server actions `features/tasks/actions.ts`. Не подключено: правка задач, «взять себе», страница «Задачи» (у backend нет фильтров по исполнителю и поиска, нет «моих задач на сегодня»).
+**Подключено (задачи сделки на карточке, только чтение):** `GET /activities/?kind=task&subject_type=deal&subject_id={id}` (P0). Видимость задаёт backend: менеджер — свои (владелец задачи = исполнитель), РОП — команды, руководитель — все. Перевод в интерфейс: срок — только дата (`due_date`, без времени), `is_overdue` и `due_group` (`overdue|today|this_week|later`; открытая без срока → `no_due`) считает backend по дню компании; `completed` → выполнено, `cancelled` не показывается; тип `follow_up|other` → «Задача»; приоритет `high|urgent` → «важная». Имена исполнителя и автора — из `/staff/`; менеджеру (403) известно только своё имя. Ограничение backend: не больше 2 открытых задач на сделку (409). Создание (`POST /activities/`, срок — дата, тип `call|meeting|other`, исполнитель — себе или, для РОПа и руководителя, активному сотруднику компании; 409 — лимит открытых задач) и выполнение (`POST /activities/{id}/complete/`, 409 — задача уже закрыта) подключены через server actions `features/tasks/actions.ts`. **С 02.11.2026 подключены также:** страница «Задачи» (`GET /activities/?kind=task&assignee_id&task_status`; название сделки — `GET /sales/deals/{id}/` по уникальным id страницы), правка задачи (`PATCH /activities/{id}/`: название, срок, приоритет, описание; тип backend не меняет — в форме поле заблокировано) и передача (`POST /activities/{id}/reassign/`). Создать задачу можно только из карточки сделки. Не подключено: поиск по задачам (у backend нет — поле скрыто в режиме api), «взять себе» (задача без исполнителя на backend не существует, фильтр «Без исполнителя» честно пуст).
 
 `taskSchema`: `id, title, description, type (call|meeting|email|todo), priority (high|normal), status (open|done), dueAt | null, isOverdue, dueGroup (overdue|today|tomorrow|this_week|next_week|later|no_due) | null, assignee | null, createdBy, lead { id, name } | null, completedAt, result`.
 **Просрочку и группу срока считает backend** в часовом поясе компании. Список: `{ count, results }`, фильтры `status` (open|done|all), `assignee_id` (или «без исполнителя»), `lead_id`, `search`. «Мой день» использует `{ date, tasks, overdueFromPreviousDays }`.
@@ -165,7 +167,11 @@
 Фильтры: `period` (yesterday|today|tomorrow|week — границы дней на backend) или произвольный интервал (уточнить формат), `status`, `host_id`, `lead_id`, `search`, `outcome_required`.
 Нужны операции: назначить, записать итог (`held|no_show|rescheduled` + новая дата и комментарий), отменить. `outcomeRequired`, напоминания (за 24 ч и 2 ч) и списание через 14 дней — на backend.
 
+**Подключено (02.11.2026):** список `GET /meetings/` (`period` → `date_from/date_to` в днях компании, ведущий → `owner_id`, лид → `subject_type=deal&subject_id`, `status`), назначение `POST /meetings/` (по сделке, длительность 60 мин — в форме её нет) и итог `POST /meetings/{id}/outcome/` (перенос — с новой датой). Перевод: `scheduled` + `confirmed_at` → «подтверждена»; `outcomeRequired` = запланирована и время окончания прошло — **считает frontend по ответу**, т. к. backend флага не отдаёт (фильтр «Без итога» уточняется в пределах страницы до 100 встреч); «подтверждение не отправлялось» backend не хранит — без `confirmed_at` показывается «не подтвердил». Не подключено: поиск (нет у backend), отмена и ручное подтверждение в интерфейсе.
+
 ### После встречи — `features/after-meeting/schemas.ts`
+
+**В режиме api (02.11.2026) очередь собирается на frontend из данных backend, пока нет отдельного endpoint:** встречи без итога (`scheduled`, окончание прошло; все страницы `GET /meetings/`) и состоявшиеся за 14 дней (`status=held`), по одной последней на сделку; состояние сделки — `GET /sales/deals/{id}/` (только открытые). Группы: «Нужен итог», «Нет следующего шага» (`next_step` пуст), «Ждём решения» (`next_step` указан). Обработка — три запроса: итог `POST /meetings/{id}/outcome/` (договорённости — в комментарий), задача `POST /activities/` и следующий шаг `PATCH /sales/deals/{id}/` (с `version`). **Нужен endpoint очереди** с группами, посчитанными на backend, и обработка одной транзакцией — см. блокеры в `docs/FRONTEND_IMPLEMENTATION_AUDIT.md`.
 
 Очередь: `{ groups: [{ id: outcome_required|no_next_step|awaiting_decision, title, description, items }] }`. Элемент: встреча (`id, startsAt, format, host, outcomeComment`), лид (`id, name, phone`), воронка, этап, сумма, текущий следующий шаг, `aiHint`. **Группы раскладывает backend.**
 Нужна операция «обработать после встречи»: итог (если не записан: `held|no_show|rescheduled` + новая дата), краткий итог, договорённости, следующий шаг (создаёт задачу). Один запрос или два (итог встречи + задача) — решить с backend.
@@ -175,6 +181,8 @@
 Клиент — человек или компания с одной или несколькими сделками (в том числе закрытыми). Отдельной сущности в контракте пока нет.
 Список: `{ id, name, phones[], email, city, manager, openDealsCount, dealsCount, currentDeal { id, stageName } | null, lastInteractionAt }`; фильтры `search` (имя и телефон по всей истории, включая архив; телефон — по цифрам), `status` (`active` — есть открытая сделка, `archive`), `manager_id`. Детали: + `deals[]` (`id, title, pipelineName, stageName, stageKind, amount, currency, updatedAt`) и `recentActivity[]`.
 Вопросы: как backend склеивает дубли (один телефон — разные имена), есть ли у клиента собственные поля (компания, ИНН), отдельная карточка клиента или достаточно панели.
+
+**Подключено (02.11.2026):** `GET /customers/` (`search`, `owner_id`, `archived=true|false|all`), сделки клиента — `GET /sales/deals/?customer_id`, история — `GET /activities/?subject_type=customer`; создание (`POST /customers/`), архив и возврат (`/archive/`, `/restore/`), передача (`/assign/`, РОП — в своём отделе) и новая сделка клиенту (`POST /sales/deals/` с `customer_id`; каждая новая сделка — отдельная продажа после первой оплаты). Фильтр «Активные» = не в архиве. `lastInteractionAt` — последнее движение по сделкам клиента; `city` backend не хранит.
 
 ### Звонки — `features/calls/schemas.ts`
 
@@ -193,6 +201,8 @@
 - **Дела на сегодня** `todayActionsSchema`: `asOf`, `actions[{ id, kind (reply | overdue_task | meeting_outcome | confirm_meeting | no_next_step | stale_deal), urgency (now | today | soon), lead { id, name }, problem, detail, at, amount, currency }]`. Отбор, срочность и порог «давно без движения» — правила backend; один пункт на клиента.
 - Расписание дня — существующие «Встречи» (`period=today`) и «Задачи на сегодня»; сделки в фокусе — «Фокус» (добавлены `amount`, `currency`).
 
+**В режиме api (02.11.2026)** вместо макета показывается то, что backend уже отдаёт (`features/my-day/components/server-my-day.tsx`): рабочая смена (`GET /work-sessions/current/`, `POST /work-sessions/start|stop/`), личные планы текущего периода (`GET /plans/progress/?scope=user&scope_id`), счётчики задач на сегодня и просроченных (`/activities/` с `due_from/due_to`, `overdue=true`) и встреч сегодня. Месяц из макета (оборот, заработок, KPI, направления) и «Дела на сегодня» ждут endpoint.
+
 ### Кабинет РОПа — `features/team-cabinet/schemas.ts`
 
 Доступ — роли РОП, директор, админ; остальным 403. Числа — детерминированно (SQL), совпадают с «Отчётами дня», «Встречами», «Звонками».
@@ -202,6 +212,10 @@
 - **Воронка** `teamFunnelSchema`: по этапам `count`, `amount`, `medianAgeDays`, `staleCount` (дольше `staleThresholdDays`), `conversionToNext | null`, `isPile`. Без истории переходов конверсия = null.
 - **Карточка менеджера** `memberCardSchema` (14 дней): `dayScores[]`, `plan`, оплаты, `activity[{ date, calls, conversations, isWorkDay }]`, `discipline`, `callQuality { rated, total, distribution, goalAchievedShare, nextStepShare, gaps[] } | null`, `focusPoints[]` (правила, не ИИ), `dealsToPush[]`, `toListen[]`.
 - **Звонки:** в разбор добавлен признак `goal` (achieved | partial | missed) — «цель звонка да/частично/нет» из ТЗ.
+
+**В режиме api (02.11.2026)** кабинет показывает только то, что считает backend (`features/team-cabinet/components/server-cabinet.tsx`): «Сегодня» — `GET /team/today/` (светофор и причины backend, встречи, звонки, оплаты, получено, задачи) и «План — факт» — `GET /team/plan-fact/` (план продаж, продажи, осталось, линейный прогноз, получено). Вкладки «Встречи и звонки», «Воронка» и карточка менеджера — до появления endpoint.
+
+**Также подключено (02.11.2026):** вкладка «Планы» — `GET /plans/progress/?period` (план, факт, процент, остаток — backend), форма `PUT /plans/` (уровень, кому, показатель, месяц, цель), история `GET /plans/{id}/history/`; вкладка «Тишина и отсутствия» — `GET /team/inactivity/`, `GET /absences/?active_from&active_to`, `POST /absences/` (отпуск, больничный, отгул, командировка, «не вышел без предупреждения»); выгрузка KPI — `POST /analytics/reports/` (`kpi_summary`, `csv`, `idempotency_key`) → опрос `GET /analytics/reports/{id}/` → скачивание через BFF `GET /exports/{id}` (`GET /analytics/reports/{id}/download/`). В «Моём дне» — показатели месяца `GET /payments/metrics/` с определениями backend.
 
 Не подключено (нужны контракты): «Срез на планёрку» и отправка в Telegram, задание планов (форма и история), график отсутствий с типами, выгрузки без телефонов, итоги one-to-one (P2), калибровка оценок ИИ.
 
@@ -213,7 +227,7 @@
 |-----|-----------|-----|
 | Администратор платформы | Компанию и её первого директора | `POST /api/v1/platform/companies/` (см. «Платформа») |
 | Директор | РОПов и других сотрудников своей компании, отделы | сразу: `POST /api/v1/staff/`, `POST /api/v1/departments/` |
-| РОП | Менеджера (`sales_rep`) или лидоруба своего отдела; увольнение сотрудника своего отдела | только **заявкой** директору: `POST /api/v1/staff/requests/` |
+| РОП | Менеджера (`sales_rep`) или лидоруба своего отдела; отключение и сброс пароля сотрудника своего отдела | **сразу** (с 02.11.2026, `create-options.can_create_directly`): `POST /api/v1/staff/`, `POST /staff/{id}/deactivate/`, `POST /staff/{id}/reset-password/`; заявки директору остаются только для истории |
 | Менеджер, наблюдатель | — | 403 |
 
 Endpoint (все с `X-Tenant`):
@@ -289,4 +303,4 @@ Endpoint (все с `X-Tenant`):
 
 ### «Фокус», рабочее пространство
 
-Без изменений: `focusListSchema` (+ `amount`, `currency` у элемента). Раскладка рабочего пространства убрана вместе со старой главной; вернётся отдельным контрактом, когда будет утверждена настройка РОПом.
+**Подключено (02.11.2026):** `GET /operations/findings/` (модуль `operations`, тариф Enterprise; иначе 403 `feature_not_in_plan` — показывается сообщение о тарифе). Группы — виды правил backend: `overdue_task`, `stale_lead`, `deal_without_next_step`, `stalled_deal`; порядок — как у backend (старые первыми), пороги — `thresholds`. Названия: сделки `GET /sales/deals/{id}/`, лиды `GET /leads/{id}/`, задачи `GET /activities/{id}/` (до 25 строк на группу). Приоритета, «ждут ответа», последнего касания и рекомендации ИИ backend не отдаёт — поля пустые (`priority: null`, `awaitingReply: null`). «Отложить» и «Убрать из фокуса» в режиме api скрыты: операций нет. `focusListSchema` (+ `amount`, `currency`, `href` у элемента). Раскладка рабочего пространства убрана вместе со старой главной; вернётся отдельным контрактом, когда будет утверждена настройка РОПом.
