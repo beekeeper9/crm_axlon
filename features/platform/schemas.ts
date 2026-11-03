@@ -39,6 +39,17 @@ export const companySummarySchema = z.object({
   tenantStatus: z.string().nullable(),
   users: z.int().nonnegative(),
   subscription: subscriptionSchema.nullable(),
+  /** Структура компании: только действующие аккаунты, каждый человек один раз (считает backend) */
+  staff: z
+    .object({
+      employees: z.int().nonnegative(),
+      leaders: z.int().nonnegative(),
+      departments: z.int().nonnegative(),
+      headsOfSales: z.int().nonnegative(),
+      managers: z.int().nonnegative(),
+    })
+    .nullable()
+    .default(null),
 })
 
 export const companyDetailSchema = companySummarySchema.extend({

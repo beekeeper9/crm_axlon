@@ -277,7 +277,7 @@ async function CompaniesTable({ params }: { params: SearchParamsRecord }) {
                 <th scope="col" className="h-9 px-3 font-medium">Статус</th>
                 <th scope="col" className="h-9 px-3 font-medium">Тариф и модули</th>
                 <th scope="col" className="h-9 px-3 font-medium">Подписка</th>
-                <th scope="col" className="h-9 px-3 text-right font-medium">Пользователи</th>
+                <th scope="col" className="h-9 px-3 text-right font-medium">Сотрудники</th>
                 <th scope="col" className="h-9 px-4 text-right font-medium">Подключена</th>
               </tr>
             </thead>
@@ -331,7 +331,14 @@ function CompanyRow({ company }: { company: CompanySummary }) {
           <span className="text-muted-foreground">—</span>
         )}
       </td>
-      <td className="px-3 py-2.5 text-right tabular-nums">{formatNumber(company.users)}</td>
+      <td className="px-3 py-2.5 text-right">
+        <span className="tabular-nums">{formatNumber(company.staff?.employees ?? company.users)}</span>
+        {company.staff && (
+          <span className="block text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+            {formatNumber(company.staff.departments)} отд. · {formatNumber(company.staff.headsOfSales)} РОП · {formatNumber(company.staff.managers)} мен.
+          </span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-right text-meta text-muted-foreground">{formatFullDate(company.createdAt)}</td>
     </tr>
   )
@@ -571,8 +578,11 @@ export async function PlatformCompanyView({ companyId }: { companyId: string }) 
                 <StatusBadge tone={company.isActive ? "success" : "neutral"}>{company.isActive ? "Активна" : "Приостановлена"}</StatusBadge>
               </Row>
               <Row label="База данных">{company.tenantStatus === "active" ? "Готова" : (company.tenantStatus ?? "Не создана")}</Row>
-              <Row label="Пользователей">{formatNumber(company.users)}</Row>
-              <Row label="Отделов">{formatNumber(company.departments)}</Row>
+              <Row label="Сотрудников (действующих)">{formatNumber(company.staff?.employees ?? company.users)}</Row>
+              {company.staff && <Row label="Руководителей компании">{formatNumber(company.staff.leaders)}</Row>}
+              <Row label="Отделов продаж">{formatNumber(company.staff?.departments ?? company.departments)}</Row>
+              {company.staff && <Row label="РОПов">{formatNumber(company.staff.headsOfSales)}</Row>}
+              {company.staff && <Row label="Менеджеров">{formatNumber(company.staff.managers)}</Row>}
               <Row label="Страна и валюта">
                 {company.country} · {company.currency}
               </Row>
