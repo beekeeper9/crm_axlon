@@ -18,6 +18,13 @@ import {
   Sparkles,
   Sun,
   Target,
+  Settings,
+  ListOrdered,
+  History,
+  Plug,
+  MessageSquareText,
+  Upload,
+  Bell,
   TriangleAlert,
   UserCheck,
   type LucideIcon,
@@ -52,6 +59,13 @@ const item = {
   platformErrors: { title: "Ошибки", href: routes.platformErrors, icon: TriangleAlert, permission: "platform.manage" },
   platformTickets: { title: "Обращения", href: routes.platformTickets, icon: LifeBuoy, permission: "platform.manage" },
   support: { title: "Поддержка", href: routes.support, icon: LifeBuoy, permission: "support.contact" },
+  settingsCompany: { title: "Настройки компании", href: routes.settingsCompany, icon: Settings, permission: "company.settings" },
+  settingsReferenceLists: { title: "Справочники", href: routes.settingsReferenceLists, icon: ListOrdered, permission: "staff.manage" },
+  settingsAudit: { title: "Журнал изменений", href: routes.settingsAudit, icon: History, permission: "audit.view" },
+  settingsIntegrations: { title: "Интеграции", href: routes.settingsIntegrations, icon: Plug, permission: "company.settings" },
+  settingsTemplates: { title: "Шаблоны сообщений", href: routes.settingsTemplates, icon: MessageSquareText },
+  settingsImport: { title: "Импорт", href: routes.settingsImport, icon: Upload, permission: "records.edit" },
+  profileNotifications: { title: "Уведомления", href: routes.profileNotifications, icon: Bell },
   focus: { title: "Фокус", href: routes.focus, icon: Target },
   sales: { title: "Продажи", href: routes.sales, icon: Handshake },
   afterMeeting: { title: "После встречи", href: routes.afterMeeting, icon: UserCheck },
@@ -109,6 +123,18 @@ const directorSections: readonly NavGroup[] = [
   { title: "Работа", items: [item.tasks, item.calls, item.sales, item.focus] },
   { title: "Контроль", items: [item.dailyReports, item.clientBase] },
   { title: "Инструменты", items: [item.assistant, item.workspace, item.support] },
+  {
+    title: "Настройки",
+    items: [
+      item.settingsCompany,
+      item.settingsReferenceLists,
+      item.settingsAudit,
+      item.settingsIntegrations,
+      item.settingsTemplates,
+      item.settingsImport,
+      item.profileNotifications,
+    ],
+  },
 ]
 
 /** Меню «Все разделы» остальных ролей — полный каталог экранов */
@@ -119,6 +145,10 @@ const teamSections: readonly NavGroup[] = [
   { title: "Поиск", items: [item.prospects, item.leads, item.clientBase] },
   { title: "Материалы", items: [item.materials, item.assistant] },
   { title: "Управление", items: [item.staff, item.workspace, item.support] },
+  {
+    title: "Настройки",
+    items: [item.settingsReferenceLists, item.settingsAudit, item.settingsTemplates, item.settingsImport, item.profileNotifications],
+  },
 ]
 
 export function allSectionsFor(role: Role): NavGroup[] {

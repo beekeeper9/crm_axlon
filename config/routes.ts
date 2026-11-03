@@ -30,6 +30,13 @@ export const routes = {
   platformErrors: "/platform/errors",
   platformTickets: "/platform/tickets",
   support: "/support",
+  settingsCompany: "/settings/company",
+  settingsAudit: "/settings/audit",
+  settingsReferenceLists: "/settings/reference-lists",
+  settingsImport: "/settings/import",
+  settingsIntegrations: "/settings/integrations",
+  settingsTemplates: "/settings/templates",
+  profileNotifications: "/profile/notifications",
 } as const
 
 export type AppRoute = (typeof routes)[keyof typeof routes]
