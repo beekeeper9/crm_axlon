@@ -5,38 +5,52 @@ export type DepartmentGroup = {
   department: { id: string; name: string }
   /** Действующий РОП отдела; null — не назначен */
   head: StaffMember | null
-  /** Менеджеры, лидорубы и остальные сотрудники отдела (отключённые — в конце) */
+  /** Менеджеры, лидорубы и остальные действующие сотрудники отдела */
   members: StaffMember[]
 }
 
 export type StaffStructure = {
   departments: DepartmentGroup[]
-  /** Директор, наблюдатели и другие сотрудники без отдела */
-  withoutDepartment: StaffMember[]
+  /** Уволенные (отключённые) сотрудники: история работы сохраняется */
+  dismissed: StaffMember[]
+  /**
+   * Действующие сотрудники без отдела. По правилам компании таких быть не должно (отдел
+   * обязателен); старые записи не меняются автоматически — директору показывается предупреждение
+   */
+  unassigned: StaffMember[]
 }
 
-const byStatusThenName = (a: StaffMember, b: StaffMember) =>
-  Number(a.status === "deactivated") - Number(b.status === "deactivated") || a.fullName.localeCompare(b.fullName, "ru")
+/** Руководство компании: в структуре отделов не показывается */
+const LEADERSHIP: ReadonlySet<StaffMember["role"]> = new Set(["director", "platform_admin"])
 
-/** Структура «РОП → его менеджеры» по отделам; отделы — по названию */
+const byName = (a: StaffMember, b: StaffMember) => a.fullName.localeCompare(b.fullName, "ru")
+
+/** Структура «РОП → его менеджеры» по отделам; отделы — по названию; уволенные — отдельно */
 export function groupStaff(members: readonly StaffMember[]): StaffStructure {
   const groups = new Map<string, DepartmentGroup>()
-  const withoutDepartment: StaffMember[] = []
+  const dismissed: StaffMember[] = []
+  const unassigned: StaffMember[] = []
   for (const member of members) {
+    if (LEADERSHIP.has(member.role)) continue
+    if (member.status === "deactivated") {
+      dismissed.push(member)
+      continue
+    }
     if (!member.department) {
-      withoutDepartment.push(member)
+      unassigned.push(member)
       continue
     }
     const group = groups.get(member.department.id) ?? { department: member.department, head: null, members: [] }
-    if (member.role === "head_of_sales" && member.status !== "deactivated" && group.head === null) group.head = member
+    if (member.role === "head_of_sales" && group.head === null) group.head = member
     else group.members.push(member)
     groups.set(member.department.id, group)
   }
   return {
     departments: [...groups.values()]
-      .map((group) => ({ ...group, members: group.members.toSorted(byStatusThenName) }))
+      .map((group) => ({ ...group, members: group.members.toSorted(byName) }))
       .toSorted((a, b) => a.department.name.localeCompare(b.department.name, "ru")),
-    withoutDepartment: withoutDepartment.toSorted(byStatusThenName),
+    dismissed: dismissed.toSorted(byName),
+    unassigned: unassigned.toSorted(byName),
   }
 }
 

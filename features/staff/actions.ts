@@ -5,9 +5,11 @@ import { z } from "zod"
 
 import { routes } from "@/config/routes"
 import { staffRepository } from "@/features/staff/api/staff-repository"
-import { STAFF_BACKEND_MESSAGES, staffErrorMessage } from "@/features/staff/lib/staff-messages"
+import { assignMemberDepartment, assignRecord, deleteMember, fetchFormerBase, type RecordKind } from "@/features/staff/api/staff-profile"
+import { DEPARTMENT_REQUIRED_MESSAGE, STAFF_BACKEND_MESSAGES, STAFF_ERROR_CODES, staffErrorMessage } from "@/features/staff/lib/staff-messages"
 import { createStaffFormSchema, type ApprovedRequest } from "@/features/staff/schemas"
 import { ApiError } from "@/lib/api/errors"
+import { getActionAuth } from "@/lib/auth/token-store"
 import { hasPermission, ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -19,7 +21,7 @@ export type CreateStaffState =
   | {
       status: "created"
       /** Временный пароль — только в этом ответе: не логируется и не сохраняется в браузере */
-      account: { fullName: string; login: string; temporaryPassword: string; roleLabel: string; place: string }
+      account: { fullName: string; login: string; temporaryPassword: string; roleLabel: string; department: string | null }
     }
   /** РОП: аккаунт появится после одобрения директором */
   | { status: "requested"; request: { fullName: string; roleLabel: string; department: string } }
@@ -43,6 +45,11 @@ export async function createStaffAccount(_previous: CreateStaffState, formData: 
     const fieldErrors: Partial<Record<FieldName, string>> = {}
     for (const issue of parsed.error.issues) fieldErrors[issue.path[0] as FieldName] ??= issue.message
     return { status: "error", message: null, fieldErrors, requestId: null, values }
+  }
+  // Отдел обязателен всем, кроме директора; РОП создаёт в свой отдел — его подставит backend
+  const fixedDepartment = (await staffRepository.getCreateOptions().catch(() => null))?.fixedDepartment ?? null
+  if (!fixedDepartment && parsed.data.role !== "director" && !parsed.data.departmentId) {
+    return { status: "error", message: null, fieldErrors: { departmentId: DEPARTMENT_REQUIRED_MESSAGE }, requestId: null, values }
   }
   const input = {
     fullName: parsed.data.fullName,
@@ -75,7 +82,7 @@ export async function createStaffAccount(_previous: CreateStaffState, formData: 
         login: member.login,
         temporaryPassword,
         roleLabel: ROLE_LABELS[member.role],
-        place: [member.company?.name, member.department?.name].filter(Boolean).join(" · "),
+        department: member.department?.name ?? null,
       },
     }
   } catch (error) {
@@ -86,6 +93,7 @@ export async function createStaffAccount(_previous: CreateStaffState, formData: 
       if (message) fieldErrors[field] = STAFF_BACKEND_MESSAGES[message] ?? message
     }
     if (error.message === "This login is already taken.") fieldErrors.login = STAFF_BACKEND_MESSAGES[error.message]
+    if (error.code === "department_required") fieldErrors.departmentId = STAFF_ERROR_CODES.department_required
     const message = Object.keys(fieldErrors).length > 0 ? null : staffErrorMessage(error)
     return { status: "error", message, fieldErrors, requestId: error.requestId ?? null, values }
   }
@@ -149,4 +157,60 @@ export async function deactivateStaffAction(membershipId: string): Promise<Reque
 export async function resetStaffPasswordAction(membershipId: string): Promise<RequestActionResult<string>> {
   if (!hasPermission((await getCurrentUser()).role, "staff.manage")) return { ok: false, message: "У вашей роли нет права сбрасывать пароли.", requestId: null }
   return run(() => staffRepository.resetPassword(membershipId))
+}
+
+/** Удалить аккаунт без истории работы — только директор; с историей backend откажет (has_history) */
+export async function deleteStaffAction(membershipId: string): Promise<RequestActionResult> {
+  if (!hasPermission((await getCurrentUser()).role, "company.view")) return { ok: false, message: "Удалять аккаунты может только директор.", requestId: null }
+  return run(async () => {
+    await deleteMember(await getActionAuth(), membershipId)
+    return null
+  })
+}
+
+/** Прикрепить сотрудника без отдела к отделу — директор */
+export async function assignDepartmentAction(membershipId: string, departmentId: string): Promise<RequestActionResult> {
+  if (!hasPermission((await getCurrentUser()).role, "company.view")) return { ok: false, message: "Назначать отдел может только директор.", requestId: null }
+  if (!departmentId) return { ok: false, message: DEPARTMENT_REQUIRED_MESSAGE, requestId: null }
+  return run(async () => {
+    await assignMemberDepartment(await getActionAuth(), membershipId, departmentId)
+    return null
+  })
+}
+
+export type ReassignResult = { moved: number; failed: number; firstError: string | null }
+
+/**
+ * Передать записи уволенного сотрудника действующему: выбранные или все (`ids: "all"` — вся
+ * текущая база этого вида). Каждая передача — отдельный запрос с аудитом на backend.
+ */
+export async function reassignRecordsAction(
+  formerUserId: string,
+  kind: RecordKind,
+  ids: readonly string[] | "all",
+  ownerUserId: string
+): Promise<RequestActionResult<ReassignResult>> {
+  if (!hasPermission((await getCurrentUser()).role, "staff.manage")) return { ok: false, message: "Перераспределять базу может директор или РОП.", requestId: null }
+  if (!ownerUserId) return { ok: false, message: "Выберите сотрудника, которому передать записи.", requestId: null }
+  const auth = await getActionAuth()
+  let targets: readonly string[] = ids === "all" ? [] : ids
+  if (ids === "all") {
+    const base = await fetchFormerBase(auth, formerUserId)
+    targets = (kind === "lead" ? base.leads : kind === "customer" ? base.customers : base.deals.filter((deal) => deal.status === "open")).map((row) => row.id)
+  }
+  let moved = 0
+  let failed = 0
+  let firstError: string | null = null
+  for (const id of targets) {
+    try {
+      await assignRecord(auth, kind, id, ownerUserId)
+      moved += 1
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error
+      failed += 1
+      firstError ??= staffErrorMessage(error)
+    }
+  }
+  revalidatePath(routes.staff, "layout")
+  return { ok: true, data: { moved, failed, firstError } }
 }

@@ -21,7 +21,7 @@ const member = (id: string, role: StaffMember["role"], department: string | null
 })
 
 describe("структура «РОП → менеджеры»", () => {
-  it("каждый отдел со своим РОПом, сотрудники без отдела отдельно", () => {
+  it("каждый отдел со своим РОПом; директора нет; уволенные и сотрудники без отдела отдельно", () => {
     const structure = groupStaff([
       member("aibek", "manager", "d1"),
       member("rop", "head_of_sales", "d1"),
@@ -29,14 +29,16 @@ describe("структура «РОП → менеджеры»", () => {
       member("director", "director", null),
       member("former", "manager", "d1", { status: "deactivated" }),
       member("nurlan", "manager", "d1"),
+      member("legacy", "viewer", null),
     ])
     expect(structure.departments.map((group) => [group.department.name, group.head?.id ?? null])).toEqual([
       ["Отдел продаж", "rop"],
       ["Ош", null],
     ])
-    // Отключённые — в конце отдела
-    expect(structure.departments[0].members.map((m) => m.id)).toEqual(["aibek", "nurlan", "former"])
-    expect(structure.withoutDepartment.map((m) => m.id)).toEqual(["director"])
+    expect(structure.departments[0].members.map((m) => m.id)).toEqual(["aibek", "nurlan"])
+    expect(structure.dismissed.map((m) => m.id)).toEqual(["former"])
+    expect(structure.unassigned.map((m) => m.id)).toEqual(["legacy"])
+    expect(JSON.stringify(structure)).not.toContain('"director"')
   })
 })
 

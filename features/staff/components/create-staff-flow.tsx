@@ -42,23 +42,24 @@ function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: Create
     const { account } = state
     return (
       <CredentialsCard
-        title="Аккаунт создан"
-        description="Передайте эти данные сотруднику. Пароль показывается только сейчас."
+        title="Сотрудник добавлен"
+        description="Передайте эти данные сотруднику. Временный пароль показывается только сейчас — скопируйте его; при первом входе система попросит сменить пароль."
         login={account.login}
         temporaryPassword={account.temporaryPassword}
         rows={[
           { label: "Сотрудник", value: account.fullName },
-          { label: "Роль", value: [account.roleLabel, account.place].filter(Boolean).join(" · ") },
+          { label: "Роль", value: account.roleLabel },
+          { label: "Отдел", value: account.department ?? "—" },
           { label: "Статус", value: "Ожидает первого входа" },
         ]}
         actions={
           <>
             <Button size="lg" variant="outline" onClick={onCreateAnother}>
               <UserPlus data-icon="inline-start" aria-hidden />
-              Создать ещё одного
+              Добавить ещё
             </Button>
             <Link href={backHref} className={buttonVariants({ variant: "ghost", size: "lg" })}>
-              К списку сотрудников
+              К сотрудникам
             </Link>
           </>
         }

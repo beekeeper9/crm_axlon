@@ -43,6 +43,11 @@ export function leadRoute(leadId: string): string {
   return `${routes.leads}/${encodeURIComponent(leadId)}`
 }
 
+/** Профиль сотрудника (уволенного — с историей работы и его базой); id — членство в компании */
+export function staffMemberRoute(membershipId: string): string {
+  return `${routes.staff}/${encodeURIComponent(membershipId)}`
+}
+
 /** Страница отдела продаж: показатели отдела, РОП и его менеджеры */
 export function departmentRoute(departmentId: string): string {
   return `${routes.departments}/${encodeURIComponent(departmentId)}`

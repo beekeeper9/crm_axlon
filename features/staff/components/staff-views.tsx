@@ -11,12 +11,15 @@ import { StatusBadge, type StatusTone } from "@/components/shared/status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
-import { departmentRoute, routes } from "@/config/routes"
+import { departmentRoute, routes, staffMemberRoute } from "@/config/routes"
+import { CompanyPlanWidget } from "@/features/departments/components/company-plan-widget"
 import { staffRepository } from "@/features/staff/api/staff-repository"
+import { AddHeadButton } from "@/features/staff/components/add-head-button"
 import { CreateStaffFlow } from "@/features/staff/components/create-staff-flow"
 import { DepartmentForm } from "@/features/staff/components/department-form"
 import { StaffRequests } from "@/features/staff/components/staff-requests"
 import { StaffRowActions } from "@/features/staff/components/staff-row-actions"
+import { UnassignedNotice } from "@/features/staff/components/unassigned-notice"
 import type { AccountStatus, StaffMember } from "@/features/staff/schemas"
 import { UrlSheet } from "@/components/shared/url-sheet"
 import { companyDays, listWorkSessions, type StaffSession } from "@/features/staff/api/work-sessions"
@@ -72,8 +75,10 @@ export async function StaffListView({
   const [members, options, requests, todaySessions] = loaded.data
   const isRequest = options.mode === "request"
   const createLabel = options.creatableRole && (canHire || isRequest) ? "Добавить сотрудника" : null
-  const count = `${formatNumber(members.length)} ${pluralize(members.length, ["сотрудник", "сотрудника", "сотрудников"])}`
   const structure = groupStaff(members)
+  // В счёт — действующие сотрудники отделов: директор и уволенные не входят
+  const activeCount = structure.departments.reduce((sum, group) => sum + group.members.length + (group.head ? 1 : 0), 0) + structure.unassigned.length
+  const count = `${formatNumber(activeCount)} ${pluralize(activeCount, ["сотрудник", "сотрудника", "сотрудников"])}`
   const sessionsByUser = Map.groupBy(todaySessions ?? [], (session) => session.userId)
   const memberId = getParam(params, "member")
   const openMember = memberId ? members.find((member) => member.userId === memberId) ?? null : null
@@ -82,6 +87,7 @@ export async function StaffListView({
     canHire,
     activityOf: (member: StaffMember) => (todaySessions ? todayActivity(sessionsByUser.get(member.userId) ?? []) : null),
     historyHref: (member: StaffMember) => hrefWithParams(routes.staff, params, { member: member.userId }),
+    profileHref: (member: StaffMember) => staffMemberRoute(member.id),
     canManage: (member: StaffMember) => !isMockDataSource && member.status !== "deactivated" && (canDecide || MANAGED_BY_HEAD.has(member.role)),
   }
 
@@ -104,12 +110,23 @@ export async function StaffListView({
         }
       />
       <StaffRequests requests={requests} canDecide={canDecide} currentUserId={currentUserId} />
+      {canDecide && !isMockDataSource && structure.unassigned.length > 0 && (
+        <UnassignedNotice
+          members={structure.unassigned.map((member) => ({ id: member.id, fullName: member.fullName, roleLabel: ROLE_LABELS[member.role] }))}
+          departments={options.departments}
+        />
+      )}
       {members.length === 0 ? (
         <ListPanel>
           <EmptyState icon={Users} title="Пока никого нет" description="Создайте первый аккаунт — данные для входа появятся сразу после создания." />
         </ListPanel>
       ) : (
         <>
+          {structure.departments.length === 0 && (
+            <ListPanel>
+              <EmptyState icon={Users} title="В отделах пока никого нет" description="Добавьте сотрудника и выберите отдел, к которому он будет прикреплён." />
+            </ListPanel>
+          )}
           {structure.departments.map((group) => (
             <section key={group.department.id} aria-labelledby={`dept-${group.department.id}`} className="space-y-2">
               <h2 id={`dept-${group.department.id}`} className="flex flex-wrap items-baseline gap-x-2 text-base font-semibold">
@@ -122,12 +139,15 @@ export async function StaffListView({
               <StaffTable members={group.head ? [group.head, ...group.members] : group.members} headId={group.head?.id ?? null} {...tableProps} />
             </section>
           ))}
-          {structure.withoutDepartment.length > 0 && (
-            <section aria-labelledby="dept-none" className="space-y-2">
-              <h2 id="dept-none" className="text-base font-semibold">
-                Без отдела
+          {structure.dismissed.length > 0 && (
+            <section aria-labelledby="dept-dismissed" className="space-y-2">
+              <h2 id="dept-dismissed" className="flex flex-wrap items-baseline gap-x-2 text-base font-semibold">
+                Уволенные сотрудники
+                <span className="text-meta font-normal text-muted-foreground">
+                  Вход заблокирован; лиды, клиенты, сделки и история работы сохранены — откройте профиль, чтобы передать базу
+                </span>
               </h2>
-              <StaffTable members={structure.withoutDepartment} headId={null} {...tableProps} />
+              <StaffTable members={structure.dismissed} headId={null} {...tableProps} canManage={() => false} />
             </section>
           )}
         </>
@@ -186,6 +206,7 @@ function StaffTable({
   canHire,
   activityOf,
   historyHref,
+  profileHref,
 }: {
   members: readonly StaffMember[]
   /** Строка РОПа отдела выделяется */
@@ -195,6 +216,7 @@ function StaffTable({
   canHire: boolean
   activityOf: (member: StaffMember) => TodayActivity | null
   historyHref: (member: StaffMember) => string
+  profileHref: (member: StaffMember) => string
 }) {
   return (
     <ListPanel>
@@ -216,7 +238,13 @@ function StaffTable({
             {members.map((member) => (
               <tr key={member.id} className={member.id === headId ? "bg-muted/30" : undefined}>
                 <td className="px-4 py-2.5">
-                  <p className="font-medium">{member.fullName}</p>
+                  {isMockDataSource ? (
+                    <p className="font-medium">{member.fullName}</p>
+                  ) : (
+                    <Link href={profileHref(member)} className="font-medium hover:text-primary hover:underline">
+                      {member.fullName}
+                    </Link>
+                  )}
                   <p className="font-mono text-xs text-muted-foreground">{member.login}</p>
                 </td>
                 <td className="px-3 py-2.5 text-meta">{ROLE_LABELS[member.role]}</td>
@@ -327,14 +355,12 @@ export async function CompanyView({ companyName }: { companyName: string }) {
             <Link href={routes.staff} className={buttonVariants({ variant: "outline", size: "lg" })}>
               Все сотрудники
             </Link>
-            <Link href={routes.staffNew} className={buttonVariants({ size: "lg" })}>
-              <UserPlus data-icon="inline-start" aria-hidden />
-              Добавить РОПа
-            </Link>
+            <AddHeadButton hasDepartments={options.departments.length > 0} />
           </>
         }
       />
       {!isMockDataSource && <DepartmentForm />}
+      <CompanyPlanWidget />
       {options.departments.length === 0 && (
         <ListPanel>
           <EmptyState icon={Building2} title="Отделов пока нет" description="Создайте отдел продаж, затем добавьте РОПа и выберите этот отдел." />

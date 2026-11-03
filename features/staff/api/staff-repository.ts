@@ -235,6 +235,7 @@ const httpStaffRepository: StaffRepository = {
     return createdAccountSchema.parse({
       member: {
         id: member.id,
+        userId: member.userId,
         login: member.login,
         fullName: member.fullName || member.login,
         role: uiRoleFromBackend(member.role),
