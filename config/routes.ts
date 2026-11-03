@@ -36,6 +36,8 @@ export const routes = {
   settingsImport: "/settings/import",
   settingsIntegrations: "/settings/integrations",
   settingsTemplates: "/settings/templates",
+  settingsLeadRouting: "/settings/lead-routing",
+  paymentReview: "/payments/review",
   profileNotifications: "/profile/notifications",
 } as const
 
