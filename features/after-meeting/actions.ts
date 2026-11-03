@@ -44,6 +44,7 @@ export async function processAfterMeetingAction(
         newStart: values.result === "rescheduled" && values.rescheduledTo ? companyWallTimeToIso(values.rescheduledTo) : null,
         durationMinutes: DURATION_MINUTES,
         comment: note || null,
+        reason: values.result === "no_show" ? values.noShowReason : null,
         nextStep: stepWithOutcome ? { title: values.nextTitle, dueDate: values.nextDueAt.slice(0, 10) } : null,
       })
       outcomeSaved = true

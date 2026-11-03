@@ -34,6 +34,7 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
     needsResult,
     result: null,
     rescheduledTo: "",
+    noShowReason: "",
     summary: "",
     agreements: "",
     nextTitle: "",
@@ -101,6 +102,19 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
               ))}
             </div>
             {errors.result && <p className="text-xs text-destructive">{errors.result}</p>}
+            {values.result === "no_show" && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="after-no-show-reason">Причина неявки</Label>
+                <Input
+                  id="after-no-show-reason"
+                  value={values.noShowReason}
+                  onChange={(event) => set("noShowReason", event.target.value)}
+                  placeholder="Например: не дозвонились накануне"
+                  aria-invalid={Boolean(errors.noShowReason)}
+                />
+                {errors.noShowReason && <p className="text-xs text-destructive">{errors.noShowReason}</p>}
+              </div>
+            )}
             {values.result === "rescheduled" && (
               <div className="grid gap-1.5">
                 <Label htmlFor="after-rescheduled">Новая дата встречи</Label>

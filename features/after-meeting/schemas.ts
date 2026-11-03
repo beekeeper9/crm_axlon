@@ -49,12 +49,18 @@ export const afterMeetingFormSchema = z
     needsResult: z.boolean(),
     result: z.enum(["held", "no_show", "rescheduled"]).nullable(),
     rescheduledTo: z.string(),
+    /** Причина неявки — обязательна для «Не дошёл» */
+    noShowReason: z.string().trim().max(200, "Не длиннее 200 символов"),
     summary: z.string().trim().max(2000, "Не длиннее 2000 символов"),
     agreements: z.string().trim().max(2000, "Не длиннее 2000 символов"),
     nextTitle: z.string().trim().max(200, "Не длиннее 200 символов"),
     nextDueAt: z.string(),
   })
   .refine((value) => !value.needsResult || value.result !== null, { message: "Выберите, как прошла встреча", path: ["result"] })
+  .refine((value) => value.result !== "no_show" || value.noShowReason.length > 0, {
+    message: "Укажите причину неявки",
+    path: ["noShowReason"],
+  })
   .refine((value) => value.result !== "rescheduled" || value.rescheduledTo.length > 0, {
     message: "Укажите новую дату встречи",
     path: ["rescheduledTo"],

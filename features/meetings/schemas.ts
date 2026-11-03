@@ -55,6 +55,11 @@ export const meetingOutcomeFormSchema = z
     nextStepDue: z.union([z.iso.date("Укажите срок"), z.literal("")]).optional(),
   })
   // Перенос — только с новой датой и временем (решение владельца 03.11.2026)
+  // Неявка — с причиной (требование 5.13; backend отвечает no_show_reason_required)
+  .refine((values) => values.result !== "no_show" || Boolean(values.reason), {
+    message: "Укажите причину неявки",
+    path: ["reason"],
+  })
   .refine((values) => values.result !== "rescheduled" || Boolean(values.rescheduledTo), {
     message: "Укажите новую дату и время встречи",
     path: ["rescheduledTo"],
