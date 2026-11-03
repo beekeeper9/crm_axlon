@@ -7,6 +7,7 @@ import { ListPanel } from "@/components/shared/list-panel"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
 import {
+  fetchCompanyCurrency,
   fetchDepartmentPlanFact,
   fetchDepartments,
   fetchDepartmentToday,
@@ -16,22 +17,26 @@ import {
   fetchStaff,
   plansFor,
   type Department,
+  type PlanProgress,
   type StaffMember,
 } from "@/features/departments/api/department-analytics"
-import { DEFINITIONS, Figure, PeriodFilter, PlanBar, REASONS, SalesFigures } from "@/features/departments/components/analytics-parts"
+import { DEFINITIONS, Figure, PeriodFilter, PlanBar, planPeriodNote, REASONS, SalesFigures } from "@/features/departments/components/analytics-parts"
+import { PlanEditor } from "@/features/departments/components/plan-editor"
 import { periodFrom, type Period } from "@/features/departments/lib/period"
 import { CabinetSection, LevelDot } from "@/features/team-cabinet/components/cabinet-parts"
 import { tryLoad } from "@/lib/api/load"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { formatDecimal, formatDecimalMoney, formatNumber, formatTime } from "@/lib/format"
+import { hasPermission } from "@/lib/permissions/roles"
 import type { SearchParamsRecord } from "@/lib/search-params"
+import { getCurrentUser } from "@/lib/session/current-user"
 
 /** Страница отдела продаж: РОП и менеджеры, план и факт, продажи, предоплаты и лиды за период */
 export async function DepartmentView({ departmentId, params }: { departmentId: string; params: SearchParamsRecord }) {
   const loaded = await tryLoad(async () => {
     const auth = await getRenderAuth()
-    const [departments, staff] = await Promise.all([fetchDepartments(auth), fetchStaff(auth)])
-    return { departments, staff }
+    const [departments, staff, user] = await Promise.all([fetchDepartments(auth), fetchStaff(auth), getCurrentUser()])
+    return { departments, staff, user }
   })
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
   const department = loaded.data.departments.find((item) => item.id === departmentId)
@@ -52,9 +57,22 @@ export async function DepartmentView({ departmentId, params }: { departmentId: s
         </div>
         <PeriodFilter period={period} params={params} action={`${routes.departments}/${encodeURIComponent(department.id)}`} />
       </header>
-      <DepartmentDetails department={department} staff={loaded.data.staff} period={period} />
+      <DepartmentDetails
+        department={department}
+        staff={loaded.data.staff}
+        period={period}
+        canEditPlans={hasPermission(loaded.data.user.role, "company.view")}
+      />
     </div>
   )
+}
+
+function departmentPlansOf(
+  plans: Awaited<ReturnType<typeof tryLoad<PlanProgress[]>>>,
+  departmentId: string,
+  metric: string
+): PlanProgress | null {
+  return plans.ok ? (plansFor(plans.data, "department", departmentId).find((plan) => plan.metric === metric) ?? null) : null
 }
 
 export function headOf(staff: readonly StaffMember[], departmentId: string): StaffMember | undefined {
@@ -62,15 +80,30 @@ export function headOf(staff: readonly StaffMember[], departmentId: string): Sta
 }
 
 /** Показатели отдела за период — на странице отдела и на «Продажах», если отдел один */
-export async function DepartmentDetails({ department, staff, period }: { department: Department; staff: readonly StaffMember[]; period: Period }) {
+export async function DepartmentDetails({
+  department,
+  staff,
+  period,
+  canEditPlans = false,
+}: {
+  department: Department
+  staff: readonly StaffMember[]
+  period: Period
+  /** Директор задаёт и меняет план отдела; РОП видит его только для чтения */
+  canEditPlans?: boolean
+}) {
   const auth = await getRenderAuth()
-  const [plans, metrics, counts, planFact, today] = await Promise.all([
+  const [plans, metrics, counts, planFact, today, companyCurrency] = await Promise.all([
     tryLoad(() => fetchMonthPlans(auth, period.month)),
     tryLoad(() => fetchSalesMetrics(auth, period.from, period.to, department.id)),
     tryLoad(() => fetchLeadCounts(auth, period.from, period.to, "department")),
     tryLoad(() => fetchDepartmentPlanFact(auth, department.id)),
     tryLoad(() => fetchDepartmentToday(auth, department.id)),
+    canEditPlans ? tryLoad(() => fetchCompanyCurrency(auth)) : Promise.resolve(null),
   ])
+  const salesPlan = departmentPlansOf(plans, department.id, "monthly_sales")
+  const moneyPlan = departmentPlansOf(plans, department.id, "monthly_turnover")
+  const note = planPeriodNote(period)
   const departmentPlans = plans.ok ? plansFor(plans.data, "department", department.id) : []
   const names = new Map(staff.map((member) => [member.userId, member.name]))
   const statusOf = new Map(today.ok ? today.data.managers.map((row) => [row.userId, row]) : [])
@@ -78,16 +111,32 @@ export async function DepartmentDetails({ department, staff, period }: { departm
 
   return (
     <div className="space-y-6">
-      <CabinetSection id={`plan-${department.id}`} title={`План отдела · ${period.month}`} description="План задаёт директор; факт и процент считает сервер.">
+      <CabinetSection
+        id={`plan-${department.id}`}
+        title={`План отдела · ${period.month}`}
+        description={note ?? "План задаёт директор; факт и процент считает сервер."}
+        action={
+          canEditPlans && plans.ok && companyCurrency?.ok ? (
+            <PlanEditor
+              scope="department"
+              scopeId={department.id}
+              month={period.month}
+              title={`отдела «${department.name}»`}
+              salesTarget={salesPlan?.target ?? null}
+              moneyTarget={moneyPlan?.target ?? null}
+              currency={moneyPlan?.currency ?? null}
+              companyCurrency={companyCurrency.data}
+              label={departmentPlans.length === 0 ? "Задать план отдела" : "Изменить план"}
+            />
+          ) : undefined
+        }
+      >
         {!plans.ok ? (
           <ApiErrorState error={plans.error} bare />
         ) : departmentPlans.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            План отдела на этот месяц не задан. Задать его можно в разделе{" "}
-            <Link href={`${routes.team}?tab=plans`} className="text-primary hover:underline">
-              «Планы»
-            </Link>
-            .
+            План отдела на этот месяц не задан.{" "}
+            {canEditPlans ? "Задайте его кнопкой «Задать план отдела» или распределите план компании на странице «Компания»." : "План отдела задаёт директор."}
           </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">

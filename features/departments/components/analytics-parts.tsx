@@ -57,7 +57,10 @@ export function PlanBar({ plan, emphasis = false }: { plan: PlanProgress; emphas
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className={cn(emphasis ? "text-base font-bold" : "text-sm font-medium")}>{METRIC_LABELS[plan.metric] ?? plan.metric}</span>
+        <span className={cn(emphasis ? "text-base font-bold" : "text-sm font-medium")}>
+          {METRIC_LABELS[plan.metric] ?? plan.metric}
+          {plan.unit === "money" && plan.currency && <span className="ml-1.5 text-meta font-normal text-muted-foreground">{plan.currency}</span>}
+        </span>
         <span className={cn("tabular-nums", emphasis ? "text-base font-bold" : "text-sm")}>
           {plan.actual === null ? "—" : planValue(plan, plan.actual)} из {planValue(plan, plan.target)}
         </span>
@@ -116,6 +119,17 @@ export function SalesFigures({ metrics }: { metrics: SalesMetrics }) {
       <Figure label="Оборот" value={money(metrics.turnover)} hint={DEFINITIONS.turnover} />
     </dl>
   )
+}
+
+/**
+ * Подпись к плану при произвольном периоде: план и полоса — за месяц плана,
+ * продажи и деньги ниже — за выбранный период.
+ */
+export function planPeriodNote(period: Period): string | null {
+  const [year, month] = period.month.split("-").map(Number)
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const isWholeMonth = period.from === `${period.month}-01` && period.to === `${period.month}-${String(lastDay).padStart(2, "0")}`
+  return isWholeMonth ? null : `План и выполнение — за месяц ${period.month}; продажи и деньги ниже — за ${period.from} — ${period.to}.`
 }
 
 /** Причины светофора backend простыми словами («проколы») */

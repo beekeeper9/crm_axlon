@@ -16,7 +16,8 @@ import {
   type LeadCounts,
   type PlanProgress,
 } from "@/features/departments/api/department-analytics"
-import { DEFINITIONS, Figure, PeriodFilter, PlanBar, SalesFigures } from "@/features/departments/components/analytics-parts"
+import { DEFINITIONS, Figure, PeriodFilter, PlanBar, planPeriodNote, SalesFigures } from "@/features/departments/components/analytics-parts"
+import { CompanyPlanWidget } from "@/features/departments/components/company-plan-widget"
 import { DepartmentDetails, headOf } from "@/features/departments/components/department-view"
 import { periodFrom, type Period } from "@/features/departments/lib/period"
 import { tryLoad } from "@/lib/api/load"
@@ -44,7 +45,6 @@ export async function SalesOverview({ params }: { params: SearchParamsRecord }) 
     tryLoad(() => fetchLeadCounts(auth, period.from, period.to, "company")),
     tryLoad(() => fetchLeadCounts(auth, period.from, period.to, "department")),
   ])
-  const companyPlans = plans.ok ? plansFor(plans.data, "company", null) : []
   const companyLeads = companyCounts.ok ? companyCounts.data.get(null) : undefined
 
   return (
@@ -54,27 +54,12 @@ export async function SalesOverview({ params }: { params: SearchParamsRecord }) 
         <PeriodFilter period={period} params={params} action={routes.sales} />
       </div>
 
-      <section aria-labelledby="company-plan" className="space-y-4 rounded-xl p-5 ring-1 ring-border">
-        <h2 id="company-plan" className="text-lg font-bold">
-          План продаж компании · {period.month}
+      <CompanyPlanWidget month={period.month} />
+
+      <section aria-labelledby="company-period" className="space-y-4 rounded-xl p-5 ring-1 ring-border">
+        <h2 id="company-period" className="text-base font-semibold">
+          Компания за период · {period.from} — {period.to}
         </h2>
-        {!plans.ok ? (
-          <ApiErrorState error={plans.error} bare />
-        ) : companyPlans.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            План компании на этот месяц не задан — задайте его в разделе{" "}
-            <Link href={`${routes.team}?tab=plans`} className="text-primary hover:underline">
-              «Планы»
-            </Link>
-            .
-          </p>
-        ) : (
-          <div className="grid gap-5 md:grid-cols-2">
-            {companyPlans.map((plan) => (
-              <PlanBar key={plan.id} plan={plan} emphasis />
-            ))}
-          </div>
-        )}
         {companyMetrics.ok ? <SalesFigures metrics={companyMetrics.data} /> : <ApiErrorState error={companyMetrics.error} bare />}
         {companyCounts.ok ? (
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -95,7 +80,7 @@ export async function SalesOverview({ params }: { params: SearchParamsRecord }) 
           <h2 id="single-department" className="text-lg font-semibold">
             {departments[0].name}
           </h2>
-          <DepartmentDetails department={departments[0]} staff={staff} period={period} />
+          <DepartmentDetails department={departments[0]} staff={staff} period={period} canEditPlans />
         </section>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -146,10 +131,11 @@ async function DepartmentBlock({
         </Link>
       </div>
       {plans.length === 0 ? (
-        <p className="text-sm text-muted-foreground">План отдела на месяц не задан.</p>
+        <p className="text-sm text-muted-foreground">План отдела на {period.month} не задан — распределите план компании или задайте его на странице отдела.</p>
       ) : (
         plans.map((plan) => <PlanBar key={plan.id} plan={plan} />)
       )}
+      {planPeriodNote(period) && <p className="text-meta text-muted-foreground">{planPeriodNote(period)}</p>}
       {metrics.ok ? <SalesFigures metrics={metrics.data} /> : <ApiErrorState error={metrics.error} bare />}
       <dl className="grid gap-3 sm:grid-cols-2">
         <Figure label="Лидов в базе" value={formatNumber(leads?.leadsTotal ?? 0)} hint={DEFINITIONS.leadsTotal} />

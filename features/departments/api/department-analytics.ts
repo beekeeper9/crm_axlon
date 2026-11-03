@@ -23,6 +23,13 @@ export async function fetchDepartments(auth: ApiAuth): Promise<Department[]> {
   return page.results.filter((department) => department.isActive)
 }
 
+const companySchema = z.object({ currency: currencyCodeSchema })
+
+/** Валюта компании по умолчанию (`GET /company/`) — предвыбор в форме денежного плана */
+export async function fetchCompanyCurrency(auth: ApiAuth): Promise<string> {
+  return (await apiRequest("/api/v1/company/", { auth, schema: companySchema })).currency
+}
+
 const crmCountsSchema = z.object({
   dateFrom: z.iso.date(),
   dateTo: z.iso.date(),
