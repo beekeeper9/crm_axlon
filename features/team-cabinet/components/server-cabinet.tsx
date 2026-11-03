@@ -22,6 +22,7 @@ import {
 import { FunnelSection, LossesSection } from "@/features/team-cabinet/components/analytics-sections"
 import { AbsenceForm, PlanForm } from "@/features/team-cabinet/components/cabinet-forms"
 import { KpiExport } from "@/features/team-cabinet/components/kpi-export"
+import { TodayActionsSection } from "@/features/team-cabinet/components/today-actions"
 import { CabinetSection, LevelDot, NumLink } from "@/features/team-cabinet/components/cabinet-parts"
 import { ABSENCE_LABELS, PLAN_METRIC_LABELS } from "@/features/team-cabinet/lib/plan-absence-meta"
 import { cabinetMoney } from "@/features/team-cabinet/lib/money"
@@ -76,6 +77,7 @@ export async function ServerCabinetView({ params }: { params: SearchParamsRecord
         </div>
         <KpiExport defaultStart={`${currentMonth()}-01`} defaultEnd={companyDateOf(nowIso())} />
       </header>
+      <TodayActionsSection />
       <DepartmentPlanSection plansHref={hasPermission(user.role, "company.view") ? href({ tab: "plans" }) : null} />
       <div className="border-b">
         <SegmentedLinks
