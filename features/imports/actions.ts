@@ -48,6 +48,7 @@ export async function commitImportAction(input: unknown): Promise<ImportActionRe
     const job = await commitImport(await getActionAuth(), request)
     revalidatePath(routes.prospects)
     revalidatePath(routes.clientBase)
+    revalidatePath(routes.sales)
     revalidatePath("/settings/import")
     return job
   })

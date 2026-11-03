@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/session/current-user"
 
 export const metadata: Metadata = { title: "Загрузка из файла" }
 
-/** Создавать лиды и клиентов может любой сотрудник продаж; права и область проверяет backend */
+/** Создавать лиды, клиентов и сделки может сотрудник продаж; права и область проверяет backend */
 async function Content() {
   return <ImportView user={await getCurrentUser()} />
 }
@@ -15,7 +15,7 @@ async function Content() {
 export default function Page() {
   return (
     <div className="mx-auto max-w-screen-lg space-y-5">
-      <PageHeader title="Загрузка из файла" description="Лиды и клиенты из CSV: сначала проверка дублей, потом загрузка только новых строк" />
+      <PageHeader title="Загрузка из файла" description="Лиды, клиенты и сделки из CSV: сначала проверка дублей и ошибок, потом загрузка только новых строк" />
       <Suspense fallback={<ImportViewSkeleton />}>
         <Content />
       </Suspense>

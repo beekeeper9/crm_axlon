@@ -1,18 +1,37 @@
 import { z } from "zod"
 
-/** Что загружаем: лиды попадают во «Входящие лиды», клиенты — в «Базу клиентов» */
-export const IMPORT_ENTITIES = ["leads", "customers"] as const
+/** Что загружаем: лиды — во «Входящие лиды», клиенты — в «Базу клиентов», сделки — в воронку продаж */
+export const IMPORT_ENTITIES = ["leads", "customers", "deals"] as const
 export const importEntitySchema = z.enum(IMPORT_ENTITIES)
 export type ImportEntity = z.infer<typeof importEntitySchema>
 
 export const IMPORT_ENTITY_LABELS: Record<ImportEntity, string> = {
   leads: "Лиды",
   customers: "Клиенты",
+  deals: "Сделки",
 }
 
 /** new — будет создана; duplicate — уже есть в CRM или выше в файле; invalid — ошибка в строке */
 export const importRowStatusSchema = z.enum(["new", "duplicate", "invalid"])
 export type ImportRowStatus = z.infer<typeof importRowStatusSchema>
+
+/** Сделки: что backend создаст по строке — воронка, этап, ответственный, найден клиент или будет создан */
+const dealPlanSchema = z.object({
+  title: z.string(),
+  amount: z.string(),
+  currency: z.string(),
+  pipelineId: z.string(),
+  pipelineName: z.string(),
+  stageId: z.string(),
+  stageName: z.string(),
+  ownerUserId: z.string(),
+  customerId: z.string().nullable(),
+  customerName: z.string().nullable(),
+  customerAction: z.enum(["match", "create"]).nullable(),
+  hasNextStep: z.boolean(),
+})
+
+export type ImportDealPlan = z.infer<typeof dealPlanSchema>
 
 const previewRowSchema = z.object({
   line: z.int(),
@@ -24,6 +43,8 @@ const previewRowSchema = z.object({
   reason: z.string().nullable(),
   duplicateOf: z.object({ kind: z.string(), id: z.string(), name: z.string() }).nullable(),
   duplicateLine: z.int().nullable(),
+  /** Только для сделок; у лидов и клиентов — null */
+  deal: dealPlanSchema.nullable().default(null),
 })
 
 /** `POST /imports/preview/` — разбор файла и проверка дублей без записи */

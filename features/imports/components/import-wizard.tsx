@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { FileUp, LoaderCircle, RotateCcw, Upload } from "lucide-react"
+import { Download, FileUp, LoaderCircle, RotateCcw, Upload } from "lucide-react"
 
 import { StatusBadge, type StatusTone } from "@/components/shared/status-badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -12,7 +12,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { routes } from "@/config/routes"
 import { commitImportAction, previewImportAction } from "@/features/imports/actions"
 import { decodeCsv, isCsvFile, MAX_IMPORT_FILE_BYTES } from "@/features/imports/lib/decode-csv"
-import { IMPORT_ENTITIES, IMPORT_ENTITY_LABELS, type ImportEntity, type ImportJob, type ImportPreview, type ImportRowStatus } from "@/features/imports/schemas"
+import { IMPORT_COLUMNS, IMPORT_TEMPLATE_NAMES, importTemplateHref } from "@/features/imports/lib/import-templates"
+import {
+  IMPORT_ENTITIES,
+  IMPORT_ENTITY_LABELS,
+  type ImportEntity,
+  type ImportJob,
+  type ImportPreview,
+  type ImportPreviewRow,
+  type ImportRowStatus,
+} from "@/features/imports/schemas"
 import { formatNumber } from "@/lib/format"
 
 export type ImportOwnerOption = { userId: string; name: string }
@@ -44,12 +53,13 @@ export function ImportWizard({ owners }: ImportWizardProps) {
   const [failure, setFailure] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  function check(next: LoadedFile, nextEntity: ImportEntity) {
+  /** Ответственный влияет на проверку сделок: РОП назначает только в свой отдел, менеджер — только себе */
+  function check(next: LoadedFile, nextEntity: ImportEntity, owner: string = ownerUserId) {
     setPreview(null)
     setJob(null)
     setFailure(null)
     startTransition(async () => {
-      const result = await previewImportAction({ entity: nextEntity, filename: next.name, content: next.content, ownerUserId: null })
+      const result = await previewImportAction({ entity: nextEntity, filename: next.name, content: next.content, ownerUserId: owner || null })
       if (result.ok) setPreview(result.data)
       else setFailure(result.message)
     })
@@ -74,6 +84,11 @@ export function ImportWizard({ owners }: ImportWizardProps) {
   function onEntityChange(next: ImportEntity) {
     setEntity(next)
     if (file) check(file, next)
+  }
+
+  function onOwnerChange(next: string) {
+    setOwnerUserId(next)
+    if (file && entity === "deals") check(file, entity, next)
   }
 
   function confirm() {
@@ -127,7 +142,7 @@ export function ImportWizard({ owners }: ImportWizardProps) {
               id="import-owner"
               value={ownerUserId}
               disabled={isPending}
-              onChange={(event) => setOwnerUserId(event.target.value)}
+              onChange={(event) => onOwnerChange(event.target.value)}
               className="h-8 min-w-56 rounded-lg border border-input bg-background px-2 text-sm"
             >
               <option value="">Я</option>
@@ -152,10 +167,7 @@ export function ImportWizard({ owners }: ImportWizardProps) {
           />
         </div>
       </div>
-      <p className="text-meta text-muted-foreground">
-        Первая строка — заголовки: «Имя», «Телефон», «E-mail»{entity === "leads" && ", «Источник»"}. Телефон — в международном формате (+996…).
-        До 2000 строк. Дубли ищутся по телефону и e-mail среди клиентов{entity === "leads" && " и лидов"} компании. Формат XLSX пока не поддерживается.
-      </p>
+      <ColumnsHelp entity={entity} />
 
       {isPending && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
@@ -169,22 +181,79 @@ export function ImportWizard({ owners }: ImportWizardProps) {
         </p>
       )}
 
-      {preview && file && <PreviewBlock preview={preview} filename={file.name} isPending={isPending} onConfirm={confirm} onReset={reset} />}
+      {preview && file && <PreviewBlock preview={preview} filename={file.name} ownerNames={ownerNames(owners)} isPending={isPending} onConfirm={confirm} onReset={reset} />}
       {job && <ResultBlock job={job} onReset={reset} />}
     </Card>
+  )
+}
+
+const DUPLICATE_RULE: Record<ImportEntity, string> = {
+  leads: "Дубли ищутся по телефону и e-mail среди клиентов и лидов компании.",
+  customers: "Дубли ищутся по телефону и e-mail среди клиентов компании.",
+  deals: "Дубль — сделка с тем же названием у того же клиента. Клиент ищется по телефону и e-mail, иначе создаётся.",
+}
+
+/** Какие колонки узнаёт backend и шаблон файла для выбранного вида записей */
+function ColumnsHelp({ entity }: { entity: ImportEntity }) {
+  const columns = IMPORT_COLUMNS[entity]
+  return (
+    <div className="text-meta space-y-1.5 text-muted-foreground">
+      <p>
+        Первая строка — заголовки. Телефон — в международном формате (+996…). До 2000 строк. {DUPLICATE_RULE[entity]} Формат XLSX пока не поддерживается.
+      </p>
+      <details>
+        <summary className="cursor-pointer">Колонки файла ({columns.length})</summary>
+        <ul className="mt-1 space-y-0.5">
+          {columns.map((column) => (
+            <li key={column.title}>
+              <span className="font-medium text-foreground">«{column.title}»</span>
+              {column.required && " — обязательно"}
+              {column.hint && ` — ${column.hint}`}
+            </li>
+          ))}
+        </ul>
+      </details>
+      <a href={importTemplateHref(entity)} download={IMPORT_TEMPLATE_NAMES[entity]} className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline">
+        <Download className="size-3.5" aria-hidden />
+        Скачать шаблон CSV
+      </a>
+    </div>
+  )
+}
+
+function ownerNames(owners: readonly ImportOwnerOption[] | null): ReadonlyMap<string, string> {
+  return new Map((owners ?? []).map((owner) => [owner.userId, owner.name]))
+}
+
+const CUSTOMER_ACTION: Record<"match" | "create", string> = { match: "найден", create: "будет создан" }
+
+/** Сделка в таблице проверки: воронка, этап, ответственный и что будет с клиентом */
+function DealCells({ row, ownerNames }: { row: ImportPreviewRow; ownerNames: ReadonlyMap<string, string> }) {
+  const deal = row.deal
+  return (
+    <>
+      <TableCell>{row.name || "—"}</TableCell>
+      <TableCell className="whitespace-normal">
+        {deal?.customerName ? `${deal.customerName}${deal.customerAction ? ` (${CUSTOMER_ACTION[deal.customerAction]})` : ""}` : "—"}
+      </TableCell>
+      <TableCell className="whitespace-normal">{deal ? `${deal.pipelineName} → ${deal.stageName}` : "—"}</TableCell>
+      <TableCell>{deal ? (ownerNames.get(deal.ownerUserId) ?? "Я") : "—"}</TableCell>
+    </>
   )
 }
 
 type PreviewBlockProps = {
   preview: ImportPreview
   filename: string
+  ownerNames: ReadonlyMap<string, string>
   isPending: boolean
   onConfirm: () => void
   onReset: () => void
 }
 
-function PreviewBlock({ preview, filename, isPending, onConfirm, onReset }: PreviewBlockProps) {
+function PreviewBlock({ preview, filename, ownerNames, isPending, onConfirm, onReset }: PreviewBlockProps) {
   const shown = preview.rows.slice(0, PREVIEW_ROWS_SHOWN)
+  const isDeals = preview.entity === "deals"
   return (
     <section aria-label="Проверка файла" className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -199,9 +268,20 @@ function PreviewBlock({ preview, filename, isPending, onConfirm, onReset }: Prev
           <TableHeader>
             <TableRow>
               <TableHead className="w-16">Строка</TableHead>
-              <TableHead>Имя</TableHead>
-              <TableHead>Телефон</TableHead>
-              <TableHead>E-mail</TableHead>
+              {isDeals ? (
+                <>
+                  <TableHead>Сделка</TableHead>
+                  <TableHead>Клиент</TableHead>
+                  <TableHead>Воронка → этап</TableHead>
+                  <TableHead>Ответственный</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead>Имя</TableHead>
+                  <TableHead>Телефон</TableHead>
+                  <TableHead>E-mail</TableHead>
+                </>
+              )}
               <TableHead>Статус</TableHead>
               <TableHead>Пояснение</TableHead>
             </TableRow>
@@ -210,9 +290,15 @@ function PreviewBlock({ preview, filename, isPending, onConfirm, onReset }: Prev
             {shown.map((row) => (
               <TableRow key={row.line}>
                 <TableCell className="tabular-nums text-muted-foreground">{row.line}</TableCell>
-                <TableCell>{row.name || "—"}</TableCell>
-                <TableCell className="tabular-nums">{row.phone ?? "—"}</TableCell>
-                <TableCell>{row.email ?? "—"}</TableCell>
+                {isDeals ? (
+                  <DealCells row={row} ownerNames={ownerNames} />
+                ) : (
+                  <>
+                    <TableCell>{row.name || "—"}</TableCell>
+                    <TableCell className="tabular-nums">{row.phone ?? "—"}</TableCell>
+                    <TableCell>{row.email ?? "—"}</TableCell>
+                  </>
+                )}
                 <TableCell>
                   <StatusBadge tone={ROW_STATUS[row.status].tone}>{ROW_STATUS[row.status].label}</StatusBadge>
                 </TableCell>
@@ -241,8 +327,14 @@ function PreviewBlock({ preview, filename, isPending, onConfirm, onReset }: Prev
   )
 }
 
+const RESULT_LINKS: Record<ImportEntity, { href: string; label: string }> = {
+  leads: { href: routes.prospects, label: "Открыть входящие лиды" },
+  customers: { href: routes.clientBase, label: "Открыть базу клиентов" },
+  deals: { href: routes.sales, label: "Открыть сделки" },
+}
+
 function ResultBlock({ job, onReset }: { job: ImportJob; onReset: () => void }) {
-  const listRoute = job.entity === "leads" ? routes.prospects : routes.clientBase
+  const link = RESULT_LINKS[job.entity]
   return (
     <section aria-label="Итог загрузки" role="status" className="space-y-3">
       <p className="flex items-center gap-2 text-sm font-medium">
@@ -252,7 +344,7 @@ function ResultBlock({ job, onReset }: { job: ImportJob; onReset: () => void }) 
       <ul className="text-meta space-y-0.5 text-muted-foreground">
         <li>Пропущено дублей: {formatNumber(job.duplicates)}</li>
         <li>Пропущено строк с ошибками: {formatNumber(job.invalid)}</li>
-        {job.failed > 0 && <li className="text-destructive">Не создано из-за ошибки сервера: {formatNumber(job.failed)}</li>}
+        {job.failed > 0 && <li className="text-destructive">Отклонено при создании: {formatNumber(job.failed)}</li>}
       </ul>
       {job.errors.length > 0 && (
         <details className="text-meta">
@@ -267,8 +359,8 @@ function ResultBlock({ job, onReset }: { job: ImportJob; onReset: () => void }) 
         </details>
       )}
       <div className="flex flex-wrap gap-2">
-        <Link href={listRoute} className={buttonVariants({ variant: "outline" })}>
-          {job.entity === "leads" ? "Открыть входящие лиды" : "Открыть базу клиентов"}
+        <Link href={link.href} className={buttonVariants({ variant: "outline" })}>
+          {link.label}
         </Link>
         <Button variant="ghost" onClick={onReset}>
           <RotateCcw data-icon="inline-start" aria-hidden />
