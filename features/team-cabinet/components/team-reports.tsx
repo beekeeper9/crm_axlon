@@ -2,20 +2,18 @@ import Link from "next/link"
 import { Download } from "lucide-react"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
-import { ListPanel } from "@/components/shared/list-panel"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
+import { StatusBadge } from "@/components/shared/status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { routes, teamMemberRoute } from "@/config/routes"
 import { fetchDepartments, fetchTeamReport, REPORT_PERIODS, type ReportPeriod, type TeamReport } from "@/features/team-cabinet/api/team-board"
 import { NumLink } from "@/features/team-cabinet/components/cabinet-parts"
 import { tryLoad } from "@/lib/api/load"
-import { formatDayMonth, formatDecimal, formatNumber, formatPercent } from "@/lib/format"
+import { formatDayMonth, formatDecimal, formatNumber, formatPercent, pluralize } from "@/lib/format"
 import { getParam, hrefWithParams, type SearchParamsRecord } from "@/lib/search-params"
+import { cn } from "@/lib/utils"
 
 const PERIOD_LABELS: Record<ReportPeriod, string> = { day: "День", week: "Неделя", month: "Месяц" }
-
-const th = "px-3 py-2 text-right font-medium text-muted-foreground"
-const td = "px-3 py-2 text-right tabular-nums"
 
 /**
  * Отчёты отдела за день, неделю и месяц по данным CRM (те же определения, что в кабинете).
@@ -89,84 +87,161 @@ export async function TeamReportsView({ params, canPickDepartment }: { params: S
   )
 }
 
+type ReportRow = TeamReport["rows"][number]
+
+const percent = (value: string | null) => (value === null ? "—" : formatPercent(Number(value)))
+
+/** Итоги отдела — плитками над карточками; затем по карточке на сотрудника */
 function ReportTable({ report }: { report: TeamReport }) {
   const range = report.dateFrom === report.dateTo ? formatDayMonth(report.dateFrom) : `${formatDayMonth(report.dateFrom)} — ${formatDayMonth(report.dateTo)}`
   if (report.rows.length === 0) return <p className="text-sm text-muted-foreground">В отделе пока нет сотрудников.</p>
   const totals = report.totals
+  const withTails = report.rows.filter(hasTails).length
+
   return (
-    <section aria-label={`Отчёт за ${range}`} className="space-y-2">
-      <p className="text-meta text-muted-foreground">
-        Период: {range}. Хвосты CRM и план — на текущий момент; продажи — сделки, первая оплата по которым попала в период.
-      </p>
-      <ListPanel>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[72rem] text-sm">
-            <thead className="border-b">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Сотрудник</th>
-                <th className={th}>Встреч</th>
-                <th className={th}>Состоялось</th>
-                <th className={th}>Не пришли</th>
-                <th className={th}>Доходимость</th>
-                <th className={th}>Звонки</th>
-                <th className={th}>Продажи</th>
-                <th className={th}>Оплаты</th>
-                <th className={th}>Сумма оплат</th>
-                <th className={th}>Предоплаты</th>
-                <th className={th}>Задачи выполнены</th>
-                <th className={th}>Просрочено</th>
-                <th className={th}>Без итога</th>
-                <th className={th}>Без шага</th>
-                <th className={th}>План месяца</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {report.rows.map((row) => (
-                <tr key={row.userId}>
-                  <td className="px-3 py-2">
-                    <Link href={teamMemberRoute(row.userId)} className="font-medium hover:text-primary hover:underline">
-                      {row.name}
-                    </Link>
-                  </td>
-                  <td className={td}>{formatNumber(row.meetingsBooked)}</td>
-                  <td className={td}>{formatNumber(row.meetingsHeld)}</td>
-                  <td className={td}>{formatNumber(row.meetingsNoShow)}</td>
-                  <td className={td}>{row.attendance === null ? "—" : formatPercent(Number(row.attendance))}</td>
-                  <td className={td}>{formatNumber(row.calls)}</td>
-                  <td className={td}>{formatNumber(row.sales)}</td>
-                  <td className={td}>{formatNumber(row.paymentsCount)}</td>
-                  <td className={td}>{formatDecimal(Number(row.received))}</td>
-                  <td className={td}>{formatNumber(row.prepayments)}</td>
-                  <td className={td}>{formatNumber(row.tasksDone)}</td>
-                  <td className={td}><NumLink value={row.overdueTasks} tone="danger" /></td>
-                  <td className={td}><NumLink value={row.meetingsWithoutOutcome} tone="danger" /></td>
-                  <td className={td}><NumLink value={row.dealsWithoutNextStep} tone="warning" /></td>
-                  <td className={td}>
-                    {formatNumber(row.monthSales)}
-                    {row.planSales === null ? <span className="text-muted-foreground"> / не задан</span> : ` / ${formatDecimal(Number(row.planSales))}`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="border-t font-medium">
-              <tr>
-                <td className="px-3 py-2">Итого · {formatNumber(report.rows.length)}</td>
-                <td className={td}>{formatNumber(totals.meetingsBooked)}</td>
-                <td className={td}>{formatNumber(totals.meetingsHeld)}</td>
-                <td className={td}>{formatNumber(totals.meetingsNoShow)}</td>
-                <td className={td}>{totals.attendance === null ? "—" : formatPercent(Number(totals.attendance))}</td>
-                <td className={td}>{formatNumber(totals.calls)}</td>
-                <td className={td}>{formatNumber(totals.sales)}</td>
-                <td className={td}>{formatNumber(totals.paymentsCount)}</td>
-                <td className={td}>{formatDecimal(Number(totals.received))}</td>
-                <td className={td}>{formatNumber(totals.prepayments)}</td>
-                <td className={td}>{formatNumber(totals.tasksDone)}</td>
-                <td className={td} colSpan={4} />
-              </tr>
-            </tfoot>
-          </table>
+    <div className="space-y-6">
+      <section aria-labelledby="report-summary" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="report-summary" className="text-base font-semibold">
+            Итоги за {range}
+          </h2>
+          <p className="text-meta text-muted-foreground">
+            {formatNumber(report.rows.length)} {pluralize(report.rows.length, ["сотрудник", "сотрудника", "сотрудников"])}
+            {withTails > 0 ? ` · с хвостами CRM: ${formatNumber(withTails)}` : " · хвостов CRM нет"}
+          </p>
         </div>
-      </ListPanel>
-    </section>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <SummaryTile label="Встреч назначено" value={formatNumber(totals.meetingsBooked)} />
+          <SummaryTile label="Состоялось" value={formatNumber(totals.meetingsHeld)} note={`доходимость ${percent(totals.attendance)}`} />
+          <SummaryTile label="Продажи" value={formatNumber(totals.sales)} note={`встреча → продажа ${percent(totals.meetingToSale)}`} />
+          <SummaryTile label="Оплаты" value={formatNumber(totals.paymentsCount)} note={`предоплат ${formatNumber(totals.prepayments)}`} />
+          <SummaryTile label="Получено" value={formatDecimal(Number(totals.received))} />
+          <SummaryTile label="Задач выполнено" value={formatNumber(totals.tasksDone)} note={`звонков ${formatNumber(totals.calls)}`} />
+        </dl>
+        <p className="text-meta text-muted-foreground">
+          Продажи — сделки, первая оплата по которым попала в период. Хвосты CRM и план месяца — на текущий момент.
+        </p>
+      </section>
+
+      <section aria-labelledby="report-people" className="space-y-3">
+        <h2 id="report-people" className="text-base font-semibold">
+          По сотрудникам
+        </h2>
+        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {report.rows.map((row) => (
+            <PersonCard key={row.userId} row={row} />
+          ))}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+function SummaryTile({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-xl bg-muted/40 px-4 py-3 ring-1 ring-border">
+      <dt className="text-meta text-muted-foreground">{label}</dt>
+      <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
+      {note && <dd className="text-xs text-muted-foreground">{note}</dd>}
+    </div>
+  )
+}
+
+const hasTails = (row: ReportRow) =>
+  row.overdueTasks + row.meetingsWithoutOutcome + row.dealsWithoutNextStep + row.reschedulesWithoutDate > 0
+
+function PersonCard({ row }: { row: ReportRow }) {
+  const plan = row.planSales === null ? null : Number(row.planSales)
+  const progress = plan && plan > 0 ? Math.min(row.monthSales / plan, 1) : null
+  const tails = hasTails(row)
+
+  return (
+    <li className={cn("space-y-4 rounded-xl bg-card p-4 ring-1", tails ? "ring-warning/40" : "ring-border")}>
+      <div className="flex items-start justify-between gap-3">
+        <Link href={teamMemberRoute(row.userId)} className="min-w-0 truncate font-semibold hover:text-primary hover:underline">
+          {row.name}
+        </Link>
+        <StatusBadge tone={tails ? "warning" : "success"}>{tails ? "Есть хвосты" : "Всё заполнено"}</StatusBadge>
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="flex items-baseline justify-between gap-2 text-sm">
+          <span className="text-muted-foreground">План месяца</span>
+          <span className="tabular-nums">
+            {formatNumber(row.monthSales)}
+            {plan === null ? <span className="text-muted-foreground"> · план не задан</span> : ` из ${formatDecimal(plan)}`}
+          </span>
+        </p>
+        {progress !== null && (
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+            <div className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <MetricGroup
+          title="Встречи"
+          items={[
+            ["Назначено", formatNumber(row.meetingsBooked)],
+            ["Состоялось", formatNumber(row.meetingsHeld)],
+            ["Не пришли", formatNumber(row.meetingsNoShow)],
+            ["Доходимость", percent(row.attendance)],
+          ]}
+        />
+        <MetricGroup
+          title="Продажи и оплаты"
+          items={[
+            ["Продажи", formatNumber(row.sales)],
+            ["Оплат", formatNumber(row.paymentsCount)],
+            ["Получено", formatDecimal(Number(row.received))],
+            ["Предоплат", formatNumber(row.prepayments)],
+          ]}
+        />
+        <MetricGroup
+          title="Задачи и звонки"
+          items={[
+            ["Выполнено задач", formatNumber(row.tasksDone)],
+            ["Звонков", formatNumber(row.calls)],
+          ]}
+        />
+        <div className="space-y-1.5">
+          <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Хвосты CRM</h3>
+          <dl className="space-y-1 text-sm">
+            <TailRow label="Просроченные задачи" value={row.overdueTasks} tone="danger" />
+            <TailRow label="Встречи без итога" value={row.meetingsWithoutOutcome} tone="danger" />
+            <TailRow label="Сделки без шага" value={row.dealsWithoutNextStep} tone="warning" />
+            <TailRow label="Переносы без даты" value={row.reschedulesWithoutDate} tone="warning" />
+          </dl>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function MetricGroup({ title, items }: { title: string; items: readonly (readonly [string, string])[] }) {
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h3>
+      <dl className="space-y-1 text-sm">
+        {items.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-2">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-medium tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+function TailRow({ label, value, tone }: { label: string; value: number; tone: "warning" | "danger" }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd>
+        <NumLink value={value} tone={tone} />
+      </dd>
+    </div>
   )
 }
