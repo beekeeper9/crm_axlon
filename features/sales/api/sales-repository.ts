@@ -228,10 +228,10 @@ const httpSalesRepository: SalesRepository = {
       apiRequest("/api/v1/sales/pipelines/", { auth, schema: z.array(backendPipelineSchema) }),
       apiRequest("/api/v1/sales/loss-reasons/", { auth, query: { active: true }, schema: backendLossReasonsSchema }),
     ])
-    // Воронка по умолчанию — первой: её доска открывается без выбора
-    const ordered = pipelines.toSorted((a, b) => Number(b.isDefault) - Number(a.isDefault))
+    // Порядок задаёт backend: сначала воронки отдела пользователя (основная — первой), затем
+    // воронки компании. Поэтому менеджер сразу видит воронку, настроенную его РОПом.
     return {
-      pipelines: ordered.map(toPipeline).filter((pipeline) => pipeline.stages.length > 0),
+      pipelines: pipelines.map(toPipeline).filter((pipeline) => pipeline.stages.length > 0),
       lossReasons: lossReasons.results.map(({ id, name }) => ({ id, label: name })),
     }
   },

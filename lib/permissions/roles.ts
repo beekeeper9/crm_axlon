@@ -55,6 +55,8 @@ export type Permission =
   | "platform.manage"
   /** Обращения в поддержку платформы — у сотрудников компаний */
   | "support.contact"
+  /** Настраивать этапы воронки: РОП — воронку своего отдела, директор — любую */
+  | "pipelines.configure"
 
 const MANAGEMENT: readonly Permission[] = [
   "team.view",
@@ -71,8 +73,8 @@ const MANAGEMENT: readonly Permission[] = [
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_admin: ["platform.manage"],
-  director: [...MANAGEMENT, "staff.manage", "staff.hire", "staff.approve", "company.view", "support.contact"],
-  head_of_sales: [...MANAGEMENT, "staff.manage", "staff.hire", "support.contact"],
+  director: [...MANAGEMENT, "staff.manage", "staff.hire", "staff.approve", "company.view", "support.contact", "pipelines.configure"],
+  head_of_sales: [...MANAGEMENT, "staff.manage", "staff.hire", "support.contact", "pipelines.configure"],
   manager: ["records.edit", "my_day.view", "support.contact"],
   /**
    * Роли P0 backend. Их рабочие пространства в продукте ещё не описаны — пока минимальный набор:
