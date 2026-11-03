@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { ExportCsvLink } from "@/features/imports"
 import { ProspectsView, ProspectsViewSkeleton } from "@/features/prospects"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -20,6 +21,11 @@ export default function ProspectsPage({ searchParams }: ProspectsPageProps) {
       <PageHeader
         title="Входящие лиды"
         description="Заявки до клиента и сделки: квалифицируйте, проверьте дубли и конвертируйте в клиента"
+        actions={
+          <Suspense fallback={null}>
+            <ExportCsvLink href="/exports/prospects" />
+          </Suspense>
+        }
       />
       <Suspense fallback={<ProspectsViewSkeleton />}>
         <ProspectsContent searchParams={searchParams} />

@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { ExportCsvLink } from "@/features/imports"
 import { ClientsView, ClientsViewSkeleton } from "@/features/clients"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -17,7 +18,15 @@ async function ClientBaseContent({ searchParams }: Pick<ClientBasePageProps, "se
 export default function ClientBasePage({ searchParams }: ClientBasePageProps) {
   return (
     <div className="space-y-5">
-      <PageHeader title="База клиентов" description="Все клиенты за всю историю: найдите по имени или телефону и откройте нужную сделку" />
+      <PageHeader
+        title="База клиентов"
+        description="Все клиенты за всю историю: найдите по имени или телефону и откройте нужную сделку"
+        actions={
+          <Suspense fallback={null}>
+            <ExportCsvLink href="/exports/customers" />
+          </Suspense>
+        }
+      />
       <Suspense fallback={<ClientsViewSkeleton />}>
         <ClientBaseContent searchParams={searchParams} />
       </Suspense>
