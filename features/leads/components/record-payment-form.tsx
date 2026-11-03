@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { recordPaymentAction } from "@/features/sales/actions"
+import { submitPayment } from "@/features/payments/api/record-payment"
+import { ReceiptField } from "@/features/payments/components/receipt-field"
 import { companyDateOf } from "@/lib/datetime"
 
 const KINDS = [
@@ -19,7 +20,10 @@ const KINDS = [
 
 type Kind = (typeof KINDS)[number]["value"]
 
-/** Внести оплату или возврат; повторная отправка той же формы не создаёт дубль (ключ reference) */
+/**
+ * Внести оплату (с чеком — без него оплата не уходит на проверку) или возврат (документ не
+ * обязателен). Повторная отправка той же формы не создаёт дубль (ключ reference).
+ */
 export function RecordPaymentForm({ dealId, customerId, currency }: { dealId: string; customerId: string | null; currency: string | null }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -29,14 +33,23 @@ export function RecordPaymentForm({ dealId, customerId, currency }: { dealId: st
   const [kind, setKind] = useState<Kind>("prepayment")
   const [paidOn, setPaidOn] = useState(() => companyDateOf(new Date().toISOString()))
   const [isRefund, setIsRefund] = useState(false)
+  const [receipt, setReceipt] = useState<File | null>(null)
+  const [sentForReview, setSentForReview] = useState(false)
   const [reference, setReference] = useState(() => crypto.randomUUID())
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Plus data-icon="inline-start" aria-hidden />
-        Внести оплату
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+          <Plus data-icon="inline-start" aria-hidden />
+          Внести оплату
+        </Button>
+        {sentForReview && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Оплата отправлена на проверку.
+          </p>
+        )}
+      </div>
     )
   }
 
@@ -46,12 +59,18 @@ export function RecordPaymentForm({ dealId, customerId, currency }: { dealId: st
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
+        if (!isRefund && !receipt) {
+          setFailure("Прикрепите чек: без чека оплата не уходит на проверку и не считается продажей.")
+          return
+        }
         startTransition(async () => {
-          const result = await recordPaymentAction(dealId, customerId, { amount, kind, paidOn, isRefund, reference })
+          const result = await submitPayment({ dealId, customerId, amount, kind, paidOn, isRefund, closeSale: false, reference, receipt })
           if (result.ok) {
             setFailure(null)
             setOpen(false)
             setAmount("")
+            setReceipt(null)
+            setSentForReview(result.status === "pending_verification")
             setReference(crypto.randomUUID())
             router.refresh()
           } else setFailure(result.message)
@@ -85,6 +104,9 @@ export function RecordPaymentForm({ dealId, customerId, currency }: { dealId: st
         <input type="checkbox" checked={isRefund} onChange={(e) => setIsRefund(e.target.checked)} className="size-4 accent-(--primary)" />
         Это возврат
       </label>
+      <div className="sm:col-span-2">
+        <ReceiptField file={receipt} onChange={setReceipt} optional={isRefund} />
+      </div>
       {failure && (
         <p role="alert" className="text-sm text-destructive sm:col-span-2">
           {failure}

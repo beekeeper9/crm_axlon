@@ -11,6 +11,7 @@ export type ApiRequestOptions<TSchema extends z.ZodType> = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   /** Имена параметров в camelCase — в snake_case их переводит клиент */
   query?: Record<string, QueryValue>
+  /** JSON (ключи переводятся в snake_case) или FormData — уходит как есть, имена полей уже в snake_case */
   body?: unknown
   /** Схема ответа (в camelCase): каждый ответ backend проверяется перед использованием. */
   schema: TSchema
@@ -67,7 +68,9 @@ type SendOptions = {
 
 async function send(path: string, options: SendOptions): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json" }
-  if (options.body !== undefined) headers["Content-Type"] = "application/json"
+  // multipart/form-data: заголовок с границей частей проставляет fetch
+  const isForm = options.body instanceof FormData
+  if (options.body !== undefined && !isForm) headers["Content-Type"] = "application/json"
   if (options.accessToken) headers.Authorization = `Bearer ${options.accessToken}`
   if (options.tenant) headers["X-Tenant"] = options.tenant
 
@@ -76,7 +79,7 @@ async function send(path: string, options: SendOptions): Promise<Response> {
     return await fetch(buildUrl(path, options.query), {
       method: options.method,
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(keysToSnake(options.body)),
+      body: options.body === undefined ? undefined : isForm ? (options.body as FormData) : JSON.stringify(keysToSnake(options.body)),
       signal: options.signal,
       cache: "no-store",
     })
