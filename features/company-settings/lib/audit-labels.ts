@@ -64,6 +64,11 @@ const VERB_LABELS: Record<string, string> = {
   item_updated: "изменён пункт",
   reordered: "изменён порядок",
   rejected: "отклонено",
+  confirmed: "подтверждена",
+  // Единственный директор подтвердил собственную оплату (решение владельца 03.11.2026)
+  self_confirmed: "директор подтвердил свою оплату",
+  meeting_rescheduled: "встреча перенесена",
+  outcome_rescheduled: "перенесена на новую дату",
 }
 
 export function resourceLabel(resourceType: string): string {

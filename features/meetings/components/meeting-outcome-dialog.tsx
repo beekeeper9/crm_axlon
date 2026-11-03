@@ -131,7 +131,7 @@ function OutcomeForm({
 
       {result === "rescheduled" && (
         <div className="grid gap-2">
-          <Label htmlFor="meeting-new-date">Новая дата и время (если известна)</Label>
+          <Label htmlFor="meeting-new-date">Новая дата и время</Label>
           <Input
             id="meeting-new-date"
             type="datetime-local"
@@ -140,7 +140,7 @@ function OutcomeForm({
             aria-invalid={Boolean(errors.rescheduledTo)}
           />
           {errors.rescheduledTo && <p className="text-xs text-destructive">{errors.rescheduledTo}</p>}
-          <p className="text-xs text-muted-foreground">Не договорились о дате — оставьте пустым: встреча будет «перенос без даты» и попадёт в хвосты.</p>
+          <p className="text-xs text-muted-foreground">Перенос сохраняется только с новой датой — договоритесь о ней с клиентом.</p>
         </div>
       )}
 

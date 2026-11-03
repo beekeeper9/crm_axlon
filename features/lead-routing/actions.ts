@@ -12,7 +12,6 @@ import { getActionAuth } from "@/lib/auth/token-store"
 const inputSchema = z.object({
   enabled: z.boolean(),
   memberIds: z.array(z.string().min(1)).refine((ids) => new Set(ids).size === ids.length, "Менеджер указан дважды"),
-  requireOnShift: z.boolean(),
   skipOnAbsence: z.boolean(),
   isCompanyIntake: z.boolean().optional(),
 })

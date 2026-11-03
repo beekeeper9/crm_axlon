@@ -102,8 +102,8 @@ export async function recordMeetingOutcomeAction(meetingId: string, values: Meet
   try {
     await recordMeetingOutcome(await getActionAuth(), meetingId, {
       result: parsed.data.result,
-      // Перенос без новой даты — явное состояние «перенос без даты», оно попадает в хвосты CRM
-      newStart: parsed.data.result === "rescheduled" && parsed.data.rescheduledTo ? companyWallTimeToIso(parsed.data.rescheduledTo) : null,
+      // Перенос всегда с новой датой: схема формы и backend (meeting_date_required) это проверяют
+      newStart: parsed.data.result === "rescheduled" ? companyWallTimeToIso(parsed.data.rescheduledTo) : null,
       durationMinutes: DEFAULT_DURATION_MINUTES,
       comment: parsed.data.comment || null,
       reason: parsed.data.result === "no_show" ? parsed.data.reason || null : null,

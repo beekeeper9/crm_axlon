@@ -156,7 +156,7 @@
 
 **Оплаты с чеком (решение владельца 03.11.2026; backend `payments` 0003, frontend `features/payments`):**
 - `POST /payments/` — `multipart/form-data` через BFF `POST /payment-receipts`: `amount`, `currency?`, `kind` (`prepayment` | `full` | `additional`), `paid_on`, `deal_id`, `close_sale` (оплата внесена с этапа «Продажа»), `receipt` (PDF, JPEG, PNG, WEBP, HEIC до 10 МБ; обязателен, кроме возврата). Без чека → 400. Новая оплата `status: pending_verification`, в продажи, KPI и план не входит.
-- `GET /payments/review/` — очередь «на проверке» (РОП — свой отдел, директор — компания; менеджер → 403). `POST /payments/{id}/confirm/`, `POST /payments/{id}/reject/ {reason}` — РОП или директор, не автор оплаты; повторное решение → 409. Подтверждение оплаты с `close_sale` закрывает сделку на «Продажа» (история этапов, аудит, событие `deal_won`).
+- `GET /payments/review/` — очередь «на проверке» (РОП — свой отдел, директор — компания; менеджер → 403). `POST /payments/{id}/confirm/`, `POST /payments/{id}/reject/ {reason}` — РОП или директор, не автор оплаты; исключение — единственный активный директор компании подтверждает собственные оплаты (в журнале `payment.self_confirmed`); повторное решение → 409. Подтверждение оплаты с `close_sale` закрывает сделку на «Продажа» (история этапов, аудит, событие `deal_won`).
 - `GET /payments/{id}/receipt/` — файл чека (BFF `GET /payment-receipts/{paymentId}`), видимость — как у оплаты.
 - `GET /payments/deals/{deal_id}/summary/` — цена сделки, получено (только подтверждённые), на проверке, долг, история оплат со статусом, загрузившим и датой загрузки чека. Возвраты — отдельные записи, история не удаляется.
 - Проверка чека сейчас ручная (`ManualReviewVerifier`): автоматическое чтение суммы требует OCR / разбора PDF — зависимость не согласована.
@@ -179,7 +179,7 @@
 
 **Подключено (02.11.2026):** список `GET /meetings/` (`period` → `date_from/date_to` в днях компании, ведущий → `owner_id`, лид → `subject_type=deal&subject_id`, `status`), назначение `POST /meetings/` (по сделке, длительность 60 мин — в форме её нет) и итог `POST /meetings/{id}/outcome/` (перенос — с новой датой). Перевод: `scheduled` + `confirmed_at` → «подтверждена»; `outcomeRequired` = запланирована и время окончания прошло — **считает frontend по ответу**, т. к. backend флага не отдаёт (фильтр «Без итога» уточняется в пределах страницы до 100 встреч); «подтверждение не отправлялось» backend не хранит — без `confirmed_at` показывается «не подтвердил». Не подключено: поиск (нет у backend), отмена и ручное подтверждение в интерфейсе.
 
-Итог `held` для встречи по сделке или клиенту принимает `next_step` (задача: название, срок) и требует его, если открытой задачи со сроком нет (400 `next_step_required`); то же для `POST …/complete/`. В «Итоге встречи» и «После встречи» поля следующего шага уходят вместе с итогом — задача создаётся в той же транзакции.
+Итог `rescheduled` требует `new_start` и `new_end` (иначе 400 `meeting_date_required`): перенос без даты больше не сохраняется (решение владельца 03.11.2026). Итог `held` для встречи по сделке или клиенту принимает `next_step` (задача: название, срок) и требует его, если открытой задачи со сроком нет (400 `next_step_required`); то же для `POST …/complete/`. В «Итоге встречи» и «После встречи» поля следующего шага уходят вместе с итогом — задача создаётся в той же транзакции.
 
 ### После встречи — `features/after-meeting/schemas.ts`
 
@@ -190,7 +190,7 @@
 
 ### Распределение лидов — `features/lead-routing` (решение владельца 03.11.2026)
 
-`GET|PUT /leads/routing/` — правило отдела. `PUT`: `enabled`, `member_ids` (пусто — все менеджеры отдела), `require_on_shift`, `skip_on_absence`, `is_company_intake?`. Ответ: те же поля плюс `department_id`, `last_assigned_user_id`, `updated_by`, `updated_at`, `is_default` и `candidates[]` (`user_id`, `full_name`, `selected`, `on_shift`, `absent`, `eligible` — «получит лид» по текущему состоянию). Распределение по кругу (round-robin) среди менеджеров отдела; лиды, созданные менеджером, остаются у него; если подходящих нет — лид остаётся у создателя, РОП получает уведомление. Изменять — РОП (свой отдел) и директор; страница `/settings/lead-routing`.
+`GET|PUT /leads/routing/` — правило отдела. `PUT`: `enabled`, `member_ids` (пусто — все менеджеры отдела), `require_on_shift`, `skip_on_absence`, `is_company_intake?`. Ответ: те же поля плюс `department_id`, `last_assigned_user_id`, `updated_by`, `updated_at`, `is_default` и `candidates[]` (`user_id`, `full_name`, `selected`, `on_shift`, `absent`, `eligible` — «получит лид» по текущему состоянию). Распределение по кругу (round-robin) только среди активных менеджеров продаж отдела, которые на смене (лидорубы не участвуют; `require_on_shift: false` → 400, поле во frontend не передаётся); лиды, созданные менеджером, остаются у него; если подходящих нет — лид остаётся у создателя, РОП получает уведомление. Изменять — РОП (свой отдел) и директор; страница `/settings/lead-routing`.
 
 ### База клиентов — `features/clients/schemas.ts`
 

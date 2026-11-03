@@ -28,7 +28,6 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
   // Пустой список на backend = все активные менеджеры отдела
   const [everyone, setEveryone] = useState(initial.memberIds.length === 0)
   const [memberIds, setMemberIds] = useState<string[]>(initial.memberIds)
-  const [requireOnShift, setRequireOnShift] = useState(initial.requireOnShift)
   const [skipOnAbsence, setSkipOnAbsence] = useState(initial.skipOnAbsence)
   const [isCompanyIntake, setIsCompanyIntake] = useState(initial.isCompanyIntake)
   const [isPending, startTransition] = useTransition()
@@ -48,7 +47,6 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
       const error = await saveLeadRoutingAction(departmentId, {
         enabled,
         memberIds: everyone ? [] : memberIds,
-        requireOnShift,
         skipOnAbsence,
         ...(canChooseIntake ? { isCompanyIntake } : {}),
       })
@@ -109,10 +107,8 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
 
       <fieldset className="space-y-2 rounded-xl px-4 py-3 ring-1 ring-border" disabled={disabled}>
         <legend className="px-1 text-sm font-medium">Условия</legend>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4" checked={requireOnShift} onChange={(event) => setRequireOnShift(event.target.checked)} />
-          Только тем, кто на смене (начал рабочий день)
-        </label>
+        {/* Правило владельца (03.11.2026): лиды получают только менеджеры продаж на смене; лидорубы не участвуют */}
+        <p className="text-sm text-muted-foreground">Лиды получают только менеджеры продаж, которые на смене (начали рабочий день).</p>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" className="size-4" checked={skipOnAbsence} onChange={(event) => setSkipOnAbsence(event.target.checked)} />
           Пропускать тех, кто в отпуске, на больничном или в отгуле

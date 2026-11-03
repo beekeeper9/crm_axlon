@@ -54,7 +54,11 @@ export const meetingOutcomeFormSchema = z
     nextStepTitle: z.string().trim().max(200, "Не длиннее 200 символов").optional(),
     nextStepDue: z.union([z.iso.date("Укажите срок"), z.literal("")]).optional(),
   })
-  // Перенос без даты допустим: это явное состояние, которое попадает в хвосты CRM
+  // Перенос — только с новой датой и временем (решение владельца 03.11.2026)
+  .refine((values) => values.result !== "rescheduled" || Boolean(values.rescheduledTo), {
+    message: "Укажите новую дату и время встречи",
+    path: ["rescheduledTo"],
+  })
   .refine((values) => values.result !== "held" || !values.nextStepTitle || Boolean(values.nextStepDue), {
     message: "Укажите срок следующего шага",
     path: ["nextStepDue"],

@@ -32,6 +32,7 @@ describe("журнал изменений", () => {
   it("подписи действий по-русски, неизвестное — как есть", () => {
     expect(actionLabel("deal.stage_changed")).toBe("Сделка: смена этапа")
     expect(actionLabel("customer.reassigned")).toBe("Клиент: смена ответственного")
+    expect(actionLabel("payment.self_confirmed")).toBe("Оплата: директор подтвердил свою оплату")
     expect(actionLabel("robot.exploded")).toBe("robot.exploded")
   })
 
