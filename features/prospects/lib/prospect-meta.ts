@@ -27,6 +27,7 @@ export const PROSPECT_HISTORY_LABELS: Record<string, string> = {
   "lead.disqualified": "Отмечен как неподходящий",
   "lead.converted": "Конвертирован в клиента",
   "lead.reassigned": "Сменился ответственный",
+  "lead.auto_assigned": "Назначен автоматически",
 }
 
 export const PROSPECT_FIELD_LABELS: Record<string, string> = {
