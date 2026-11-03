@@ -45,14 +45,17 @@ export async function CompanyPlanWidget({ month = companyDateOf(nowIso()).slice(
       name: department.name,
       sales: target(own, "monthly_sales")?.target ?? null,
       money: target(own, "monthly_turnover")?.target ?? null,
+      moneyCurrency: target(own, "monthly_turnover")?.currency ?? null,
     }
   })
+  // Деньги складываются только в одной валюте: план отдела в другой валюте в сумму не входит
+  const mismatched = money?.currency ? rows.filter((row) => row.money !== null && row.moneyCurrency !== money.currency) : []
   const checks = [
     { title: "Продажи", plan: sales, parts: rows.map((row) => row.sales ?? "0"), format: (value: string) => formatDecimal(Number(value)) },
     {
       title: "Деньги",
       plan: money,
-      parts: rows.map((row) => row.money ?? "0"),
+      parts: rows.map((row) => (row.money !== null && row.moneyCurrency === money?.currency ? row.money : "0")),
       format: (value: string) => (money?.currency ? formatDecimalMoney(value, money.currency) : formatDecimal(Number(value))),
     },
   ].filter((check) => check.plan !== null)
@@ -103,11 +106,18 @@ export async function CompanyPlanWidget({ month = companyDateOf(nowIso()).slice(
                 <p className="text-meta text-muted-foreground tabular-nums">
                   {sales && `продаж: ${row.sales === null ? "не задано" : formatDecimal(Number(row.sales))}`}
                   {sales && money && " · "}
-                  {money && `денег: ${row.money === null ? "не задано" : money.currency ? formatDecimalMoney(row.money, money.currency) : row.money}`}
+                  {money &&
+                    `денег: ${row.money === null ? "не задано" : formatDecimalMoney(row.money, row.moneyCurrency ?? money.currency ?? companyCurrency)}`}
                 </p>
               </li>
             ))}
           </ul>
+          {mismatched.length > 0 && (
+            <p className="text-meta text-warning">
+              В другой валюте и не учтены в распределении: {mismatched.map((row) => row.name).join(", ")}. Нажмите «Распределить план» — планы
+              отделов перейдут в валюту плана компании.
+            </p>
+          )}
           {checks.map((check) => {
             const status = distributionStatus(check.plan?.target ?? "0", check.parts)
             return (

@@ -5,7 +5,7 @@ import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
-import { PLAN_METRICS, parseTarget } from "@/features/departments/lib/plan-distribution"
+import { distributionBody, PLAN_METRICS, parseTarget } from "@/features/departments/lib/plan-distribution"
 import { apiRequest } from "@/lib/api/client"
 import { ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { getActionAuth } from "@/lib/auth/token-store"
@@ -21,6 +21,9 @@ const BACKEND_MESSAGES: Array<[RegExp, string]> = [
   [/Department not found/i, "Отдел не найден — возможно, его удалили. Обновите страницу."],
   [/Currency must be/i, "Валюта — трёхбуквенный код, например KGS или USD."],
   [/Only a director/i, "Планы компании и отделов задаёт директор."],
+  [/must be in the company plan currency \((\w{3})\)/i, "План отдела должен быть в валюте плана компании."],
+  [/already distributed in another currency/i, "План компании уже распределён по отделам в другой валюте. Смените валюту в «Распределить план» — она изменится у компании и отделов вместе."],
+  [/Each metric may appear only once|Each department may appear only once/i, "Отдел или показатель указан дважды — обновите страницу и повторите."],
 ]
 
 async function save(operation: () => Promise<unknown>): Promise<PlanActionResult> {
@@ -86,26 +89,32 @@ export async function setPlansAction(input: z.input<typeof planSchema>): Promise
 
 const distributionSchema = z.object({
   period: z.string().regex(MONTH, "Месяц — в формате ГГГГ-ММ"),
-  metric: z.enum(PLAN_METRICS),
-  parts: z.array(z.object({ departmentId: z.string().min(1), target: z.string() })).min(1, "Нет отделов для распределения"),
+  distributions: z
+    .array(
+      z.object({
+        metric: z.enum(PLAN_METRICS),
+        /** Только для денег: новая валюта плана компании и всех отделов на этот месяц */
+        currency: z.string().regex(/^[A-Z]{3}$/, "Выберите валюту").optional(),
+        parts: z.array(z.object({ departmentId: z.string().min(1), target: z.string() })).min(1, "Нет отделов для распределения"),
+      })
+    )
+    .min(1, "Нечего распределять"),
 })
 
+export type DistributionInput = z.input<typeof distributionSchema>
+
 /**
- * Распределение плана компании по отделам одной операцией (`POST /plans/distribute/`):
- * backend проверяет, что части в сумме равны плану компании, и меняет планы отделов
- * только этим явным действием директора.
+ * Распределение плана компании по отделам — одной операцией для количества и денег
+ * (`POST /plans/distribute/`): backend проверяет все показатели и сохраняет всё в одной
+ * транзакции, поэтому частично сохранённого распределения не бывает. Планы отделов
+ * меняются только этим явным действием директора.
  */
-export async function distributePlanAction(input: z.input<typeof distributionSchema>): Promise<PlanActionResult> {
+export async function distributePlanAction(input: DistributionInput): Promise<PlanActionResult> {
   const parsed = distributionSchema.safeParse(input)
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Проверьте поля"
-  const parts = parsed.data.parts.map((part) => ({ departmentId: part.departmentId, target: parseTarget(part.target === "" ? "0" : part.target) }))
-  if (parts.some((part) => part.target === null)) return "Доли отделов — числа, например 5 или 250000."
+  const body = distributionBody(parsed.data)
+  if (!body) return "Доли отделов — числа, например 5 или 250000."
   return save(async () =>
-    apiRequest("/api/v1/plans/distribute/", {
-      method: "POST",
-      auth: await getActionAuth(),
-      body: { metric: parsed.data.metric, period: parsed.data.period, parts },
-      schema: z.unknown(),
-    })
+    apiRequest("/api/v1/plans/distribute/", { method: "POST", auth: await getActionAuth(), body, schema: z.unknown() })
   )
 }

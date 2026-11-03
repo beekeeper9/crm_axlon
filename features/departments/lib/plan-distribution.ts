@@ -50,3 +50,24 @@ export function distributionStatus(companyTarget: string, parts: readonly string
   const remaining = toCents(companyTarget) - total
   return { distributed: fromCents(total), remaining: fromCents(remaining), isExact: remaining === 0 }
 }
+
+export type MetricParts = {
+  metric: PlanMetricKey
+  /** Только для денег: новая валюта плана компании и всех отделов на этот месяц */
+  currency?: string
+  parts: readonly { departmentId: string; target: string }[]
+}
+
+/**
+ * Тело `POST /plans/distribute/`: все показатели одним запросом (backend сохраняет их в одной
+ * транзакции). null — доля отдела не число.
+ */
+export function distributionBody(input: { period: string; distributions: readonly MetricParts[] }) {
+  const distributions = input.distributions.map((item) => ({
+    metric: item.metric,
+    ...(item.metric === "monthly_turnover" && item.currency ? { currency: item.currency } : {}),
+    parts: item.parts.map((part) => ({ departmentId: part.departmentId, target: parseTarget(part.target === "" ? "0" : part.target) })),
+  }))
+  if (distributions.some((item) => item.parts.some((part) => part.target === null))) return null
+  return { period: input.period, distributions }
+}

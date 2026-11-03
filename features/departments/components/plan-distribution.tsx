@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { distributePlanAction } from "@/features/departments/actions"
-import { distributionStatus, parseTarget, type PlanMetricKey } from "@/features/departments/lib/plan-distribution"
+import { currencyOptions, distributionStatus, parseTarget, type PlanMetricKey } from "@/features/departments/lib/plan-distribution"
 import { formatDecimal, formatDecimalMoney } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -45,15 +45,17 @@ export function PlanDistribution({ month, companySales, companyMoney, currency, 
   const [failure, setFailure] = useState<string | null>(null)
   const initial = () => Object.fromEntries(rows.map((row) => [row.departmentId, { sales: clean(row.sales), money: clean(row.money) }]))
   const [values, setValues] = useState<Record<string, { sales: string; money: string }>>(initial)
+  // Валюта денег: смена здесь меняет валюту плана компании и всех отделов вместе
+  const [moneyCurrency, setMoneyCurrency] = useState(currency ?? "KGS")
 
   const metrics: { key: PlanMetricKey; field: "sales" | "money"; title: string; company: string | null; format: (value: string) => string }[] = [
     { key: "monthly_sales", field: "sales", title: "Продажи", company: companySales, format: (value) => formatDecimal(Number(value)) },
     {
       key: "monthly_turnover",
       field: "money",
-      title: `Деньги${currency ? `, ${currency}` : ""}`,
+      title: `Деньги, ${moneyCurrency}`,
       company: companyMoney,
-      format: (value) => (currency ? formatDecimalMoney(value, currency) : formatDecimal(Number(value))),
+      format: (value) => formatDecimalMoney(value, moneyCurrency),
     },
   ]
   const active = metrics.filter((metric) => metric.company !== null)
@@ -75,6 +77,7 @@ export function PlanDistribution({ month, companySales, companyMoney, currency, 
         title={active.length === 0 ? "Сначала задайте план компании" : rows.length === 0 ? "Сначала создайте отдел" : undefined}
         onClick={() => {
           setValues(initial())
+          setMoneyCurrency(currency ?? "KGS")
           setFailure(null)
           setOpen(true)
         }}
@@ -90,16 +93,18 @@ export function PlanDistribution({ month, companySales, companyMoney, currency, 
             onSubmit={(event) => {
               event.preventDefault()
               startTransition(async () => {
-                for (const metric of active) {
-                  const error = await distributePlanAction({
-                    period: month,
+                // Количество и деньги — одним запросом: при ошибке не сохраняется ничего
+                const error = await distributePlanAction({
+                  period: month,
+                  distributions: active.map((metric) => ({
                     metric: metric.key,
+                    ...(metric.key === "monthly_turnover" && moneyCurrency !== currency ? { currency: moneyCurrency } : {}),
                     parts: rows.map((row) => ({ departmentId: row.departmentId, target: values[row.departmentId]?.[metric.field] ?? "" })),
-                  })
-                  if (error) {
-                    setFailure(error)
-                    return
-                  }
+                  })),
+                })
+                if (error) {
+                  setFailure(error)
+                  return
                 }
                 setOpen(false)
                 router.refresh()
@@ -144,6 +149,27 @@ export function PlanDistribution({ month, companySales, companyMoney, currency, 
                 </tbody>
               </table>
             </div>
+
+            {companyMoney !== null && (
+              <label className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Валюта денежного плана</span>
+                <select
+                  value={moneyCurrency}
+                  onChange={(e) => setMoneyCurrency(e.target.value)}
+                  className="h-8 rounded-md border bg-background px-2"
+                  aria-label="Валюта денежного плана"
+                >
+                  {currencyOptions(currency ?? "KGS").map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+                {moneyCurrency !== currency && (
+                  <span className="text-meta text-warning">Валюта изменится у плана компании и у всех отделов на этот месяц.</span>
+                )}
+              </label>
+            )}
 
             <dl className="grid gap-2 sm:grid-cols-2">
               {active.map((metric) => {
