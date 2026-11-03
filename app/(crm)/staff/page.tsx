@@ -10,22 +10,23 @@ import { getCurrentUser } from "@/lib/session/current-user"
 export const metadata: Metadata = { title: "Сотрудники" }
 
 /** Доступ проверяется на сервере; данные и создание аккаунтов backend проверяет ещё раз */
-async function Content() {
-  const user = await getCurrentUser()
+async function Content({ searchParams }: Pick<PageProps<"/staff">, "searchParams">) {
+  const [user, params] = await Promise.all([getCurrentUser(), searchParams])
   if (!hasPermission(user.role, "staff.manage")) redirect(homeRouteFor(user.role))
   return <StaffListView
       canHire={hasPermission(user.role, "staff.hire")}
       canDecide={hasPermission(user.role, "staff.approve")}
       currentUserId={user.id}
       currentLogin={user.login}
+      params={params}
     />
 }
 
-export default function Page() {
+export default function Page({ searchParams }: PageProps<"/staff">) {
   return (
     <div className="mx-auto max-w-screen-lg">
       <Suspense fallback={<StaffSkeleton />}>
-        <Content />
+        <Content searchParams={searchParams} />
       </Suspense>
     </div>
   )

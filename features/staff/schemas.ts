@@ -12,7 +12,10 @@ const refSchema = z.object({ id: z.string(), name: z.string() })
 export const accountStatusSchema = z.enum(["active", "invited", "deactivated"])
 
 export const staffMemberSchema = z.object({
+  /** Членство в компании (действия «Пароль», «Отключить» адресуются по нему) */
   id: z.string(),
+  /** Пользователь: по нему связаны смены, планы и записи CRM */
+  userId: z.string(),
   login: z.string(),
   fullName: z.string(),
   role: z.enum(ROLES),
@@ -37,6 +40,8 @@ export const createOptionsSchema = z.object({
   fixedDepartment: refSchema.nullable(),
   /** Можно ли задать логин вручную (иначе сервер сгенерирует) */
   loginIsOptional: z.boolean(),
+  /** Отделы, где уже есть действующий РОП: второго туда назначить нельзя */
+  departmentsWithHead: z.array(z.string()).default([]),
 })
 
 /** Ответ на создание: временный пароль приходит один раз и больше нигде не хранится */

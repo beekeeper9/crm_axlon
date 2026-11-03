@@ -18,7 +18,8 @@ import { platformCompanyRoute, platformTicketRoute, routes } from "@/config/rout
 import * as platform from "@/features/platform/api/platform-repository"
 import { CompanyCreateForm } from "@/features/platform/components/company-create-form"
 import { CompanyActiveControl, CompanyNameForm, ErrorStatusControl, SubscriptionForm, TicketUpdateForm } from "@/features/platform/components/platform-controls"
-import { PlatformNav, type PlatformSection } from "@/features/platform/components/platform-nav"
+import { DirectorCredentialsButton } from "@/features/platform/components/director-credentials-button"
+import type { PlatformSection } from "@/features/platform/components/platform-nav"
 import { ACCESS_META, ERROR_STATUS_META, FEATURE_LABELS, HISTORY_LABELS, PLAN_LABELS, TICKET_KIND_LABELS, TICKET_STATUS_META } from "@/features/platform/labels"
 import {
   ACCESS_STATES,
@@ -41,12 +42,11 @@ import { applyParamPatch, getPageParam, getParam, toUrlSearchParams, type Search
 
 const PAGE_SIZE = 25
 
-/** Обёртка раздела: заголовок, вкладки панели и честное сообщение для демо-режима */
-function PlatformPage({ section, title, description, actions, children }: { section: PlatformSection; title: string; description?: string; actions?: React.ReactNode; children: React.ReactNode }) {
+/** Обёртка раздела: заголовок и честное сообщение для демо-режима. Разделы панели — в верхнем меню */
+function PlatformPage({ title, description, actions, children }: { section: PlatformSection; title: string; description?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-5">
       <PageHeader title={title} description={description} actions={actions} />
-      <PlatformNav active={section} />
       {isMockDataSource ? (
         <ListPanel>
           <EmptyState
@@ -599,6 +599,11 @@ export async function PlatformCompanyView({ companyId }: { companyId: string }) 
                             ? `Последний вход ${formatDateTime(director.lastLogin)}`
                             : "Активен"}
                     </p>
+                    {director.status !== "deactivated" && (
+                      <div className="pt-1.5">
+                        <DirectorCredentialsButton companyId={company.id} companyName={company.name} director={director} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

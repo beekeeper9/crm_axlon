@@ -8,8 +8,9 @@ import { PASSWORD_MIN_LENGTH } from "@/config/auth"
 import { isMockDataSource } from "@/config/env"
 import { homeRouteFor } from "@/config/navigation"
 import { routes } from "@/config/routes"
+import { toggleOwnSession } from "@/features/staff/api/work-sessions"
 import { changeOwnPassword, fetchMe, logout, obtainTokens, type Me } from "@/lib/api/auth-api"
-import type { TokenPair, TokenStore } from "@/lib/api/auth-session"
+import type { ApiAuth, TokenPair, TokenStore } from "@/lib/api/auth-session"
 import { API_ERROR_MESSAGES, ApiError } from "@/lib/api/errors"
 import { TENANT_COOKIE, tokenCookieOptions } from "@/lib/auth/cookies"
 import { getActionAuth, writableTokenStore } from "@/lib/auth/token-store"
@@ -161,7 +162,10 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
         otpRequired: false,
       }
     }
-    if (me.memberships.length === 1) await setTenant(me.memberships[0].tenant)
+    if (me.memberships.length === 1) {
+      await setTenant(me.memberships[0].tenant)
+      await markWork({ tokens: fixedTokenStore(tokens), tenant: me.memberships[0].tenant, refreshOnUnauthorized: false }, "start")
+    }
     const role = roleOf(me)
     if (me.mustChangePassword) destination = routes.changePassword
     else if (!role) destination = `${routes.selectCompany}${next ? `?next=${encodeURIComponent(next)}` : ""}`
@@ -174,6 +178,18 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
   redirect(destination)
 }
 
+/**
+ * Вход в компанию начинает рабочую смену, выход из системы — завершает («во сколько начал и
+ * закончил работу» для РОПа и директора). Ошибка отметки не мешает входу и выходу.
+ */
+async function markWork(auth: ApiAuth, action: "start" | "stop"): Promise<void> {
+  try {
+    await toggleOwnSession(auth, action)
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error
+  }
+}
+
 /** Выбор компании проверяется по списку членств из /me/, а не верится на слово */
 export async function selectCompany(formData: FormData): Promise<void> {
   if (isMockDataSource) redirect(routes.myDay)
@@ -182,6 +198,7 @@ export async function selectCompany(formData: FormData): Promise<void> {
   const membership = me.memberships.find((item) => item.tenant === slug)
   if (!membership) redirect(routes.selectCompany)
   await setTenant(membership.tenant)
+  await markWork({ ...(await getActionAuth()), tenant: membership.tenant }, "start")
   redirect(safeReturnPath(formData.get("next")) ?? homeRouteFor(uiRoleFromBackend(membership.role)))
 }
 
@@ -192,6 +209,7 @@ export async function signOut(): Promise<void> {
     store.delete(DEMO_SESSION_COOKIE)
     redirect(routes.login)
   }
+  await markWork(await getActionAuth(), "stop")
   try {
     await logout(await getActionAuth())
   } catch {

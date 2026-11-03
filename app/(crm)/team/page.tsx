@@ -7,7 +7,7 @@ import { CabinetView, CabinetViewSkeleton } from "@/features/team-cabinet"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
-export const metadata: Metadata = { title: "Кабинет РОПа" }
+export const metadata: Metadata = { title: "Мой кабинет" }
 
 type TeamPageProps = PageProps<"/team">
 

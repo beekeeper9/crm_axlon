@@ -109,6 +109,24 @@ export async function createCompanyAction(input: NewCompanyForm): Promise<Action
   }
 }
 
+/** Новый временный пароль директора компании; старый пароль и сессии директора отзываются */
+export async function issueDirectorCredentialsAction(
+  companyId: string,
+  userId: string
+): Promise<ActionResult<{ login: string; temporaryPassword: string }>> {
+  if (!(await isPlatformAdmin())) return DENIED
+  try {
+    const credentials = await platform.issueDirectorCredentials(await getActionAuth(), companyId, userId)
+    revalidatePath(routes.platformCompanies, "layout")
+    return { ok: true, data: credentials }
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "not_found") {
+      return { ok: false, message: "Этот пользователь больше не активный директор компании. Обновите страницу.", fieldErrors: {}, requestId: error.requestId ?? null }
+    }
+    return failure(error)
+  }
+}
+
 export type TermsForm = z.input<typeof termsSchema>
 
 export async function setSubscriptionAction(companyId: string, input: TermsForm): Promise<ActionResult> {

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createStaffAccount, type CreateStaffState } from "@/features/staff/actions"
+import { DEPARTMENT_HAS_HEAD_MESSAGE } from "@/features/staff/lib/staff-messages"
 import type { CreateOptions } from "@/features/staff/schemas"
 import { ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 
@@ -33,6 +34,9 @@ function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: Create
   const [departmentId, setDepartmentId] = useState<string | null>(state.status === "error" ? state.values.departmentId || null : null)
   const [role, setRole] = useState<Role | null>(options.creatableRole)
   const isRequest = options.mode === "request"
+  // В отделе не больше одного РОПа: отделы, где он уже есть, для новой роли РОПа закрыты
+  const headTaken = (id: string) => role === "head_of_sales" && options.departmentsWithHead.includes(id)
+  const noFreeDepartment = role === "head_of_sales" && options.departments.length > 0 && options.departments.every((d) => headTaken(d.id))
 
   if (state.status === "created") {
     const { account } = state
@@ -89,7 +93,7 @@ function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: Create
   return (
     <form action={formAction} className="space-y-5" noValidate>
       <p className="rounded-lg bg-muted/50 px-3 py-2 text-meta">
-        {isRequest ? "Заявка на сотрудника" : "Новый аккаунт"}
+        Добавить сотрудника
         {options.fixedDepartment && <> · отдел «{options.fixedDepartment.name}»</>}.{" "}
         {isRequest ? "Аккаунт создаст директор, когда одобрит заявку." : "Роли доступны по вашим правам; сервер проверит их ещё раз."}
       </p>
@@ -138,12 +142,16 @@ function CreateStaffRound({ options, backHref, isDemo, onCreateAnother }: Create
             </SelectTrigger>
             <SelectContent>
               {options.departments.map((department) => (
-                <SelectItem key={department.id} value={department.id}>
+                <SelectItem key={department.id} value={department.id} disabled={headTaken(department.id)}>
                   {department.name}
+                  {headTaken(department.id) && " — уже есть РОП"}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {(noFreeDepartment || (departmentId !== null && headTaken(departmentId))) && (
+            <p className="text-xs text-warning">{DEPARTMENT_HAS_HEAD_MESSAGE}</p>
+          )}
         </Field>
       )}
 

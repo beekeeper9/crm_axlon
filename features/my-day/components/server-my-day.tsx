@@ -1,4 +1,4 @@
-import { Suspense } from "react"
+import { Fragment, Suspense } from "react"
 import Link from "next/link"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
@@ -10,6 +10,8 @@ import { fetchServerDay, type PlanProgress } from "@/features/my-day/api/my-day-
 import { FocusDeals, FocusDealsSkeleton } from "@/features/my-day/components/focus-deals"
 import { MonthMetrics } from "@/features/my-day/components/month-metrics"
 import { WorkSessionCard } from "@/features/my-day/components/work-session-card"
+import { fetchEffectiveLayout, type WorkspaceBlockId } from "@/features/workspace"
+import { DEFAULT_LAYOUT } from "@/features/workspace/lib/blocks"
 import { tryLoad } from "@/lib/api/load"
 import { formatDecimal, formatDecimalMoney, formatNumber } from "@/lib/format"
 
@@ -25,69 +27,86 @@ function amount(plan: PlanProgress, value: string): string {
   return plan.unit === "money" && plan.currency ? formatDecimalMoney(value, plan.currency) : formatDecimal(Number(value))
 }
 
-/** «Мой день» в режиме api: только то, что считает backend */
+/**
+ * «Мой день» в режиме api: только то, что считает backend. Порядок и видимость блоков задаёт
+ * руководитель в «Рабочем пространстве»; если раскладку загрузить не удалось — порядок по умолчанию.
+ */
 export async function ServerMyDayView({ userId }: { userId: string }) {
-  const result = await tryLoad(() => fetchServerDay(userId))
+  const [result, layout] = await Promise.all([tryLoad(() => fetchServerDay(userId)), tryLoad(fetchEffectiveLayout)])
   if (!result.ok) return <ApiErrorState error={result.error} />
   const day = result.data
 
-  return (
-    <div className="space-y-4">
-      <WorkSessionCard session={day.session} />
-
+  const blocks: Record<WorkspaceBlockId, React.ReactNode> = {
+    work_session: <WorkSessionCard session={day.session} />,
+    counters: (
       <div className="grid gap-3 sm:grid-cols-3">
         <Counter label="Задачи на сегодня" value={day.tasksToday} href={routes.tasks} />
         <Counter label="Просроченные задачи" value={day.tasksOverdue} href={routes.tasks} tone="danger" />
         <Counter label="Встречи сегодня" value={day.meetingsToday} href={routes.meetings} />
       </div>
-
-      <section aria-labelledby="my-plans" className="space-y-2.5">
-        <h2 id="my-plans" className="text-base font-semibold">
-          Мои планы
-        </h2>
-        {day.plans.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Личный план на текущий период не задан — его ставит руководитель.</p>
-        ) : (
-          <ListPanel>
-            <ul className="divide-y">
-              {day.plans.map((plan) => {
-                const percent = plan.percent === null ? null : Number(plan.percent)
-                return (
-                  <li key={plan.id} className="space-y-1.5 px-4 py-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                      <span className="font-medium">{METRIC_LABELS[plan.metric] ?? plan.metric}</span>
-                      <span className="tabular-nums">
-                        {plan.actual === null ? "—" : amount(plan, plan.actual)} из {amount(plan, plan.target)}
-                        {percent !== null && <span className="text-muted-foreground"> · {formatNumber(Math.round(percent))}%</span>}
-                      </span>
-                    </div>
-                    {percent !== null && (
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                        <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(percent, 100)}%` }} />
-                      </div>
-                    )}
-                    {plan.remaining !== null && Number(plan.remaining) > 0 && (
-                      <p className="text-meta text-muted-foreground">Осталось: {amount(plan, plan.remaining)}</p>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </ListPanel>
-        )}
-      </section>
-
+    ),
+    plans: <PlansBlock plans={day.plans} />,
+    month_metrics: (
       <Suspense fallback={<Skeleton className="h-24 w-full rounded-xl" />}>
         <MonthMetrics />
       </Suspense>
-
+    ),
+    focus_deals: (
       <WidgetErrorBoundary title="Сделки в приоритете">
         <Suspense fallback={<FocusDealsSkeleton />}>
           <FocusDeals userId={userId} />
         </Suspense>
       </WidgetErrorBoundary>
+    ),
+  }
+  const order = layout.ok ? layout.data.blocks : DEFAULT_LAYOUT
 
+  return (
+    <div className="space-y-4">
+      {order.filter((block) => block.visible).map((block) => (
+        <Fragment key={block.id}>{blocks[block.id]}</Fragment>
+      ))}
     </div>
+  )
+}
+
+function PlansBlock({ plans }: { plans: readonly PlanProgress[] }) {
+  return (
+    <section aria-labelledby="my-plans" className="space-y-2.5">
+      <h2 id="my-plans" className="text-base font-semibold">
+        Мои планы
+      </h2>
+      {plans.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Личный план на текущий период не задан — его ставит руководитель.</p>
+      ) : (
+        <ListPanel>
+          <ul className="divide-y">
+            {plans.map((plan) => {
+              const percent = plan.percent === null ? null : Number(plan.percent)
+              return (
+                <li key={plan.id} className="space-y-1.5 px-4 py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                    <span className="font-medium">{METRIC_LABELS[plan.metric] ?? plan.metric}</span>
+                    <span className="tabular-nums">
+                      {plan.actual === null ? "—" : amount(plan, plan.actual)} из {amount(plan, plan.target)}
+                      {percent !== null && <span className="text-muted-foreground"> · {formatNumber(Math.round(percent))}%</span>}
+                    </span>
+                  </div>
+                  {percent !== null && (
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(percent, 100)}%` }} />
+                    </div>
+                  )}
+                  {plan.remaining !== null && Number(plan.remaining) > 0 && (
+                    <p className="text-meta text-muted-foreground">Осталось: {amount(plan, plan.remaining)}</p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </ListPanel>
+      )}
+    </section>
   )
 }
 

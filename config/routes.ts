@@ -16,6 +16,8 @@ export const routes = {
   assistant: "/assistant",
   workspace: "/workspace",
   team: "/team",
+  heads: "/heads",
+  departments: "/departments",
   login: "/login",
   selectCompany: "/select-company",
   changePassword: "/change-password",
@@ -39,6 +41,11 @@ export function teamMemberRoute(managerId: string): string {
 
 export function leadRoute(leadId: string): string {
   return `${routes.leads}/${encodeURIComponent(leadId)}`
+}
+
+/** Страница отдела продаж: показатели отдела, РОП и его менеджеры */
+export function departmentRoute(departmentId: string): string {
+  return `${routes.departments}/${encodeURIComponent(departmentId)}`
 }
 
 /** Карточка входящего лида (до конвертации в клиента) */

@@ -18,11 +18,11 @@ import {
   Sparkles,
   Sun,
   Target,
+  TriangleAlert,
   UserCheck,
   type LucideIcon,
 } from "lucide-react"
 
-import { isMockDataSource } from "@/config/env"
 import { routes, type AppRoute } from "@/config/routes"
 import { hasPermission, type Permission, type Role } from "@/lib/permissions/roles"
 
@@ -32,6 +32,8 @@ export type NavItem = {
   icon: LucideIcon
   /** Если указано — пункт виден только ролям с этим правом */
   permission?: Permission
+  /** Активен только на своём адресе, а не на вложенных (например, «Обзор» платформы) */
+  exact?: boolean
 }
 
 export type NavGroup = {
@@ -41,10 +43,14 @@ export type NavGroup = {
 
 const item = {
   myDay: { title: "Мой день", href: routes.myDay, icon: Sun, permission: "my_day.view" },
-  cabinet: { title: "Кабинет РОПа", href: routes.team, icon: Gauge, permission: "cabinet.view" },
+  cabinet: { title: "Мой кабинет", href: routes.team, icon: Gauge, permission: "cabinet.view" },
+  heads: { title: "РОПы", href: routes.heads, icon: Gauge, permission: "company.view" },
   company: { title: "Компания", href: routes.company, icon: Building2, permission: "company.view" },
   staff: { title: "Сотрудники", href: routes.staff, icon: UsersRound, permission: "staff.manage" },
-  platform: { title: "Платформа", href: routes.platform, icon: ShieldCheck, permission: "platform.manage" },
+  platform: { title: "Обзор", href: routes.platform, icon: ShieldCheck, permission: "platform.manage", exact: true },
+  platformCompanies: { title: "Компании", href: routes.platformCompanies, icon: Building2, permission: "platform.manage" },
+  platformErrors: { title: "Ошибки", href: routes.platformErrors, icon: TriangleAlert, permission: "platform.manage" },
+  platformTickets: { title: "Обращения", href: routes.platformTickets, icon: LifeBuoy, permission: "platform.manage" },
   support: { title: "Поддержка", href: routes.support, icon: LifeBuoy, permission: "support.contact" },
   focus: { title: "Фокус", href: routes.focus, icon: Target },
   sales: { title: "Продажи", href: routes.sales, icon: Handshake },
@@ -52,7 +58,7 @@ const item = {
   meetings: { title: "Встречи", href: routes.meetings, icon: CalendarDays },
   tasks: { title: "Задачи", href: routes.tasks, icon: ListChecks },
   calls: { title: "Звонки", href: routes.calls, icon: Phone },
-  dailyReports: { title: "Отчёты дня", href: routes.dailyReports, icon: FileBarChart },
+  dailyReports: { title: "Отчёты", href: routes.dailyReports, icon: FileBarChart, permission: "cabinet.view" },
   review: { title: "Работа над ошибками", href: routes.review, icon: MessageSquareWarning },
   leads: { title: "Список", href: routes.leads, icon: ClipboardList },
   prospects: { title: "Входящие лиды", href: routes.prospects, icon: Inbox },
@@ -68,14 +74,13 @@ const item = {
 } satisfies Record<string, NavItem>
 
 /**
- * Верхняя панель зависит от рабочего пространства:
- * менеджер начинает с «Моего дня» и работы со своими сделками,
- * руководитель — с «Кабинета РОПа» и контроля встреч, задач и звонков.
+ * Верхняя панель зависит от роли: менеджер начинает с «Моего дня», РОП — с «Моего кабинета»,
+ * директор — с «Компании» и «РОПов», администратор платформы — с её разделов.
  */
 const personalNavigation: readonly NavItem[] = [item.myDay, item.focus, item.prospects, item.sales, item.afterMeeting, item.meetings, item.tasks]
 const teamNavigation: readonly NavItem[] = [item.cabinet, item.sales, item.meetings, item.tasks, item.calls, item.staff]
-const directorNavigation: readonly NavItem[] = [item.company, item.cabinet, item.sales, item.staff]
-const platformNavigation: readonly NavItem[] = [item.platform]
+const directorNavigation: readonly NavItem[] = [item.company, item.heads, item.sales, item.staff]
+const platformNavigation: readonly NavItem[] = [item.platform, item.platformCompanies, item.platformErrors, item.platformTickets]
 
 export function primaryNavigationFor(role: Role): NavItem[] {
   if (hasPermission(role, "platform.manage")) return visibleFor(platformNavigation, role)
@@ -99,29 +104,35 @@ export function homeRouteFor(role: Role): AppRoute {
 /** Отдельная кнопка ИИ-помощника в верхней панели */
 export const assistantNavItem: NavItem = item.assistant
 
-/** Меню «Все разделы» — полный каталог экранов */
-export const allSections: readonly NavGroup[] = [
+/** Меню «Все разделы» директора — согласованный состав */
+const directorSections: readonly NavGroup[] = [
+  { title: "Работа", items: [item.tasks, item.calls, item.sales, item.focus] },
+  { title: "Контроль", items: [item.dailyReports, item.clientBase] },
+  { title: "Инструменты", items: [item.assistant, item.workspace, item.support] },
+]
+
+/** Меню «Все разделы» остальных ролей — полный каталог экранов */
+const teamSections: readonly NavGroup[] = [
   { title: "Рабочее", items: [item.myDay, item.meetings, item.tasks, item.calls] },
   { title: "Продажи", items: [item.sales, item.afterMeeting, item.focus] },
-  // «Отчёты дня» и «Работа над ошибками» ждут backend (отчёты и разборы ИИ) — в режиме api скрыты
-  { title: "Контроль продаж", items: isMockDataSource ? [item.cabinet, item.dailyReports, item.review] : [item.cabinet] },
+  { title: "Контроль продаж", items: [item.cabinet, item.dailyReports, item.review] },
   { title: "Поиск", items: [item.prospects, item.leads, item.clientBase] },
-  // ИИ-помощник — отдельный модуль; в режиме api пункт скрыт, пока модуль не подключён
-  { title: "Материалы", items: isMockDataSource ? [item.materials, item.assistant] : [item.materials] },
-  {
-    title: "Управление",
-    items: isMockDataSource
-      ? [item.company, item.staff, item.platform, item.workspace, item.support]
-      : [item.company, item.staff, item.platform, item.support],
-  },
+  { title: "Материалы", items: [item.materials, item.assistant] },
+  { title: "Управление", items: [item.staff, item.workspace, item.support] },
 ]
+
+export function allSectionsFor(role: Role): NavGroup[] {
+  if (hasPermission(role, "platform.manage")) return []
+  const groups = hasPermission(role, "company.view") ? directorSections : teamSections
+  return groups.map((group) => ({ ...group, items: visibleFor(group.items, role) })).filter((group) => group.items.length > 0)
+}
 
 const allItems: readonly NavItem[] = Object.values(item)
 
 /** Находит раздел по пути — для заголовков и активного пункта. */
 export function findNavItem(pathname: string): NavItem | undefined {
   return allItems.find(
-    (navItem) => pathname === navItem.href || pathname.startsWith(`${navItem.href}/`)
+    (navItem) => pathname === navItem.href || (!navItem.exact && pathname.startsWith(`${navItem.href}/`))
   )
 }
 
@@ -131,5 +142,5 @@ export function visibleFor<T extends NavItem>(items: readonly T[], role: Role): 
 }
 
 export function isNavItemActive(navItem: NavItem, pathname: string): boolean {
-  return pathname === navItem.href || pathname.startsWith(`${navItem.href}/`)
+  return pathname === navItem.href || (!navItem.exact && pathname.startsWith(`${navItem.href}/`))
 }

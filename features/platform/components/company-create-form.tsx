@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { platformCompanyRoute, routes } from "@/config/routes"
 import { createCompanyAction, type ActionResult } from "@/features/platform/actions"
+import { DirectorCredentialsButton } from "@/features/platform/components/director-credentials-button"
 import { ActionError, ChoiceSelect, defaultFeatures, FeatureChecklist, FormField, planOptions } from "@/features/platform/components/platform-controls"
 import { FEATURE_LABELS, PLAN_LABELS } from "@/features/platform/labels"
 import type { Catalog, CreatedCompany, Feature, PlanCode } from "@/features/platform/schemas"
@@ -46,9 +47,19 @@ export function CompanyCreateForm({ catalog, today }: { catalog: Catalog; today:
           { label: "Модули", value: sub?.features?.length ? sub.features.map((f) => FEATURE_LABELS[f]).join(", ") : "Только основа CRM" },
         ]}
         actions={
-          <Link href={platformCompanyRoute(created.company.id)} className={buttonVariants({ variant: "outline", size: "lg" })}>
-            Открыть карточку компании
-          </Link>
+          <>
+            {created.company.directors[0] && (
+              <DirectorCredentialsButton
+                companyId={created.company.id}
+                companyName={created.company.name}
+                director={created.company.directors[0]}
+                label="Сгенерировать пароль заново"
+              />
+            )}
+            <Link href={platformCompanyRoute(created.company.id)} className={buttonVariants({ variant: "outline", size: "lg" })}>
+              Открыть карточку компании
+            </Link>
+          </>
         }
       />
     )

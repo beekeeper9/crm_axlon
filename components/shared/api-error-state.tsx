@@ -39,6 +39,11 @@ const BY_CODE: Record<string, { icon: LucideIcon; title: string; description: st
     title: "Подписка компании неактивна",
     description: "Срок подписки истёк или она приостановлена. Обратитесь к директору или в поддержку платформы.",
   },
+  ai_disabled: {
+    icon: Lock,
+    title: "ИИ не подключён",
+    description: "На сервере не включено подключение к AI Platform. Обратитесь к администратору платформы.",
+  },
   feature_not_in_plan: {
     icon: Lock,
     title: "Модуль не входит в тариф компании",

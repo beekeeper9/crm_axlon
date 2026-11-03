@@ -56,6 +56,7 @@ function toMember(account: DemoAccount): StaffMember {
   const creator = account.createdById ? demoAccount(account.createdById) : null
   return {
     id: account.id,
+    userId: account.id,
     login: account.login,
     fullName: account.fullName,
     role: account.role,
@@ -181,6 +182,7 @@ const httpStaffRepository: StaffRepository = {
     ])
     return staff.results.map((member) => ({
       id: member.id,
+      userId: member.userId,
       login: member.login,
       fullName: member.fullName || member.login,
       role: uiRoleFromBackend(member.role),
@@ -193,7 +195,14 @@ const httpStaffRepository: StaffRepository = {
   },
 
   async getCreateOptions() {
-    const options = await apiRequest("/api/v1/staff/create-options/", { auth: await getRenderAuth(), schema: backendCreateOptionsSchema })
+    const auth = await getRenderAuth()
+    const options = await apiRequest("/api/v1/staff/create-options/", { auth, schema: backendCreateOptionsSchema })
+    // Где РОП уже есть, второго назначить нельзя (правило backend): форма подсказывает заранее
+    const heads = options.creatableRoles.includes("head_of_sales")
+      ? (await apiRequest("/api/v1/staff/", { auth, schema: paginatedSchema(backendStaffSchema) })).results.filter(
+          (member) => member.role === "head_of_sales" && member.status !== "deactivated" && member.department
+        )
+      : []
     // Порядок важности: сначала роль, ради которой чаще всего создают аккаунт
     const order = ["head_of_sales", "manager", "lead_caller", "operations", "viewer", "director"] as const
     const roles = [...new Set(options.creatableRoles.map(uiRoleFromBackend))].toSorted(
@@ -207,6 +216,7 @@ const httpStaffRepository: StaffRepository = {
       departments: options.fixedDepartmentId ? [] : options.departments.map((department) => ({ id: department.id, name: department.name })),
       fixedDepartment: ref(fixed),
       loginIsOptional: true,
+      departmentsWithHead: [...new Set(heads.map((member) => member.department?.id ?? ""))].filter(Boolean),
     })
   },
 

@@ -86,7 +86,7 @@ const backendTaskSchema = z.object({
   body: z.string().nullable(),
   dueDate: z.iso.date().nullable(),
   taskStatus: z.enum(["open", "completed", "cancelled"]),
-  taskType: z.enum(["call", "meeting", "follow_up", "other"]).nullable(),
+  taskType: z.enum(["call", "meeting", "follow_up", "other", "review"]).nullable(),
   priority: z.enum(["low", "normal", "high", "urgent"]).nullable(),
   assigneeUserId: z.string().nullable(),
   createdBy: z.string().nullable(),
@@ -104,6 +104,8 @@ const TASK_TYPES: Record<NonNullable<z.infer<typeof backendTaskSchema>["taskType
   call: "call",
   meeting: "meeting",
   follow_up: "todo",
+  // Задача «Работы над ошибками» — обычная задача в списке, пакеты — в разделе «Работа над ошибками»
+  review: "todo",
   other: "todo",
 }
 

@@ -45,8 +45,8 @@ export async function AppHeader() {
       <PrimaryNav role={user.role} />
       {/* Администратор платформы управляет доступом, а не продажами: каталог CRM ему не нужен */}
       {!isPlatformAdmin && <AllSectionsMenu role={user.role} />}
-      {/* ИИ-помощник делает отдельный модуль; пока он не подключён, кнопка есть только в демо */}
-      {!isPlatformAdmin && isMockDataSource && <AssistantLink />}
+      {/* ИИ-помощник работает через модуль ИИ backend; без подключённой модели страница честно об этом говорит */}
+      {!isPlatformAdmin && <AssistantLink />}
 
       <div className="ml-auto flex items-center gap-2">
         {isMockDataSource && (

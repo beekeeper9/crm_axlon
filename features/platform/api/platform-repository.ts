@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 import {
   catalogSchema,
   companyDetailSchema,
@@ -61,6 +63,18 @@ export type NewCompanyInput = {
 
 export function createCompany(auth: ApiAuth, input: NewCompanyInput): Promise<CreatedCompany> {
   return apiRequest(`${BASE}/companies/`, { method: "POST", auth, body: input, schema: createdCompanySchema })
+}
+
+/**
+ * `POST …/directors/{user_id}/credentials/` — новый временный пароль директора (забыл пароль или
+ * не успели передать первые данные). Старый пароль и сессии перестают работать; пароль показывается один раз.
+ */
+export function issueDirectorCredentials(auth: ApiAuth, companyId: string, userId: string): Promise<{ login: string; temporaryPassword: string }> {
+  return apiRequest(`${BASE}/companies/${encodeURIComponent(companyId)}/directors/${encodeURIComponent(userId)}/credentials/`, {
+    method: "POST",
+    auth,
+    schema: z.object({ login: z.string(), temporaryPassword: z.string() }),
+  })
 }
 
 export function updateCompany(auth: ApiAuth, companyId: string, patch: { name?: string; isActive?: boolean }): Promise<CompanyDetail> {

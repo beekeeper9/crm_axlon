@@ -5,8 +5,9 @@ import { z } from "zod"
 
 import { routes } from "@/config/routes"
 import { staffRepository } from "@/features/staff/api/staff-repository"
+import { STAFF_BACKEND_MESSAGES, staffErrorMessage } from "@/features/staff/lib/staff-messages"
 import { createStaffFormSchema, type ApprovedRequest } from "@/features/staff/schemas"
-import { ApiError, apiErrorMessage } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors"
 import { hasPermission, ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
@@ -24,23 +25,6 @@ export type CreateStaffState =
   | { status: "requested"; request: { fullName: string; roleLabel: string; department: string } }
 
 const FIELDS: readonly FieldName[] = ["fullName", "login", "departmentId", "role"]
-
-/** Ответы backend на английском → понятные подписи полей */
-const BACKEND_MESSAGES: Record<string, string> = {
-  "This login is already taken.": "Такой логин уже занят — выберите другой",
-  "This e-mail is already used by another account.": "Этот e-mail уже используется",
-  "department_id is not an active department of this company.": "Выберите отдел своей компании",
-  "You cannot give this role.": "Эту роль вы выдать не можете",
-  "Hiring and dismissal are confirmed by the director.": "Нанимать и увольнять может только директор",
-  "You are not assigned to a department.": "Вы не назначены в отдел — обратитесь к директору",
-  "A department with this name already exists.": "Отдел с таким названием уже есть",
-  "The request has already been decided.": "По заявке уже принято решение — обновите страницу",
-}
-
-function friendly(error: ApiError): string {
-  if (error.kind === "contract_pending") return "В демо-режиме это действие не сохраняется на сервере."
-  return BACKEND_MESSAGES[error.message] ?? (error.kind === "validation" || error.kind === "conflict" ? error.message : apiErrorMessage(error))
-}
 
 /**
  * Создание аккаунта: директор — в компании, РОП — менеджера своего отдела (напрямую, без заявки;
@@ -99,10 +83,10 @@ export async function createStaffAccount(_previous: CreateStaffState, formData: 
     const fieldErrors: Partial<Record<FieldName, string>> = {}
     for (const field of FIELDS) {
       const message = error.fieldErrors?.[field]?.[0]
-      if (message) fieldErrors[field] = BACKEND_MESSAGES[message] ?? message
+      if (message) fieldErrors[field] = STAFF_BACKEND_MESSAGES[message] ?? message
     }
-    if (error.message === "This login is already taken.") fieldErrors.login = BACKEND_MESSAGES[error.message]
-    const message = Object.keys(fieldErrors).length > 0 ? null : friendly(error)
+    if (error.message === "This login is already taken.") fieldErrors.login = STAFF_BACKEND_MESSAGES[error.message]
+    const message = Object.keys(fieldErrors).length > 0 ? null : staffErrorMessage(error)
     return { status: "error", message, fieldErrors, requestId: error.requestId ?? null, values }
   }
 }
@@ -117,7 +101,7 @@ async function run<T>(operation: () => Promise<T>): Promise<RequestActionResult<
     return { ok: true, data }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error
-    return { ok: false, message: friendly(error), requestId: error.requestId ?? null }
+    return { ok: false, message: staffErrorMessage(error), requestId: error.requestId ?? null }
   }
 }
 

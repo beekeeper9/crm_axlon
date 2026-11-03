@@ -7,7 +7,7 @@ import { ChevronDown, LayoutGrid } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { allSections, isNavItemActive, visibleFor, type NavGroup } from "@/config/navigation"
+import { allSectionsFor, isNavItemActive, type NavGroup } from "@/config/navigation"
 import type { Role } from "@/lib/permissions/roles"
 
 /** Каталог всех разделов по группам; используется и в меню, и в мобильной навигации. */
@@ -21,9 +21,7 @@ export function SectionCatalog({
   className?: string
 }) {
   const pathname = usePathname()
-  const groups: NavGroup[] = allSections
-    .map((group) => ({ ...group, items: visibleFor(group.items, role) }))
-    .filter((group) => group.items.length > 0)
+  const groups: NavGroup[] = allSectionsFor(role)
 
   return (
     <div className={cn("grid gap-x-6 gap-y-5", className)}>
