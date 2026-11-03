@@ -12,6 +12,9 @@ import { markNotificationsReadAction } from "@/features/notifications/actions"
 import { formatDateTime, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
+/** Страница настроек (пункт меню добавляет родительская конфигурация маршрутов) */
+const NOTIFICATION_SETTINGS_PATH = "/profile/notifications"
+
 const CATEGORY_LABELS: Record<NotificationItem["category"], string> = {
   meeting: "Встреча",
   deal: "Сделка",
@@ -19,6 +22,7 @@ const CATEGORY_LABELS: Record<NotificationItem["category"], string> = {
   payment: "Оплата",
   system: "Система",
   ai: "ИИ",
+  task: "Задача",
 }
 
 type NotificationsPopoverProps = {
@@ -106,6 +110,11 @@ export function NotificationsPopover({ unread, items, failure }: NotificationsPo
             {error}
           </p>
         )}
+        <div className="border-t px-3 py-2">
+          <Link href={NOTIFICATION_SETTINGS_PATH} className="text-meta text-primary hover:underline">
+            Настройки уведомлений
+          </Link>
+        </div>
       </PopoverContent>
     </Popover>
   )

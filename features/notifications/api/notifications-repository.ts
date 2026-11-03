@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { MAX_REMINDER_DAYS_BEFORE, notificationCategorySchema } from "@/features/notifications/lib/categories"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 import { getRenderAuth } from "@/lib/auth/token-store"
@@ -9,7 +10,7 @@ import { getRenderAuth } from "@/lib/auth/token-store"
  * Статус доставки в Telegram backend в этом ответе не отдаёт — интерфейс его не показывает.
  */
 
-export const notificationCategorySchema = z.enum(["meeting", "deal", "lead", "payment", "system", "ai"])
+export { MAX_REMINDER_DAYS_BEFORE, notificationCategorySchema, type NotificationCategory } from "@/features/notifications/lib/categories"
 
 const backendNotificationSchema = z.object({
   id: z.string(),
@@ -103,4 +104,39 @@ export async function fetchInbox(limit: number): Promise<NotificationsInbox> {
 export async function markRead(auth: ApiAuth, notificationId: string | null): Promise<void> {
   const path = notificationId ? `/api/v1/notifications/${encodeURIComponent(notificationId)}/read/` : "/api/v1/notifications/read-all/"
   await apiRequest(path, { method: "POST", auth, schema: z.unknown() })
+}
+
+const preferencesSchema = z.object({
+  categories: z.record(z.string(), z.boolean()),
+  reminderDaysBefore: z.int().min(0).max(MAX_REMINDER_DAYS_BEFORE),
+})
+
+export type NotificationPreferences = {
+  /** Включена ли категория: всё, чего нет в ответе, считается включённым */
+  categories: Partial<Record<z.infer<typeof notificationCategorySchema>, boolean>>
+  reminderDaysBefore: number
+}
+
+function toPreferences(raw: z.infer<typeof preferencesSchema>): NotificationPreferences {
+  const known = notificationCategorySchema.options
+  return {
+    categories: Object.fromEntries(Object.entries(raw.categories).filter(([key]) => (known as readonly string[]).includes(key))),
+    reminderDaysBefore: raw.reminderDaysBefore,
+  }
+}
+
+/** `GET /notifications/preferences/` — настройки текущего пользователя */
+export async function fetchPreferences(): Promise<NotificationPreferences> {
+  return toPreferences(await apiRequest("/api/v1/notifications/preferences/", { auth: await getRenderAuth(), schema: preferencesSchema }))
+}
+
+export type PreferenceChange =
+  | { category: z.infer<typeof notificationCategorySchema>; enabled: boolean }
+  | { reminderDaysBefore: number }
+
+/** `POST /notifications/preferences/` — одна категория или срок напоминания */
+export async function savePreference(auth: ApiAuth, change: PreferenceChange): Promise<NotificationPreferences> {
+  return toPreferences(
+    await apiRequest("/api/v1/notifications/preferences/", { method: "POST", auth, body: change, schema: preferencesSchema })
+  )
 }
