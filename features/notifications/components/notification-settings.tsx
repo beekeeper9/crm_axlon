@@ -11,6 +11,12 @@ import { savePreferenceAction } from "@/features/notifications/actions"
 
 const CATEGORIES: readonly { value: NotificationCategory; label: string; description: string }[] = [
   { value: "task", label: "Задачи", description: "Напоминание о сроке, «задача просрочена», просрочки сотрудников (для РОПа)" },
+  {
+    value: "report",
+    label: "Утренний и вечерний отчёт",
+    description: "Сводка на день утром и итоги дня вечером; время задаёт директор в настройках компании",
+  },
+  { value: "inactivity", label: "Бездействие сотрудников", description: "Для РОПа: менеджеры без активности за день" },
   { value: "meeting", label: "Встречи", description: "Вам назначена встреча" },
   { value: "deal", label: "Сделки", description: "Новая сделка, где вы ответственный" },
   { value: "lead", label: "Лиды", description: "Поступил лид на вас" },

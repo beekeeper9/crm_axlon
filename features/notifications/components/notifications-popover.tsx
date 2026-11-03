@@ -23,6 +23,8 @@ const CATEGORY_LABELS: Record<NotificationItem["category"], string> = {
   system: "Система",
   ai: "ИИ",
   task: "Задача",
+  report: "Автоотчёт",
+  inactivity: "Бездействие",
 }
 
 type NotificationsPopoverProps = {

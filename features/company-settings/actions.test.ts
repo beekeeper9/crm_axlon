@@ -11,7 +11,16 @@ vi.mock("@/lib/session/current-user", () => ({ getCurrentUser: async () => ({ ro
 
 const { updateCompanySettingsAction } = await import("@/features/company-settings/actions")
 
-const VALID = { name: " Axlon ", country: "KG", currency: "KGS", timezone: "Asia/Bishkek" }
+const VALID = {
+  name: " Axlon ",
+  country: "KG",
+  currency: "KGS",
+  timezone: "Asia/Bishkek",
+  morningReportEnabled: true,
+  morningReportTime: "09:00",
+  eveningReportEnabled: true,
+  eveningReportTime: "19:00",
+}
 
 describe("настройки компании", () => {
   beforeEach(() => {
@@ -40,6 +49,21 @@ describe("настройки компании", () => {
   it("пустое название и неверная валюта — ошибки полей без запроса", async () => {
     const result = await updateCompanySettingsAction({ ...VALID, name: "  ", currency: "сом" })
     expect(result?.fieldErrors).toEqual({ name: "Укажите название компании", currency: "Выберите валюту" })
+    expect(apiRequest).not.toHaveBeenCalled()
+  })
+
+  it("расписание автоотчётов: время ЧЧ:ММ и выключение уходят на backend", async () => {
+    apiRequest.mockResolvedValue({})
+    expect(await updateCompanySettingsAction({ morningReportTime: "07:30", eveningReportEnabled: false })).toBeNull()
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/api/v1/company/",
+      expect.objectContaining({ body: { morningReportTime: "07:30", eveningReportEnabled: false } })
+    )
+  })
+
+  it("неверное время автоотчёта — ошибка поля без запроса", async () => {
+    const result = await updateCompanySettingsAction({ eveningReportTime: "25:00" })
+    expect(result?.fieldErrors).toEqual({ eveningReportTime: "Время в формате ЧЧ:ММ, например 09:00" })
     expect(apiRequest).not.toHaveBeenCalled()
   })
 

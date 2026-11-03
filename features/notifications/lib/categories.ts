@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 /** Категории уведомлений backend и правило напоминаний; без серверных зависимостей — нужен и в браузере */
-export const notificationCategorySchema = z.enum(["meeting", "deal", "lead", "payment", "system", "ai", "task"])
+export const notificationCategorySchema = z.enum(["meeting", "deal", "lead", "payment", "system", "ai", "task", "report", "inactivity"])
 
 export type NotificationCategory = z.infer<typeof notificationCategorySchema>
 

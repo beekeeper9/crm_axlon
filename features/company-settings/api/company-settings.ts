@@ -8,9 +8,11 @@ import { PAGE_LIMIT_MAX, paginatedSchema, type PageParams, type Paginated } from
 import { backendRoleSchema } from "@/lib/permissions/backend-roles"
 
 /**
- * Настройки компании (`GET/PATCH /company/`), данные для чек-листа запуска и журнал изменений
+ * Настройки компании (`GET/PATCH /company/`, включая расписание автоотчётов), данные для чек-листа запуска и журнал изменений
  * (`GET /audit/`). Работает только с backend: права и область журнала проверяет сервер.
  */
+
+const reportTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 
 const companySettingsSchema = z.object({
   id: z.string(),
@@ -19,11 +21,16 @@ const companySettingsSchema = z.object({
   country: z.string(),
   currency: currencyCodeSchema,
   timezone: z.string(),
+  /** Автоотчёты в CRM (утренний и вечерний): включены ли и во сколько по времени компании, ЧЧ:ММ */
+  morningReportEnabled: z.boolean(),
+  morningReportTime: reportTimeSchema,
+  eveningReportEnabled: z.boolean(),
+  eveningReportTime: reportTimeSchema,
 })
 
 export type CompanySettings = z.infer<typeof companySettingsSchema>
 
-export type CompanySettingsPatch = Partial<Pick<CompanySettings, "name" | "country" | "currency" | "timezone">>
+export type CompanySettingsPatch = Partial<Omit<CompanySettings, "id" | "slug">>
 
 export function fetchCompanySettings(auth: ApiAuth): Promise<CompanySettings> {
   return apiRequest("/api/v1/company/", { auth, schema: companySettingsSchema })

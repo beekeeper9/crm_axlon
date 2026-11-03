@@ -19,13 +19,21 @@ const BACKEND_MESSAGES: Array<[RegExp, string, string]> = [
   [/currency must be/i, "currency", "Код валюты — три латинские буквы, например KGS."],
   [/timezone must be/i, "timezone", "Выберите часовой пояс из списка."],
   [/^name\b/i, "name", "Укажите название компании (до 200 символов)."],
+  [/morning_report_time/i, "morningReportTime", "Укажите время утреннего отчёта, например 09:00."],
+  [/evening_report_time/i, "eveningReportTime", "Укажите время вечернего отчёта, например 19:00."],
 ]
+
+const reportTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Время в формате ЧЧ:ММ, например 09:00")
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1, "Укажите название компании").max(200, "Не длиннее 200 символов"),
   country: z.string().regex(/^[A-Z]{2}$/, "Выберите страну"),
   currency: z.string().regex(/^[A-Z]{3}$/, "Выберите валюту"),
   timezone: z.string().min(1, "Выберите часовой пояс"),
+  morningReportEnabled: z.boolean(),
+  morningReportTime: reportTime,
+  eveningReportEnabled: z.boolean(),
+  eveningReportTime: reportTime,
 })
 
 export type SettingsInput = z.input<typeof settingsSchema>
