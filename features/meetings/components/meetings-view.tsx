@@ -13,9 +13,11 @@ import { meetingsRepository } from "@/features/meetings/api/meetings-repository"
 import { MeetingsList } from "@/features/meetings/components/meetings-list"
 import { MEETING_PERIODS, MEETING_STATUS_META } from "@/features/meetings/lib/meeting-meta"
 import { meetingStatusSchema } from "@/features/meetings/schemas"
+import { fetchReferenceList } from "@/features/reference-lists"
 import { teamRepository } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { formatNumber, pluralize } from "@/lib/format"
 import { editModeFor } from "@/lib/permissions/edit-mode"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -52,10 +54,11 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
       }),
       meetingsRepository.listMeetings({ ...common, period: null, status: null, search: null, outcomeRequired: true, limit: 1 }),
       isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
+      meetingReasons(),
     ])
   )
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
-  const [result, pendingOutcome, members] = loaded.data
+  const [result, pendingOutcome, members, reasons] = loaded.data
 
   return (
     <div className="space-y-3">
@@ -124,9 +127,23 @@ export async function MeetingsView({ user, params, leadOptions }: MeetingsViewPr
         currentUser={{ id: user.id, name: user.fullName }}
         emptyTitle={onlyOutcome ? "Все итоги записаны" : "Встреч нет"}
         emptyDescription={onlyOutcome ? "По прошедшим встречам итоги заполнены." : "Выберите другой период или назначьте встречу клиенту."}
+        reasons={reasons}
       />
     </div>
   )
+}
+
+/** Активные причины отмены и неявки; без справочника формы работают со свободным текстом */
+async function meetingReasons(): Promise<{ cancel: string[]; noShow: string[] }> {
+  if (isMockDataSource) return { cancel: [], noShow: [] }
+  const auth = await getRenderAuth()
+  const labels = (key: "meeting_cancel" | "meeting_no_show") =>
+    fetchReferenceList(auth, key, true).then(
+      (items) => items.map((item) => item.label),
+      () => []
+    )
+  const [cancel, noShow] = await Promise.all([labels("meeting_cancel"), labels("meeting_no_show")])
+  return { cancel, noShow }
 }
 
 export function MeetingsViewSkeleton() {

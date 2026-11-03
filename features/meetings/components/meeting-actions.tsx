@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cancelMeetingAction, confirmMeetingAction, rescheduleMeetingAction, type MeetingActionResult } from "@/features/meetings/actions"
+import { ReasonChips } from "@/features/meetings/components/reason-chips"
 import type { Meeting } from "@/features/meetings/schemas"
 import { formatDateTime } from "@/lib/format"
 
 /** Подтверждение, перенос и отмена встречи через backend (статус — всегда ответ сервера) */
-export function MeetingActions({ meeting }: { meeting: Meeting }) {
+export function MeetingActions({ meeting, cancelReasons = [] }: { meeting: Meeting; cancelReasons?: readonly string[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [failure, setFailure] = useState<string | null>(null)
@@ -84,6 +85,7 @@ export function MeetingActions({ meeting }: { meeting: Meeting }) {
             {dialog === "cancel" ? (
               <div className="grid gap-1.5">
                 <Label htmlFor="meeting-cancel-reason">Причина</Label>
+                <ReasonChips reasons={cancelReasons} value={reason} onPick={setReason} />
                 <Textarea id="meeting-cancel-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
               </div>
             ) : (

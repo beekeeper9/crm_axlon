@@ -45,6 +45,8 @@ export const meetingOutcomeFormSchema = z
     result: z.enum(["held", "no_show", "rescheduled"]),
     rescheduledTo: z.string(),
     comment: z.string().trim().max(2000, "Не длиннее 2000 символов"),
+    /** Причина неявки (справочник компании или свой текст) — только для «Не дошёл» */
+    reason: z.string().trim().max(200, "Не длиннее 200 символов").optional(),
   })
   // Перенос без даты допустим: это явное состояние, которое попадает в хвосты CRM
 

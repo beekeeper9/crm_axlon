@@ -228,7 +228,8 @@ export async function cancelMeeting(auth: ApiAuth, meetingId: string, reason: st
 }
 
 export type NewMeeting = {
-  dealId: string
+  /** Встреча по сделке или с клиентом (из карточки клиента) */
+  subject: { type: "deal" | "customer"; id: string }
   title: string
   startsAt: string
   durationMinutes: number
@@ -238,7 +239,7 @@ export type NewMeeting = {
   notes: string | null
 }
 
-/** `POST /meetings/` — встреча по сделке. Пересечения и права проверяет backend */
+/** `POST /meetings/` — встреча по сделке или с клиентом. Пересечения и права проверяет backend */
 export async function createMeeting(auth: ApiAuth, meeting: NewMeeting): Promise<void> {
   const start = new Date(meeting.startsAt)
   await apiRequest("/api/v1/meetings/", {
@@ -248,8 +249,8 @@ export async function createMeeting(auth: ApiAuth, meeting: NewMeeting): Promise
       title: meeting.title,
       scheduledStart: start.toISOString(),
       scheduledEnd: new Date(start.getTime() + meeting.durationMinutes * 60_000).toISOString(),
-      subjectType: "deal",
-      subjectId: meeting.dealId,
+      subjectType: meeting.subject.type,
+      subjectId: meeting.subject.id,
       format: meeting.format,
       hostUserId: meeting.hostId,
       ...(meeting.location ? { location: meeting.location } : {}),
@@ -265,6 +266,8 @@ export type MeetingOutcome = {
   newStart: string | null
   durationMinutes: number
   comment: string | null
+  /** Причина неявки — для аналитики «Потери» */
+  reason?: string | null
 }
 
 /** `POST /meetings/{id}/outcome/` — итог; перенос сразу получает новую дату */
@@ -279,6 +282,7 @@ export async function recordMeetingOutcome(auth: ApiAuth, meetingId: string, out
         ? { newStart: start.toISOString(), newEnd: new Date(start.getTime() + outcome.durationMinutes * 60_000).toISOString() }
         : {}),
       ...(outcome.comment ? { comment: outcome.comment } : {}),
+      ...(outcome.result === "no_show" && outcome.reason ? { reason: outcome.reason } : {}),
     },
     schema: z.unknown(),
   })

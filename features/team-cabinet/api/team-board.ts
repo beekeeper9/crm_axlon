@@ -58,6 +58,8 @@ const managerDaySchema = z.object({
 })
 
 const teamBoardSchema = z.object({
+  /** Валюта денежных сумм ответа: backend складывает только оплаты в валюте компании */
+  currency: z.string().nullable().default(null),
   asOf: z.iso.datetime({ offset: true }),
   managers: z.array(managerDaySchema),
   totals: z.object({
@@ -92,6 +94,8 @@ const planFactRowSchema = z.object({
 })
 
 const planFactSchema = z.object({
+  /** Валюта денежных сумм ответа: backend складывает только оплаты в валюте компании */
+  currency: z.string().nullable().default(null),
   month: z.string(),
   workingDaysTotal: z.int().nonnegative(),
   workingDaysElapsed: z.int().nonnegative(),
@@ -277,6 +281,8 @@ export type PeriodFigures = z.infer<typeof periodSchema>
 export type Discipline = z.infer<typeof disciplineSchema>
 
 const memberCardSchema = z.object({
+  /** Валюта денежных сумм ответа: backend складывает только оплаты в валюте компании */
+  currency: z.string().nullable().default(null),
   userId: z.string(),
   username: z.string(),
   departmentId: z.string().nullable(),
@@ -335,6 +341,8 @@ const reportRowSchema = periodSchema.extend(disciplineSchema.shape).extend({
 })
 
 const teamReportSchema = z.object({
+  /** Валюта денежных сумм ответа: backend складывает только оплаты в валюте компании */
+  currency: z.string().nullable().default(null),
   period: z.enum(REPORT_PERIODS),
   dateFrom: z.iso.date(),
   dateTo: z.iso.date(),
@@ -357,3 +365,4 @@ export async function fetchTeamReport(period: ReportPeriod, date: string | null,
   ])
   return { ...report, rows: report.rows.map((row) => ({ ...row, name: nameOf(row) })) }
 }
+

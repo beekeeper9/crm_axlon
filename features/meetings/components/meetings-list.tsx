@@ -34,7 +34,11 @@ type MeetingsListProps = {
   emptyDescription: string
   /** Заголовок над списком (в карточке лида); без него — количество встреч */
   heading?: string
+  /** Причины отмены и неявки из справочника компании (режим api) */
+  reasons?: { cancel: readonly string[]; noShow: readonly string[] }
 }
+
+const NO_REASONS = { cancel: [], noShow: [] } as const
 
 function groupByDay(meetings: readonly Meeting[]): { day: string; meetings: Meeting[] }[] {
   const groups = new Map<string, Meeting[]>()
@@ -56,6 +60,7 @@ export function MeetingsList({
   emptyTitle,
   emptyDescription,
   heading,
+  reasons = NO_REASONS,
 }: MeetingsListProps) {
   const [demoMeetings, setMeetings] = useState<readonly Meeting[]>(initialMeetings)
   const [changedIds, setChangedIds] = useState<ReadonlySet<string>>(new Set())
@@ -192,7 +197,7 @@ export function MeetingsList({
                   isDemoChanged={changedIds.has(meeting.id)}
                   editMode={editMode}
                   onRecordOutcome={setOutcomeFor}
-                  actions={isServer ? <MeetingActions meeting={meeting} /> : undefined}
+                  actions={isServer ? <MeetingActions meeting={meeting} cancelReasons={reasons.cancel} /> : undefined}
                 />
               ))}
             </ListGroup>
@@ -203,6 +208,7 @@ export function MeetingsList({
       <MeetingOutcomeDialog
         meeting={outcomeFor}
         isServer={isServer}
+        noShowReasons={reasons.noShow}
         onOpenChange={(open) => !open && setOutcomeFor(null)}
         onSave={isServer ? saveOutcomeRemote : saveOutcome}
       />

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ReasonChips } from "@/features/meetings/components/reason-chips"
 import { meetingOutcomeFormSchema, type Meeting, type MeetingOutcomeFormValues } from "@/features/meetings/schemas"
 import { formatDateTime } from "@/lib/format"
 
@@ -25,13 +26,15 @@ type MeetingOutcomeDialogProps = {
   /** Через backend — сообщение об ошибке или null при успехе */
   onSave: (meeting: Meeting, values: MeetingOutcomeFormValues) => void | Promise<string | null>
   isServer?: boolean
+  /** Причины неявки из справочника компании */
+  noShowReasons?: readonly string[]
 }
 
-export function MeetingOutcomeDialog({ meeting, onOpenChange, onSave, isServer = false }: MeetingOutcomeDialogProps) {
+export function MeetingOutcomeDialog({ meeting, onOpenChange, onSave, isServer = false, noShowReasons = [] }: MeetingOutcomeDialogProps) {
   return (
     <Dialog open={meeting !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {meeting && <OutcomeForm key={meeting.id} meeting={meeting} isServer={isServer} onCancel={() => onOpenChange(false)} onSave={onSave} />}
+        {meeting && <OutcomeForm key={meeting.id} meeting={meeting} isServer={isServer} noShowReasons={noShowReasons} onCancel={() => onOpenChange(false)} onSave={onSave} />}
       </DialogContent>
     </Dialog>
   )
@@ -40,11 +43,13 @@ export function MeetingOutcomeDialog({ meeting, onOpenChange, onSave, isServer =
 function OutcomeForm({
   meeting,
   isServer,
+  noShowReasons,
   onCancel,
   onSave,
 }: {
   meeting: Meeting
   isServer: boolean
+  noShowReasons: readonly string[]
   onCancel: () => void
   onSave: MeetingOutcomeDialogProps["onSave"]
 }) {
@@ -53,6 +58,7 @@ function OutcomeForm({
   const [result, setResult] = useState<MeetingOutcomeFormValues["result"] | null>(null)
   const [rescheduledTo, setRescheduledTo] = useState("")
   const [comment, setComment] = useState("")
+  const [reason, setReason] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function submit(event: React.FormEvent) {
@@ -61,7 +67,7 @@ function OutcomeForm({
       setErrors({ result: "Выберите итог встречи" })
       return
     }
-    const parsed = meetingOutcomeFormSchema.safeParse({ result, rescheduledTo, comment })
+    const parsed = meetingOutcomeFormSchema.safeParse({ result, rescheduledTo, comment, reason: result === "no_show" ? reason : undefined })
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message])))
       return
@@ -127,6 +133,22 @@ function OutcomeForm({
           />
           {errors.rescheduledTo && <p className="text-xs text-destructive">{errors.rescheduledTo}</p>}
           <p className="text-xs text-muted-foreground">Не договорились о дате — оставьте пустым: встреча будет «перенос без даты» и попадёт в хвосты.</p>
+        </div>
+      )}
+
+      {result === "no_show" && (
+        <div className="grid gap-2">
+          <Label htmlFor="meeting-no-show-reason">Причина неявки</Label>
+          <ReasonChips reasons={noShowReasons} value={reason} onPick={setReason} />
+          <Input
+            id="meeting-no-show-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={200}
+            placeholder={noShowReasons.length ? "Выберите выше или напишите свою" : "Например: не дозвонились накануне"}
+            aria-invalid={Boolean(errors.reason)}
+          />
+          {errors.reason && <p className="text-xs text-destructive">{errors.reason}</p>}
         </div>
       )}
 

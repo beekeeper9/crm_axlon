@@ -2,6 +2,7 @@ import { Fragment, Suspense } from "react"
 import Link from "next/link"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
+import { ProgressChart } from "@/components/shared/inline-charts"
 import { ListPanel } from "@/components/shared/list-panel"
 import { WidgetErrorBoundary } from "@/components/shared/widget-error-boundary"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -100,6 +101,7 @@ function PlansBlock({ plans }: { plans: readonly PlanProgress[] }) {
                   {plan.remaining !== null && Number(plan.remaining) > 0 && (
                     <p className="text-meta text-muted-foreground">Осталось: {amount(plan, plan.remaining)}</p>
                   )}
+                  {plan.daily.length > 1 && <PlanChart plan={plan} />}
                 </li>
               )
             })}
@@ -107,6 +109,23 @@ function PlansBlock({ plans }: { plans: readonly PlanProgress[] }) {
         </ListPanel>
       )}
     </section>
+  )
+}
+
+/** Накопительный факт по дням против равномерного плана (пунктир); числа — backend */
+function PlanChart({ plan }: { plan: PlanProgress }) {
+  const totalDays = Math.round((Date.parse(plan.periodEnd) - Date.parse(plan.periodStart)) / 86_400_000) + 1
+  return (
+    <figure className="space-y-1">
+      <ProgressChart
+        label={`${METRIC_LABELS[plan.metric] ?? plan.metric}: факт по дням против равномерного плана`}
+        points={plan.daily.map((day) => ({ day: day.date, value: Number(day.actual) }))}
+        target={Number(plan.target)}
+        totalDays={totalDays}
+        height={140}
+      />
+      <figcaption className="text-meta text-muted-foreground">Линия — факт с начала периода, пунктир — сколько положено к дню при равномерном темпе.</figcaption>
+    </figure>
   )
 }
 

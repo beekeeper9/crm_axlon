@@ -19,10 +19,12 @@ import {
   type TeamBoard,
   type TeamPlanFact,
 } from "@/features/team-cabinet/api/team-board"
+import { FunnelSection, LossesSection } from "@/features/team-cabinet/components/analytics-sections"
 import { AbsenceForm, PlanForm } from "@/features/team-cabinet/components/cabinet-forms"
 import { KpiExport } from "@/features/team-cabinet/components/kpi-export"
 import { CabinetSection, LevelDot, NumLink } from "@/features/team-cabinet/components/cabinet-parts"
 import { ABSENCE_LABELS, PLAN_METRIC_LABELS } from "@/features/team-cabinet/lib/plan-absence-meta"
+import { cabinetMoney } from "@/features/team-cabinet/lib/money"
 import { tryLoad } from "@/lib/api/load"
 import { nowIso } from "@/lib/clock"
 import { companyDateOf } from "@/lib/datetime"
@@ -36,6 +38,8 @@ const TABS = [
   { value: "plan", label: "План — факт" },
   { value: "plans", label: "Планы" },
   { value: "silence", label: "Тишина и отсутствия" },
+  { value: "funnel", label: "Воронка" },
+  { value: "losses", label: "Потери" },
 ] as const
 
 type Tab = (typeof TABS)[number]["value"]
@@ -83,6 +87,8 @@ export async function ServerCabinetView({ params }: { params: SearchParamsRecord
       {tab === "plan" && <PlanFactSection />}
       {tab === "plans" && <PlansSection params={params} />}
       {tab === "silence" && <SilenceSection />}
+      {tab === "funnel" && <FunnelSection params={params} />}
+      {tab === "losses" && <LossesSection params={params} />}
     </div>
   )
 }
@@ -386,7 +392,7 @@ function TodayTable({ board }: { board: TeamBoard }) {
                       </td>
                       <td className={td}><NumLink value={row.calls} /></td>
                       <td className={td}><NumLink value={row.paymentsCount} /></td>
-                      <td className={td}>{formatDecimal(Number(row.received))}</td>
+                      <td className={td}>{cabinetMoney(row.received, board.currency)}</td>
                       <td className={td}>
                         <NumLink value={row.tasksDueToday} href={hrefWithParams(routes.tasks, {}, { assignee: row.userId, due: "today" })} />
                         {" · "}
@@ -414,7 +420,7 @@ function TodayTable({ board }: { board: TeamBoard }) {
                   <td className={td}>{formatNumber(totals.meetingsOverdueOutcome)}</td>
                   <td className={td}>{formatNumber(totals.calls)}</td>
                   <td className={td}>{formatNumber(totals.paymentsCount)}</td>
-                  <td className={td}>{formatDecimal(Number(totals.received))}</td>
+                  <td className={td}>{cabinetMoney(totals.received, board.currency)}</td>
                   <td className={td}>
                     {formatNumber(totals.openTasks)} / {formatNumber(totals.overdueTasks)}
                   </td>
@@ -459,7 +465,7 @@ function PlanFactTable({ planFact }: { planFact: TeamPlanFact }) {
                     <td className={td}>{formatNumber(row.salesActual)}</td>
                     <td className={td}>{formatDecimal(Number(row.remainingSales))}</td>
                     <td className={td}>{formatDecimal(Number(row.forecastSales))}</td>
-                    <td className={td}>{formatDecimal(Number(row.receivedActual))}</td>
+                    <td className={td}>{cabinetMoney(row.receivedActual, planFact.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -470,7 +476,7 @@ function PlanFactTable({ planFact }: { planFact: TeamPlanFact }) {
                   <td className={td}>{formatNumber(planFact.salesActualTotal)}</td>
                   <td className={td} />
                   <td className={td}>{formatDecimal(Number(planFact.forecastSalesTotal))}</td>
-                  <td className={td}>{formatDecimal(Number(planFact.receivedTotal))}</td>
+                  <td className={td}>{cabinetMoney(planFact.receivedTotal, planFact.currency)}</td>
                 </tr>
               </tfoot>
             </table>

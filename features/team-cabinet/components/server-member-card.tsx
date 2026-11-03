@@ -7,8 +7,12 @@ import { ListPanel } from "@/components/shared/list-panel"
 import { PrintButton } from "@/components/shared/print-button"
 import { buttonVariants } from "@/components/ui/button"
 import { routes } from "@/config/routes"
+import { ScoreBars } from "@/components/shared/inline-charts"
+import { MetricHint } from "@/components/shared/metric-hint"
+import { fetchScoreHistory } from "@/features/team-cabinet/api/analytics"
 import { fetchMemberCard, type MemberCard, type PeriodFigures } from "@/features/team-cabinet/api/team-board"
 import { CabinetSection, NumLink } from "@/features/team-cabinet/components/cabinet-parts"
+import { cabinetMoney } from "@/features/team-cabinet/lib/money"
 import { tryLoad } from "@/lib/api/load"
 import { formatDayMonth, formatDecimal, formatNumber, formatPercent } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -46,8 +50,8 @@ function value(figures: PeriodFigures, row: Row): number {
   return Number(figures[row.key] ?? 0)
 }
 
-function show(n: number, money = false): string {
-  return money ? formatDecimal(n) : formatNumber(n)
+function show(n: number, money: boolean | undefined, currency: string | null): string {
+  return money ? cabinetMoney(n, currency) : formatNumber(n)
 }
 
 function ratio(raw: string | null): string {
@@ -111,6 +115,8 @@ export async function ServerMemberCardView({ managerId, dateFrom, dateTo }: { ma
         </p>
       </CabinetSection>
 
+      <ScoreHistorySection userId={card.userId} dateFrom={card.dateFrom} dateTo={card.dateTo} />
+
       <CabinetSection id="card-figures" title="Показатели периода" description="Сравнение с прошлым периодом той же длины и со средним по отделу на одного сотрудника.">
         <ListPanel>
           <div className="overflow-x-auto">
@@ -132,11 +138,11 @@ export async function ServerMemberCardView({ managerId, dateFrom, dateTo }: { ma
                   return (
                     <tr key={row.key}>
                       <td className="px-3 py-2">{row.label}</td>
-                      <td className="px-3 py-2 text-right font-medium tabular-nums">{show(now, row.money)}</td>
+                      <td className="px-3 py-2 text-right font-medium tabular-nums">{show(now, row.money, card.currency)}</td>
                       <td className={cn("px-3 py-2 text-right tabular-nums", now < before ? "text-destructive" : "text-muted-foreground")}>
-                        {show(before, row.money)}
+                        {show(before, row.money, card.currency)}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{avg === null ? "—" : row.money ? formatDecimal(avg) : formatDecimal(avg)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{avg === null ? "—" : row.money ? cabinetMoney(avg, card.currency) : formatDecimal(avg)}</td>
                     </tr>
                   )
                 })}
@@ -208,5 +214,40 @@ export async function ServerMemberCardView({ managerId, dateFrom, dateTo }: { ma
         </dl>
       </CabinetSection>
     </div>
+  )
+}
+
+/** Backend отдаёт историю оценки не больше чем за 93 дня — берём конец периода карточки */
+const SCORE_HISTORY_MAX_DAYS = 93
+
+const SCORE_NOTES: Record<string, string> = { silent: "нет активности", absent: "отсутствие по графику" }
+
+const SCORE_HISTORY_DEFINITION =
+  "Оценка дня по тому же правилу, что и в «Дне отдела»: звонки, встречи и оплаты того дня, план и продажи месяца на тот день. Открытые и просроченные задачи — как они стояли в конце дня; отменённые задачи не учитываются (время отмены не хранится). Без активности и в отсутствие оценки нет."
+
+async function ScoreHistorySection({ userId, dateFrom, dateTo }: { userId: string; dateFrom: string; dateTo: string }) {
+  const earliest = new Date(`${dateTo}T00:00:00Z`)
+  earliest.setUTCDate(earliest.getUTCDate() - (SCORE_HISTORY_MAX_DAYS - 1))
+  const from = dateFrom < earliest.toISOString().slice(0, 10) ? earliest.toISOString().slice(0, 10) : dateFrom
+  const result = await tryLoad(() => fetchScoreHistory(userId, from, dateTo))
+  if (!result.ok) return <ApiErrorState error={result.error} bare />
+  const graded = result.data.points.filter((point) => point.points !== null)
+  const average = graded.length ? graded.reduce((sum, point) => sum + (point.points ?? 0), 0) / graded.length : null
+  return (
+    <CabinetSection
+      id="card-score-history"
+      title="Оценка дня по дням"
+      description={
+        average === null
+          ? "За период нет дней с оценкой."
+          : `Дней с оценкой: ${formatNumber(graded.length)} · средняя ${formatDecimal(average)}${from !== dateFrom ? ` · показаны последние ${SCORE_HISTORY_MAX_DAYS} дней` : ""}`
+      }
+      action={<MetricHint label="Оценка дня по дням" definition={SCORE_HISTORY_DEFINITION} isOpenQuestion />}
+    >
+      <ScoreBars
+        label="Оценка дня по дням периода, 0–100 баллов"
+        points={result.data.points.map((point) => ({ day: point.day, points: point.points, grade: point.grade, note: point.reason ? SCORE_NOTES[point.reason] : null }))}
+      />
+    </CabinetSection>
   )
 }

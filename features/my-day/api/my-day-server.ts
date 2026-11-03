@@ -33,6 +33,8 @@ const planProgressSchema = z.object({
   actual: decimalStringSchema.nullable(),
   percent: decimalStringSchema.nullable(),
   remaining: decimalStringSchema.nullable(),
+  /** С `?daily=true`: накопительный факт по дням периода до сегодня */
+  daily: z.array(z.object({ date: z.iso.date(), actual: decimalStringSchema })).default([]),
 })
 
 export type PlanProgress = z.infer<typeof planProgressSchema>
@@ -59,7 +61,7 @@ export async function fetchServerDay(userId: string): Promise<ServerDay> {
     apiRequest("/api/v1/work-sessions/current/", { auth, schema: z.object({ session: workSessionSchema.nullable() }) }),
     apiRequest("/api/v1/plans/progress/", {
       auth,
-      query: { scope: "user", scopeId: userId, limit: PAGE_LIMIT_MAX },
+      query: { scope: "user", scopeId: userId, limit: PAGE_LIMIT_MAX, daily: "true" },
       schema: paginatedSchema(planProgressSchema),
     }),
     count(auth, "/api/v1/activities/", { kind: "task", assigneeId: userId, taskStatus: "open", dueFrom: today, dueTo: today }),

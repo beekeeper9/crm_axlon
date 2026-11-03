@@ -12,6 +12,7 @@ import { tryLoad } from "@/lib/api/load"
 import { formatDayMonth, formatDecimal, formatNumber, formatPercent, pluralize } from "@/lib/format"
 import { getParam, hrefWithParams, type SearchParamsRecord } from "@/lib/search-params"
 import { cn } from "@/lib/utils"
+import { cabinetMoney } from "@/features/team-cabinet/lib/money"
 
 const PERIOD_LABELS: Record<ReportPeriod, string> = { day: "День", week: "Неделя", month: "Месяц" }
 
@@ -115,7 +116,7 @@ function ReportTable({ report }: { report: TeamReport }) {
           <SummaryTile label="Состоялось" value={formatNumber(totals.meetingsHeld)} note={`доходимость ${percent(totals.attendance)}`} />
           <SummaryTile label="Продажи" value={formatNumber(totals.sales)} note={`встреча → продажа ${percent(totals.meetingToSale)}`} />
           <SummaryTile label="Оплаты" value={formatNumber(totals.paymentsCount)} note={`предоплат ${formatNumber(totals.prepayments)}`} />
-          <SummaryTile label="Получено" value={formatDecimal(Number(totals.received))} />
+          <SummaryTile label="Получено" value={cabinetMoney(totals.received, report.currency)} />
           <SummaryTile label="Задач выполнено" value={formatNumber(totals.tasksDone)} note={`звонков ${formatNumber(totals.calls)}`} />
         </dl>
         <p className="text-meta text-muted-foreground">
@@ -129,7 +130,7 @@ function ReportTable({ report }: { report: TeamReport }) {
         </h2>
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {report.rows.map((row) => (
-            <PersonCard key={row.userId} row={row} />
+            <PersonCard key={row.userId} row={row} currency={report.currency} />
           ))}
         </ul>
       </section>
@@ -150,7 +151,7 @@ function SummaryTile({ label, value, note }: { label: string; value: string; not
 const hasTails = (row: ReportRow) =>
   row.overdueTasks + row.meetingsWithoutOutcome + row.dealsWithoutNextStep + row.reschedulesWithoutDate > 0
 
-function PersonCard({ row }: { row: ReportRow }) {
+function PersonCard({ row, currency }: { row: ReportRow; currency: string | null }) {
   const plan = row.planSales === null ? null : Number(row.planSales)
   const progress = plan && plan > 0 ? Math.min(row.monthSales / plan, 1) : null
   const tails = hasTails(row)
@@ -194,7 +195,7 @@ function PersonCard({ row }: { row: ReportRow }) {
           items={[
             ["Продажи", formatNumber(row.sales)],
             ["Оплат", formatNumber(row.paymentsCount)],
-            ["Получено", formatDecimal(Number(row.received))],
+            ["Получено", cabinetMoney(row.received, currency)],
             ["Предоплат", formatNumber(row.prepayments)],
           ]}
         />
