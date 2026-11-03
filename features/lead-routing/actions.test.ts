@@ -10,7 +10,7 @@ vi.mock("@/config/env", () => ({ isMockDataSource: false }))
 
 const { saveLeadRoutingAction } = await import("@/features/lead-routing/actions")
 
-const input = { enabled: true, memberIds: ["u-1", "u-2"], skipOnAbsence: true }
+const input = { enabled: true, memberIds: ["u-1", "u-2"] }
 
 describe("сохранение автораспределения лидов", () => {
   beforeEach(() => {

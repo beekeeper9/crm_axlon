@@ -38,7 +38,6 @@ export type RoutingCandidate = z.infer<typeof candidateSchema>
 export type LeadRoutingInput = {
   enabled: boolean
   memberIds: string[]
-  skipOnAbsence: boolean
   /** Только директор; не передаётся — остаётся как есть */
   isCompanyIntake?: boolean
 }

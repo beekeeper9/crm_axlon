@@ -28,7 +28,6 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
   // Пустой список на backend = все активные менеджеры отдела
   const [everyone, setEveryone] = useState(initial.memberIds.length === 0)
   const [memberIds, setMemberIds] = useState<string[]>(initial.memberIds)
-  const [skipOnAbsence, setSkipOnAbsence] = useState(initial.skipOnAbsence)
   const [isCompanyIntake, setIsCompanyIntake] = useState(initial.isCompanyIntake)
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null)
@@ -47,7 +46,6 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
       const error = await saveLeadRoutingAction(departmentId, {
         enabled,
         memberIds: everyone ? [] : memberIds,
-        skipOnAbsence,
         ...(canChooseIntake ? { isCompanyIntake } : {}),
       })
       setMessage(error ? { tone: "error", text: error } : { tone: "ok", text: "Сохранено. Правила действуют для новых лидов." })
@@ -107,12 +105,8 @@ export function LeadRoutingForm({ departmentId, initial, canChooseIntake }: Lead
 
       <fieldset className="space-y-2 rounded-xl px-4 py-3 ring-1 ring-border" disabled={disabled}>
         <legend className="px-1 text-sm font-medium">Условия</legend>
-        {/* Правило владельца (03.11.2026): лиды получают только менеджеры продаж на смене; лидорубы не участвуют */}
-        <p className="text-sm text-muted-foreground">Лиды получают только менеджеры продаж, которые на смене (начали рабочий день).</p>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4" checked={skipOnAbsence} onChange={(event) => setSkipOnAbsence(event.target.checked)} />
-          Пропускать тех, кто в отпуске, на больничном или в отгуле
-        </label>
+        {/* Правило владельца (03.11.2026): лиды получают только менеджеры продаж на смене и не в отсутствии; лидорубы не участвуют */}
+        <p className="text-sm text-muted-foreground">Лиды получают только менеджеры продаж, которые на смене (начали рабочий день) и не в отпуске, на больничном или в отгуле.</p>
         {canChooseIntake && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="size-4" checked={isCompanyIntake} onChange={(event) => setIsCompanyIntake(event.target.checked)} />
