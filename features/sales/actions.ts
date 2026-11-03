@@ -9,15 +9,35 @@ import {
   assignDeal,
   createDeal,
   moveDealStage,
-  paymentKindSchema,
-  recordPayment,
+  type StageMoveExtras,
   reopenDeal,
   updateDeal,
 } from "@/features/sales/api/deal-mutations"
 import { ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { getActionAuth } from "@/lib/auth/token-store"
 
-export type DealActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string; requestId: string | null }
+export type DealActionResult<T = null> =
+  | { ok: true; data: T }
+  | {
+      ok: false
+      message: string
+      requestId: string | null
+      /** Код правила перехода: интерфейс дозапрашивает следующий шаг или дату встречи */
+      code?: StageMoveRuleCode
+    }
+
+/** Правила перехода по этапам, на которые интерфейс отвечает формой, а не только текстом */
+export type StageMoveRuleCode = "next_step_required" | "meeting_date_required" | "sale_requires_payment"
+
+const STAGE_RULE_MESSAGES: Record<StageMoveRuleCode, string> = {
+  next_step_required: "Запланируйте следующий шаг: задачу с названием и сроком.",
+  meeting_date_required: "Укажите новую дату и время встречи.",
+  sale_requires_payment: "«Продажа» ставится только после оплаты: внесите оплату с чеком — сделка закроется, когда её подтвердят.",
+}
+
+function isStageRuleCode(code: string | undefined | null): code is StageMoveRuleCode {
+  return code === "next_step_required" || code === "meeting_date_required" || code === "sale_requires_payment"
+}
 
 const DEMO_ONLY = { ok: false as const, message: "В демо-режиме сделки на сервер не сохраняются.", requestId: null }
 
@@ -35,6 +55,8 @@ function failure(error: unknown): DealActionResult<never> {
   if (error.code === "subscription_inactive" || error.code === "feature_not_in_plan") {
     return { ok: false, message: apiErrorMessage(error), requestId }
   }
+  if (isStageRuleCode(error.code)) return { ok: false, message: STAGE_RULE_MESSAGES[error.code], requestId, code: error.code }
+  if (error.code === "system_stage_locked") return { ok: false, message: "Это системный этап воронки: его нельзя изменить.", requestId }
   if (error.kind === "conflict" && /version|modified|changed/i.test(error.message)) {
     return { ok: false, message: "Сделку уже изменил кто-то другой. Обновите страницу и повторите.", requestId }
   }
@@ -100,14 +122,32 @@ export async function updateDealAction(
   })
 }
 
-/** Смена этапа; для этапа отказа нужна причина из справочника (комментарий — по желанию) */
+const extrasSchema = z.object({
+  meetingStart: z.iso.datetime({ offset: true }).optional(),
+  meetingEnd: z.iso.datetime({ offset: true }).optional(),
+  nextStep: z
+    .object({
+      title: z.string().trim().min(2, "Опишите следующий шаг").max(200, "Не длиннее 200 символов"),
+      dueDate: z.iso.date("Укажите срок следующего шага"),
+      assigneeUserId: z.string().nullable().optional(),
+    })
+    .optional(),
+})
+
+/**
+ * Смена этапа; для этапа отказа нужна причина из справочника (комментарий — по желанию).
+ * `extras` — новое время встречи для «Встреча перенесена» и следующий шаг для рабочего этапа.
+ */
 export async function moveDealStageAction(
   dealId: string,
   stageId: string,
-  loss: { lossReasonId: string | null; comment: string } | null = null
+  loss: { lossReasonId: string | null; comment: string } | null = null,
+  extras: StageMoveExtras = {}
 ): Promise<DealActionResult> {
+  const parsed = extrasSchema.safeParse(extras)
+  if (!parsed.success) return invalid(parsed.error)
   return run(dealId, async () => {
-    await moveDealStage(await getActionAuth(), dealId, stageId, loss && { lossReasonId: loss.lossReasonId, reason: loss.comment.trim() })
+    await moveDealStage(await getActionAuth(), dealId, stageId, loss && { lossReasonId: loss.lossReasonId, reason: loss.comment.trim() }, parsed.data)
     return null
   })
 }
@@ -122,27 +162,6 @@ export async function reopenDealAction(dealId: string): Promise<DealActionResult
 export async function assignDealAction(dealId: string, ownerUserId: string): Promise<DealActionResult> {
   return run(dealId, async () => {
     await assignDeal(await getActionAuth(), dealId, ownerUserId)
-    return null
-  })
-}
-
-const paymentSchema = z.object({
-  amount: amountSchema,
-  kind: paymentKindSchema,
-  paidOn: z.iso.date("Укажите дату оплаты"),
-  isRefund: z.boolean(),
-  reference: z.string().min(8),
-})
-
-export async function recordPaymentAction(
-  dealId: string,
-  customerId: string | null,
-  input: z.input<typeof paymentSchema>
-): Promise<DealActionResult> {
-  const parsed = paymentSchema.safeParse(input)
-  if (!parsed.success) return invalid(parsed.error)
-  return run(dealId, async () => {
-    await recordPayment(await getActionAuth(), { dealId, customerId, ...parsed.data })
     return null
   })
 }

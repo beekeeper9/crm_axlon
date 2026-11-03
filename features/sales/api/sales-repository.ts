@@ -6,6 +6,7 @@ import {
   dealSchema,
   salesConfigSchema,
   stageKindSchema,
+  systemStageSchema,
   type Board,
   type BoardColumn,
   type Deal,
@@ -131,7 +132,14 @@ const backendPipelineSchema = z.object({
   name: z.string(),
   isDefault: z.boolean(),
   stages: z.array(
-    z.object({ id: z.string(), name: z.string(), position: z.int(), kind: stageKindSchema, isActive: z.boolean() })
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      position: z.int(),
+      kind: stageKindSchema,
+      isActive: z.boolean(),
+      systemCode: systemStageSchema.nullable().optional(),
+    })
   ),
 })
 
@@ -192,7 +200,7 @@ function toPipeline(pipeline: z.infer<typeof backendPipelineSchema>): Pipeline {
   const stages = pipeline.stages
     .filter((stage) => stage.isActive)
     .toSorted((a, b) => a.position - b.position)
-    .map(({ id, name, kind }) => ({ id, name, kind }))
+    .map(({ id, name, kind, systemCode }) => ({ id, name, kind, systemCode: systemCode ?? null }))
   return { id: pipeline.id, name: pipeline.name, stages }
 }
 

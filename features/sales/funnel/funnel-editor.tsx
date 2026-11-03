@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowDown, ArrowUp, Check, LoaderCircle, Plus, Star, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, LoaderCircle, Lock, Plus, Power, Star, Trash2 } from "lucide-react"
 
 import { StatusBadge, type StatusTone } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
@@ -16,10 +16,11 @@ import {
   makeDefaultFunnelAction,
   renameStageAction,
   reorderStagesAction,
+  setStageActiveAction,
   type FunnelActionResult,
 } from "@/features/sales/funnel/funnel-actions"
 import type { Funnel, FunnelStage } from "@/features/sales/funnel/funnel-api"
-import { activeStages, isLastOfKind, KIND_LABELS, movedOrder, moveTargets } from "@/features/sales/funnel/funnel-rules"
+import { activeStages, isLastOfKind, isSaleStage, isSystemStage, KIND_LABELS, movedOrder, moveTargets } from "@/features/sales/funnel/funnel-rules"
 import { formatNumber, pluralize } from "@/lib/format"
 
 const KIND_TONES: Record<FunnelStage["kind"], StatusTone> = { open: "info", won: "success", lost: "danger" }
@@ -35,7 +36,15 @@ export function FunnelEditor({ funnel }: { funnel: Funnel }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<FunnelStage | null>(null)
   const stages = activeStages(funnel.stages)
-  const archived = funnel.stages.filter((stage) => !stage.isActive)
+  // Выключенный системный этап — не архив: его можно включить обратно
+  const switchedOff = funnel.stages.filter((stage) => !stage.isActive && stage.systemCode === "meeting_rescheduled")
+  const archived = funnel.stages.filter((stage) => !stage.isActive && !isSystemStage(stage))
+  const lastMovable = stages.filter((stage) => !isSaleStage(stage)).length - 1
+  const toggle = (stage: FunnelStage, isActive: boolean) =>
+    act(
+      () => setStageActiveAction(funnel.id, stage.id, isActive),
+      () => setNotice(isActive ? `Этап «${stage.name}» включён.` : `Этап «${stage.name}» выключен: менеджеры его не видят.`)
+    )
 
   function act<T>(operation: () => Promise<FunnelActionResult<T>>, done?: (data: T) => void) {
     startTransition(async () => {
@@ -74,10 +83,11 @@ export function FunnelEditor({ funnel }: { funnel: Funnel }) {
             key={stage.id}
             stage={stage}
             index={index}
-            isFirst={index === 0}
-            isLast={index === stages.length - 1}
+            isFirst={index === 0 || isSaleStage(stage)}
+            isLast={index >= lastMovable}
             isPending={isPending}
-            canDelete={!isLastOfKind(funnel.stages, stage.id)}
+            canDelete={!isSystemStage(stage) && !isLastOfKind(funnel.stages, stage.id)}
+            onSwitchOff={stage.systemCode === "meeting_rescheduled" ? () => toggle(stage, false) : undefined}
             onRename={(name) => act(() => renameStageAction(funnel.id, stage.id, name), () => setNotice(`Этап переименован: «${name}».`))}
             onMove={(direction) => {
               const order = movedOrder(funnel.stages, stage.id, direction)
@@ -91,6 +101,16 @@ export function FunnelEditor({ funnel }: { funnel: Funnel }) {
           />
         ))}
       </ol>
+
+      {switchedOff.map((stage) => (
+        <p key={stage.id} className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Системный этап «{stage.name}» выключен — менеджеры не могут перевести на него сделку.</span>
+          <Button size="xs" variant="outline" disabled={isPending} onClick={() => toggle(stage, true)}>
+            <Power data-icon="inline-start" aria-hidden />
+            Включить
+          </Button>
+        </p>
+      ))}
 
       <AddStageForm isPending={isPending} onAdd={(name, kind) => act(() => addStageAction(funnel.id, name, kind), () => setNotice(`Этап «${name}» добавлен.`))} />
 
@@ -145,6 +165,7 @@ function StageRow({
   onRename,
   onMove,
   onDelete,
+  onSwitchOff,
 }: {
   stage: FunnelStage
   index: number
@@ -155,9 +176,13 @@ function StageRow({
   onRename: (name: string) => void
   onMove: (direction: -1 | 1) => void
   onDelete: () => void
+  /** Только «Встреча перенесена»: системный этап, который РОП может выключить */
+  onSwitchOff?: () => void
 }) {
   const [name, setName] = useState(stage.name)
   const changed = name.trim() !== stage.name && name.trim().length > 0
+  const isSystem = isSystemStage(stage)
+  const isSale = isSaleStage(stage)
 
   return (
     <li className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:flex-nowrap">
@@ -170,8 +195,24 @@ function StageRow({
           if (changed) onRename(name.trim())
         }}
       >
-        <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} aria-label={`Название этапа ${index + 1}`} className="h-8 min-w-0" />
-        {changed && (
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={100}
+          aria-label={`Название этапа ${index + 1}`}
+          className="h-8 min-w-0"
+          readOnly={isSystem}
+          title={isSystem ? "Системный этап: название не меняется" : undefined}
+        />
+        {isSystem && (
+          <span className="shrink-0" title={isSale ? "Сделка попадает сюда только после подтверждённой оплаты; этап всегда последний" : "Переход требует новой даты встречи; этап можно передвинуть или выключить"}>
+            <StatusBadge tone="neutral">
+              <Lock className="size-3" aria-hidden />
+              Системный
+            </StatusBadge>
+          </span>
+        )}
+        {changed && !isSystem && (
           <Button type="submit" size="icon-sm" variant="outline" disabled={isPending} aria-label="Сохранить название">
             <Check aria-hidden />
           </Button>
@@ -184,22 +225,30 @@ function StageRow({
         {formatNumber(stage.openDeals ?? 0)} / {formatNumber(stage.totalDeals ?? 0)} сделок
       </span>
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <Button size="icon-sm" variant="ghost" disabled={isPending || isFirst} onClick={() => onMove(-1)} aria-label="Выше">
+        <Button size="icon-sm" variant="ghost" disabled={isPending || isFirst || isSale} onClick={() => onMove(-1)} aria-label="Выше">
           <ArrowUp aria-hidden />
         </Button>
-        <Button size="icon-sm" variant="ghost" disabled={isPending || isLast} onClick={() => onMove(1)} aria-label="Ниже">
+        <Button size="icon-sm" variant="ghost" disabled={isPending || isLast || isSale} onClick={() => onMove(1)} aria-label="Ниже">
           <ArrowDown aria-hidden />
         </Button>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          disabled={isPending || !canDelete}
-          onClick={onDelete}
-          aria-label={`Удалить этап «${stage.name}»`}
-          title={canDelete ? undefined : "Это последний этап такого вида: в воронке должен остаться хотя бы один"}
-        >
-          <Trash2 aria-hidden />
-        </Button>
+        {onSwitchOff ? (
+          <Button size="icon-sm" variant="ghost" disabled={isPending} onClick={onSwitchOff} aria-label={`Выключить этап «${stage.name}»`} title="Выключить этап">
+            <Power aria-hidden />
+          </Button>
+        ) : (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            disabled={isPending || !canDelete}
+            onClick={onDelete}
+            aria-label={`Удалить этап «${stage.name}»`}
+            title={
+              canDelete ? undefined : isSystem ? "Системный этап нельзя удалить" : "Это последний этап такого вида: в воронке должен остаться хотя бы один"
+            }
+          >
+            <Trash2 aria-hidden />
+          </Button>
+        )}
       </div>
     </li>
   )

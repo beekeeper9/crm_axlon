@@ -123,7 +123,7 @@ function CloseDealForm({
         {showErrors && !outcome && <p className="text-xs text-destructive">Выберите результат сделки</p>}
         {outcome === "won" && (
           <p className="text-xs text-muted-foreground">
-            Продажей сделка станет после первой оплаты в реестре — внесите её во вкладке «Оплата».
+            Откроется внесение оплаты с чеком. На этап «{wonStage?.name}» сделка перейдёт, когда оплату подтвердят.
           </p>
         )}
       </fieldset>
@@ -172,7 +172,7 @@ function CloseDealForm({
           Отмена
         </Button>
         <Button type="submit" variant={outcome === "lost" ? "destructive" : "default"} disabled={isPending}>
-          {outcome === "lost" ? "Закрыть как нереализованную" : "Закрыть сделку"}
+          {outcome === "lost" ? "Закрыть как нереализованную" : outcome === "won" ? "Внести оплату" : "Закрыть сделку"}
         </Button>
       </DialogFooter>
     </form>

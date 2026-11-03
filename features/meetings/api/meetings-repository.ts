@@ -268,6 +268,8 @@ export type MeetingOutcome = {
   comment: string | null
   /** Причина неявки — для аналитики «Потери» */
   reason?: string | null
+  /** Следующий шаг после состоявшейся встречи (задача по сделке) */
+  nextStep?: { title: string; dueDate: string } | null
 }
 
 /** `POST /meetings/{id}/outcome/` — итог; перенос сразу получает новую дату */
@@ -283,6 +285,7 @@ export async function recordMeetingOutcome(auth: ApiAuth, meetingId: string, out
         : {}),
       ...(outcome.comment ? { comment: outcome.comment } : {}),
       ...(outcome.result === "no_show" && outcome.reason ? { reason: outcome.reason } : {}),
+      ...(outcome.result === "held" && outcome.nextStep ? { nextStep: outcome.nextStep } : {}),
     },
     schema: z.unknown(),
   })

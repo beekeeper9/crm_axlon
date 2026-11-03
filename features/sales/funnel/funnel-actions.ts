@@ -28,6 +28,10 @@ const MESSAGES: Array<[RegExp, string]> = [
 function failure(error: unknown): FunnelActionResult<never> {
   if (!(error instanceof ApiError)) throw error
   if (error.code === "move_target_required") return { ok: false, message: "На этапе есть сделки: выберите, куда их перенести." }
+  if (error.code === "system_stage_locked") {
+    return { ok: false, message: "Это системный этап: его нельзя переименовать или удалить, а «Продажа» всегда стоит последней." }
+  }
+  if (error.code === "stage_in_use") return { ok: false, message: "На этапе есть сделки в работе: сначала переведите их на другой этап." }
   if (error.code === "stage_mapping_required") return { ok: false, message: "Выберите этап воронки отдела для каждого этапа, на котором есть сделки." }
   const known = MESSAGES.find(([pattern]) => pattern.test(error.message))
   if (known) return { ok: false, message: known[1] }
@@ -81,6 +85,13 @@ export async function renameStageAction(pipelineId: string, stageId: string, nam
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Проверьте название" }
   return run(async () => {
     await api.renameStage(await getActionAuth(), pipelineId, stageId, parsed.data)
+    return null
+  })
+}
+
+export async function setStageActiveAction(pipelineId: string, stageId: string, isActive: boolean): Promise<FunnelActionResult> {
+  return run(async () => {
+    await api.setStageActive(await getActionAuth(), pipelineId, stageId, isActive)
     return null
   })
 }

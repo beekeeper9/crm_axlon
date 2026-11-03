@@ -42,6 +42,9 @@ function failure(error: unknown, subject: "create" | "create_client" | "outcome"
     forbidden: "У вашей роли нет права на это действие.",
     validation: isCreate ? "Сервер не принял встречу: проверьте дату и ведущего." : "Сервер не принял итог: проверьте новую дату.",
   }
+  if (error.code === "next_step_required") {
+    return "Запланируйте следующий шаг: у сделки нет открытой задачи со сроком — заполните «Следующий шаг»."
+  }
   const byCode = error.code === "subscription_inactive" || error.code === "feature_not_in_plan"
   const message = byCode ? apiErrorMessage(error) : (messages[error.kind] ?? apiErrorMessage(error))
   return error.requestId ? `${message} Код запроса: ${error.requestId}` : message
@@ -104,6 +107,10 @@ export async function recordMeetingOutcomeAction(meetingId: string, values: Meet
       durationMinutes: DEFAULT_DURATION_MINUTES,
       comment: parsed.data.comment || null,
       reason: parsed.data.result === "no_show" ? parsed.data.reason || null : null,
+      nextStep:
+        parsed.data.result === "held" && parsed.data.nextStepTitle && parsed.data.nextStepDue
+          ? { title: parsed.data.nextStepTitle, dueDate: parsed.data.nextStepDue }
+          : null,
     })
     revalidatePath(routes.meetings)
     return null

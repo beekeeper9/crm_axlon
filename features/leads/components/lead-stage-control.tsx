@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { Check, Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -9,7 +8,7 @@ import { DemoNotice } from "@/components/shared/demo-notice"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import type { PipelineStage } from "@/features/sales"
-import { moveDealStageAction } from "@/features/sales/actions"
+import { useStageMove } from "@/features/sales/components/stage-move-dialog"
 import { EDIT_UNAVAILABLE_HINT, type EditMode } from "@/lib/permissions/edit-mode"
 
 type LeadStageControlProps = {
@@ -21,6 +20,8 @@ type LeadStageControlProps = {
   serverDealId?: string | null
   /** Статус сделки от backend; после «Открыть снова» он open, хотя этап может остаться закрывающим */
   isOpenDeal?: boolean
+  /** Название сделки — для окон «Следующий шаг» и «Встреча перенесена» */
+  dealTitle?: string
 }
 
 /** Путь по воронке: пройденные этапы, текущий и следующие. Этапы берутся из настроек воронки. */
@@ -31,10 +32,10 @@ export function LeadStageControl({
   editMode,
   serverDealId = null,
   isOpenDeal,
+  dealTitle = "Сделка",
 }: LeadStageControlProps) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [failure, setFailure] = useState<string | null>(null)
+  const stageMove = useStageMove()
+  const { isPending, failure } = stageMove
   const [demoStageId, setStageId] = useState(initialStageId)
   const isServer = serverDealId !== null && editMode === "unavailable"
   // Через backend текущий этап — всегда ответ сервера (после router.refresh приходит новый)
@@ -49,11 +50,8 @@ export function LeadStageControl({
 
   function select(nextStageId: string) {
     if (!isServer || !serverDealId) return setStageId(nextStageId)
-    startTransition(async () => {
-      const result = await moveDealStageAction(serverDealId, nextStageId)
-      setFailure(result.ok ? null : result.message)
-      if (result.ok) router.refresh()
-    })
+    const stage = stages.find((item) => item.id === nextStageId)
+    if (stage) stageMove.move(serverDealId, dealTitle, stage)
   }
 
   return (
@@ -103,6 +101,7 @@ export function LeadStageControl({
           {failure}
         </p>
       )}
+      {stageMove.dialog}
       {!isServer && stageId !== initialStageId && (
         <DemoNotice className="items-center">
           <span className="flex flex-wrap items-center gap-x-2">

@@ -48,6 +48,35 @@ describe("действия со сделкой", () => {
   it("для отказа передаётся причина из справочника", async () => {
     moveDealStage.mockResolvedValue(undefined)
     await moveDealStageAction("d-1", "s-lost", { lossReasonId: "r-1", comment: " дорого " })
-    expect(moveDealStage).toHaveBeenCalledWith({}, "d-1", "s-lost", { lossReasonId: "r-1", reason: "дорого" })
+    expect(moveDealStage).toHaveBeenCalledWith({}, "d-1", "s-lost", { lossReasonId: "r-1", reason: "дорого" }, {})
+  })
+
+  it("правило воронки возвращается кодом: интерфейс спросит следующий шаг, а не покажет ошибку", async () => {
+    moveDealStage.mockRejectedValue(new ApiError("validation", "Plan the next step", { code: "next_step_required" }))
+    const result = await moveDealStageAction("d-1", "s-2")
+    expect(!result.ok && result.code).toBe("next_step_required")
+    expect(!result.ok && result.message).toMatch(/следующий шаг/)
+  })
+
+  it("«Продажа» без оплаты — код sale_requires_payment и подсказка про оплату", async () => {
+    moveDealStage.mockRejectedValue(new ApiError("conflict", "set by a confirmed payment", { code: "sale_requires_payment" }))
+    const result = await moveDealStageAction("d-1", "s-sale")
+    expect(!result.ok && result.code).toBe("sale_requires_payment")
+    expect(!result.ok && result.message).toMatch(/оплат/)
+  })
+
+  it("следующий шаг и время встречи уходят в запрос; пустой шаг не отправляется", async () => {
+    moveDealStage.mockResolvedValue(undefined)
+    const extras = {
+      meetingStart: "2030-01-12T14:00:00+06:00",
+      meetingEnd: "2030-01-12T15:00:00+06:00",
+      nextStep: { title: " Позвонить ", dueDate: "2030-01-10" },
+    }
+    await moveDealStageAction("d-1", "s-2", null, extras)
+    expect(moveDealStage).toHaveBeenCalledWith({}, "d-1", "s-2", null, { ...extras, nextStep: { title: "Позвонить", dueDate: "2030-01-10" } })
+    moveDealStage.mockReset()
+    const invalid = await moveDealStageAction("d-1", "s-2", null, { nextStep: { title: "", dueDate: "2030-01-10" } })
+    expect(invalid.ok).toBe(false)
+    expect(moveDealStage).not.toHaveBeenCalled()
   })
 })

@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LeadDetail } from "@/features/leads/schemas"
-import { assignDealAction, moveDealStageAction, reopenDealAction, updateDealAction, type DealActionResult } from "@/features/sales/actions"
+import { assignDealAction, reopenDealAction, updateDealAction, type DealActionResult } from "@/features/sales/actions"
 import { CloseDealDialog, type CloseDealResult } from "@/features/sales/components/close-deal-dialog"
+import { useStageMove } from "@/features/sales/components/stage-move-dialog"
 import type { LossReason } from "@/features/sales/schemas"
 
 type Person = { id: string; name: string }
@@ -31,6 +32,8 @@ export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
   const [dialog, setDialog] = useState<"edit" | "assign" | "close" | null>(null)
   const isOpen = lead.status === "open"
   const stages = lead.pipeline.stages
+  // Закрытие идёт по правилам воронки: «Продажа» — через оплату, отказ — с причиной
+  const stageMove = useStageMove({ onMoved: () => setDialog(null) })
 
   function act(operation: () => Promise<DealActionResult>) {
     startTransition(async () => {
@@ -98,17 +101,21 @@ export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
       )}
       <CloseDealDialog
         deal={dialog === "close" ? { id: lead.id, title: lead.title } : null}
-        wonStage={stages.find((stage) => stage.kind === "won")}
+        wonStage={stages.find((stage) => stage.systemCode === "sale") ?? stages.find((stage) => stage.kind === "won")}
         lostStage={stages.find((stage) => stage.kind === "lost")}
         lossReasons={lossReasons}
         isDemo={false}
-        isPending={isPending}
-        failure={failure}
+        isPending={isPending || stageMove.isPending}
+        failure={failure ?? stageMove.failure}
         onOpenChange={(open) => !open && setDialog(null)}
-        onConfirm={({ stageId, lossReasonId, comment }: CloseDealResult) =>
-          act(() => moveDealStageAction(lead.id, stageId, stages.find((stage) => stage.id === stageId)?.kind === "lost" ? { lossReasonId, comment } : null))
-        }
+        onConfirm={({ stageId, lossReasonId, comment }: CloseDealResult) => {
+          const stage = stages.find((item) => item.id === stageId)
+          if (!stage) return
+          if (stage.kind === "won") setDialog(null)
+          stageMove.move(lead.id, lead.title, stage, stage.kind === "lost" ? { lossReasonId, comment } : null)
+        }}
       />
+      {stageMove.dialog}
     </div>
   )
 }

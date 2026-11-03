@@ -163,7 +163,11 @@ export function AfterMeetingForm({ item, editMode, onSubmit }: AfterMeetingFormP
           </div>
           {errors.nextDueAt && <p className="text-xs text-destructive">{errors.nextDueAt}</p>}
           {!values.nextTitle && (
-            <p className="text-xs text-muted-foreground">Если шаг не назначить, лид останется в группе «Нет следующего шага».</p>
+            <p className="text-xs text-muted-foreground">
+              {values.result === "held"
+                ? "После состоявшейся встречи следующий шаг обязателен, если у сделки нет открытой задачи со сроком."
+                : "Если шаг не назначить, лид останется в группе «Нет следующего шага»."}
+            </p>
           )}
         </div>
       </fieldset>

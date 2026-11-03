@@ -94,7 +94,7 @@ export function CreateFunnelForm({
           </Select>
         </div>
       </div>
-      <p className="text-meta text-muted-foreground">Этапы: {stages.map((stage) => stage.name).join(" → ")}. После создания их можно переименовать, переставить и удалить.</p>
+      <p className="text-meta text-muted-foreground">Этапы: {stages.map((stage) => stage.name).join(" → ")}. После создания их можно переименовать, переставить и удалить. Сервер добавит системный этап «Встреча перенесена», а «Продажа» всегда стоит последней: на неё сделку переводит подтверждённая оплата.</p>
       {failure && (
         <p role="alert" className="text-sm text-destructive">
           {failure}

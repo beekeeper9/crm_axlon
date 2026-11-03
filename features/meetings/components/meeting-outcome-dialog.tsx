@@ -59,6 +59,8 @@ function OutcomeForm({
   const [rescheduledTo, setRescheduledTo] = useState("")
   const [comment, setComment] = useState("")
   const [reason, setReason] = useState("")
+  const [nextStepTitle, setNextStepTitle] = useState("")
+  const [nextStepDue, setNextStepDue] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function submit(event: React.FormEvent) {
@@ -67,7 +69,13 @@ function OutcomeForm({
       setErrors({ result: "Выберите итог встречи" })
       return
     }
-    const parsed = meetingOutcomeFormSchema.safeParse({ result, rescheduledTo, comment, reason: result === "no_show" ? reason : undefined })
+    const parsed = meetingOutcomeFormSchema.safeParse({
+      result,
+      rescheduledTo,
+      comment,
+      reason: result === "no_show" ? reason : undefined,
+      ...(result === "held" ? { nextStepTitle, nextStepDue } : {}),
+    })
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message])))
       return
@@ -152,6 +160,16 @@ function OutcomeForm({
         </div>
       )}
 
+      {result === "held" && (
+        <NextStepFields
+          title={nextStepTitle}
+          due={nextStepDue}
+          errors={errors}
+          onTitle={setNextStepTitle}
+          onDue={setNextStepDue}
+        />
+      )}
+
       <div className="grid gap-2">
         <Label htmlFor="meeting-comment">Комментарий</Label>
         <Textarea
@@ -179,5 +197,48 @@ function OutcomeForm({
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+/** Следующий шаг после встречи: задача по сделке. Обязателен, если открытой задачи со сроком нет */
+function NextStepFields({
+  title,
+  due,
+  errors,
+  onTitle,
+  onDue,
+}: {
+  title: string
+  due: string
+  errors: Record<string, string>
+  onTitle: (value: string) => void
+  onDue: (value: string) => void
+}) {
+  return (
+    <fieldset className="grid gap-2 rounded-lg border p-3">
+      <legend className="px-1 text-sm font-medium">Следующий шаг</legend>
+      <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
+        <div className="grid gap-1.5">
+          <Label htmlFor="meeting-next-step">Что сделать</Label>
+          <Input
+            id="meeting-next-step"
+            value={title}
+            maxLength={200}
+            onChange={(event) => onTitle(event.target.value)}
+            placeholder="Например: отправить договор"
+            aria-invalid={Boolean(errors.nextStepTitle)}
+          />
+          {errors.nextStepTitle && <p className="text-xs text-destructive">{errors.nextStepTitle}</p>}
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="meeting-next-step-due">Срок</Label>
+          <Input id="meeting-next-step-due" type="date" value={due} onChange={(event) => onDue(event.target.value)} aria-invalid={Boolean(errors.nextStepDue)} />
+          {errors.nextStepDue && <p className="text-xs text-destructive">{errors.nextStepDue}</p>}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Станет задачей по сделке для ответственного. Обязателен, если у сделки нет открытой задачи со сроком.
+      </p>
+    </fieldset>
   )
 }

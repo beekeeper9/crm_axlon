@@ -1,15 +1,14 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button } from "@/components/ui/button"
-import { moveDealStageAction } from "@/features/sales/actions"
 import { CloseDealDialog, type CloseDealResult } from "@/features/sales/components/close-deal-dialog"
 import { DealCard } from "@/features/sales/components/deal-card"
+import { useStageMove } from "@/features/sales/components/stage-move-dialog"
 import { findDeal, moveDeal } from "@/features/sales/lib/board-state"
 import type { Board, BoardColumn, Deal, LossReason, Pipeline } from "@/features/sales/schemas"
 import { addDecimals } from "@/lib/decimal"
@@ -32,14 +31,14 @@ type LastChange = {
 }
 
 export function PipelineBoard({ board, pipeline, lossReasons, showManager, editMode }: PipelineBoardProps) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [failure, setFailure] = useState<string | null>(null)
   const [demoColumns, setColumns] = useState(board.columns)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [closingDeal, setClosingDeal] = useState<Deal | null>(null)
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
+  // Правила воронки (оплата для «Продажи», дата встречи, следующий шаг) — в окнах useStageMove
+  const stageMove = useStageMove({ onMoved: () => setClosingDeal(null) })
+  const { isPending, failure } = stageMove
 
   // Через backend доска — всегда ответ сервера: после смены этапа приходят новые props
   const isServer = editMode === "unavailable"
@@ -48,28 +47,22 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
   const stagesById = new Map(pipeline.stages.map((stage) => [stage.id, stage]))
   const openStages = pipeline.stages.filter((stage) => stage.kind === "open")
 
-  function moveOnServer(dealId: string, stageId: string, loss: { lossReasonId: string | null; comment: string } | null) {
-    startTransition(async () => {
-      const result = await moveDealStageAction(dealId, stageId, loss)
-      setFailure(result.ok ? null : result.message)
-      if (result.ok) {
-        setClosingDeal(null)
-        router.refresh()
-      }
-    })
-  }
-
   function applyMove(dealId: string, stageId: string) {
     const deal = findDeal(columns, dealId)
     const stage = stagesById.get(stageId)
     if (!deal || !stage || deal.stageId === stageId) return
-    if (isServer) return moveOnServer(dealId, stageId, null)
+    if (isServer) return stageMove.move(dealId, deal.title, stage)
     setLastChange({ dealTitle: deal.title, stageName: stage.name, previous: columns })
     setColumns(moveDeal(columns, dealId, stageId))
   }
 
   function handleClose({ dealId, stageId, lossReasonId, comment }: CloseDealResult) {
-    if (isServer) return moveOnServer(dealId, stageId, stagesById.get(stageId)?.kind === "lost" ? { lossReasonId, comment } : null)
+    const stage = stagesById.get(stageId)
+    if (isServer && stage && closingDeal) {
+      // Этап успеха открывает внесение оплаты: окно закрытия уступает ему место
+      if (stage.kind === "won") setClosingDeal(null)
+      return stageMove.move(dealId, closingDeal.title, stage, stage.kind === "lost" ? { lossReasonId, comment } : null)
+    }
     applyMove(dealId, stageId)
     setClosingDeal(null)
   }
@@ -180,19 +173,18 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
 
       <CloseDealDialog
         deal={closingDeal}
-        wonStage={pipeline.stages.find((stage) => stage.kind === "won")}
+        wonStage={pipeline.stages.find((stage) => stage.systemCode === "sale") ?? pipeline.stages.find((stage) => stage.kind === "won")}
         lostStage={pipeline.stages.find((stage) => stage.kind === "lost")}
         lossReasons={lossReasons}
         isDemo={editMode === "demo"}
         isPending={isPending}
         failure={closingDeal ? failure : null}
         onOpenChange={(open) => {
-          if (open) return
-          setClosingDeal(null)
-          setFailure(null)
+          if (!open) setClosingDeal(null)
         }}
         onConfirm={handleClose}
       />
+      {stageMove.dialog}
     </div>
   )
 }

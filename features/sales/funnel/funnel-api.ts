@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { stageKindSchema } from "@/features/sales/schemas"
+import { stageKindSchema, systemStageSchema } from "@/features/sales/schemas"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 
@@ -15,6 +15,8 @@ export const funnelStageSchema = z.object({
   position: z.int(),
   kind: stageKindSchema,
   isActive: z.boolean(),
+  /** Системный этап: «Продажа» (не меняется, всегда последний) или «Встреча перенесена» (можно выключить) */
+  systemCode: systemStageSchema.nullable().optional(),
   /** Только с `?counts=true` */
   openDeals: z.int().nonnegative().optional(),
   totalDeals: z.int().nonnegative().optional(),
@@ -66,6 +68,11 @@ export function addStage(auth: ApiAuth, pipelineId: string, stage: NewFunnelStag
 
 export function renameStage(auth: ApiAuth, pipelineId: string, stageId: string, name: string): Promise<Funnel> {
   return apiRequest(stagePath(pipelineId, stageId), { method: "PATCH", auth, body: { name }, schema: funnelSchema })
+}
+
+/** Включить или выключить этап (так РОП включает «Встречу перенесена» в своей воронке) */
+export function setStageActive(auth: ApiAuth, pipelineId: string, stageId: string, isActive: boolean): Promise<Funnel> {
+  return apiRequest(stagePath(pipelineId, stageId), { method: "PATCH", auth, body: { isActive }, schema: funnelSchema })
 }
 
 /** Порядок всех этапов воронки, включая архивные (так требует backend) */

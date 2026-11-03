@@ -14,10 +14,18 @@ export const personRefSchema = z.object({ id: z.string(), name: z.string() })
 /** open — рабочий этап; won и lost — закрытие сделки */
 export const stageKindSchema = z.enum(["open", "won", "lost"])
 
+/**
+ * Системные этапы есть в каждой воронке: «Продажа» (sale) — всегда последний, на него сделку
+ * переводит только подтверждённая оплата; «Встреча перенесена» (meeting_rescheduled) — переход
+ * требует новой даты встречи. null — обычный этап.
+ */
+export const systemStageSchema = z.enum(["sale", "meeting_rescheduled"])
+
 export const pipelineStageSchema = z.object({
   id: z.string(),
   name: z.string(),
   kind: stageKindSchema,
+  systemCode: systemStageSchema.nullable().optional(),
 })
 
 export const pipelineSchema = z.object({
@@ -74,6 +82,7 @@ export const boardSchema = z.object({
 
 export type PersonRef = z.infer<typeof personRefSchema>
 export type StageKind = z.infer<typeof stageKindSchema>
+export type SystemStage = z.infer<typeof systemStageSchema>
 export type PipelineStage = z.infer<typeof pipelineStageSchema>
 export type Pipeline = z.infer<typeof pipelineSchema>
 export type SalesConfig = z.infer<typeof salesConfigSchema>

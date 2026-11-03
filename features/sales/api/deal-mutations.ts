@@ -2,7 +2,6 @@ import { z } from "zod"
 
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
-import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 
 /**
  * Изменения сделки через backend (`/sales/deals/…`). Правила (лимиты, обязательная причина
@@ -57,12 +56,26 @@ export async function updateDeal(auth: ApiAuth, dealId: string, changes: DealCha
   })
 }
 
-/** Смена этапа; этап вида won/lost закрывает сделку (для lost backend требует причину) */
+/** Следующий шаг — задача по сделке: без него backend не переводит сделку на другой рабочий этап */
+export type NextStepInput = { title: string; dueDate: string; assigneeUserId?: string | null }
+
+/** Что нужно некоторым переходам: новое время встречи («Встреча перенесена») и следующий шаг */
+export type StageMoveExtras = {
+  meetingStart?: string
+  meetingEnd?: string
+  nextStep?: NextStepInput
+}
+
+/**
+ * Смена этапа; этап вида won/lost закрывает сделку (для lost backend требует причину).
+ * «Продажа» здесь не выбирается: её ставит только подтверждённая оплата (409 sale_requires_payment).
+ */
 export async function moveDealStage(
   auth: ApiAuth,
   dealId: string,
   stageId: string,
-  loss: { lossReasonId: string | null; reason: string } | null
+  loss: { lossReasonId: string | null; reason: string } | null,
+  extras: StageMoveExtras = {}
 ): Promise<void> {
   await apiRequest(path(dealId, "stage/"), {
     method: "POST",
@@ -71,6 +84,16 @@ export async function moveDealStage(
       stageId,
       ...(loss?.lossReasonId ? { lossReasonId: loss.lossReasonId } : {}),
       ...(loss?.reason ? { reason: loss.reason } : {}),
+      ...(extras.meetingStart && extras.meetingEnd ? { meetingStart: extras.meetingStart, meetingEnd: extras.meetingEnd } : {}),
+      ...(extras.nextStep
+        ? {
+            nextStep: {
+              title: extras.nextStep.title,
+              dueDate: extras.nextStep.dueDate,
+              ...(extras.nextStep.assigneeUserId ? { assigneeUserId: extras.nextStep.assigneeUserId } : {}),
+            },
+          }
+        : {}),
     },
     schema: dealRefSchema,
   })
@@ -82,48 +105,4 @@ export async function reopenDeal(auth: ApiAuth, dealId: string): Promise<void> {
 
 export async function assignDeal(auth: ApiAuth, dealId: string, ownerUserId: string): Promise<void> {
   await apiRequest(path(dealId, "assign/"), { method: "POST", auth, body: { ownerUserId }, schema: dealRefSchema })
-}
-
-export const paymentKindSchema = z.enum(["prepayment", "additional", "full"])
-
-export const dealPaymentSchema = z.object({
-  id: z.string(),
-  amount: decimalStringSchema,
-  currency: currencyCodeSchema,
-  kind: z.string(),
-  paidOn: z.iso.date(),
-  sellerUserId: z.string().nullable(),
-  isRefund: z.boolean(),
-  createdAt: z.iso.datetime({ offset: true }),
-})
-
-export type DealPayment = z.infer<typeof dealPaymentSchema>
-
-export type NewPayment = {
-  dealId: string
-  customerId: string | null
-  amount: string
-  kind: z.infer<typeof paymentKindSchema>
-  paidOn: string
-  isRefund: boolean
-  /** Ключ идемпотентности: повтор отправки не создаёт второй платёж */
-  reference: string
-}
-
-/** `POST /payments/` — оплата или возврат по сделке; продавец по умолчанию — тот, кто вносит */
-export async function recordPayment(auth: ApiAuth, payment: NewPayment): Promise<void> {
-  await apiRequest("/api/v1/payments/", {
-    method: "POST",
-    auth,
-    body: {
-      dealId: payment.dealId,
-      ...(payment.customerId ? { customerId: payment.customerId } : {}),
-      amount: payment.amount,
-      kind: payment.kind,
-      paidOn: payment.paidOn,
-      isRefund: payment.isRefund,
-      reference: payment.reference,
-    },
-    schema: z.object({ id: z.string() }),
-  })
 }

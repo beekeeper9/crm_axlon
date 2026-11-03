@@ -47,8 +47,22 @@ export const meetingOutcomeFormSchema = z
     comment: z.string().trim().max(2000, "Не длиннее 2000 символов"),
     /** Причина неявки (справочник компании или свой текст) — только для «Не дошёл» */
     reason: z.string().trim().max(200, "Не длиннее 200 символов").optional(),
+    /**
+     * Следующий шаг после состоявшейся встречи — задача со сроком. Backend требует его, если у
+     * сделки ещё нет открытой задачи со сроком (ответ next_step_required).
+     */
+    nextStepTitle: z.string().trim().max(200, "Не длиннее 200 символов").optional(),
+    nextStepDue: z.union([z.iso.date("Укажите срок"), z.literal("")]).optional(),
   })
   // Перенос без даты допустим: это явное состояние, которое попадает в хвосты CRM
+  .refine((values) => values.result !== "held" || !values.nextStepTitle || Boolean(values.nextStepDue), {
+    message: "Укажите срок следующего шага",
+    path: ["nextStepDue"],
+  })
+  .refine((values) => values.result !== "held" || !values.nextStepDue || Boolean(values.nextStepTitle), {
+    message: "Опишите следующий шаг",
+    path: ["nextStepTitle"],
+  })
 
 export const meetingFormSchema = z.object({
   leadId: z.string({ error: "Выберите клиента" }).min(1, "Выберите клиента"),

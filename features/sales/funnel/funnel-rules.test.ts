@@ -24,6 +24,18 @@ describe("настройка воронки", () => {
     expect(movedOrder(stages, "a", -1)).toBeNull()
   })
 
+  it("«Продажа» остаётся последней: её не двигают, и выключенные этапы встают перед ней", () => {
+    const withSystem: FunnelStage[] = [
+      stage("a", 0),
+      { ...stage("moved", 1), systemCode: "meeting_rescheduled", isActive: false },
+      stage("lost", 2, "lost"),
+      { ...stage("sale", 3, "won"), systemCode: "sale" },
+    ]
+    expect(movedOrder(withSystem, "lost", -1)).toEqual(["lost", "a", "moved", "sale"])
+    expect(movedOrder(withSystem, "lost", 1)).toBeNull()
+    expect(movedOrder(withSystem, "sale", -1)).toBeNull()
+  })
+
   it("сделки удаляемого этапа переносятся только на рабочий этап того же вида", () => {
     expect(moveTargets(stages, "b").map((item) => item.id)).toEqual(["a", "c"])
     expect(isLastOfKind(stages, "won")).toBe(true)

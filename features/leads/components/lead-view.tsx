@@ -77,6 +77,7 @@ export function LeadView({ lead, user }: LeadViewProps) {
         editMode={editModeFor(user.role)}
         serverDealId={isMockDataSource ? null : lead.id}
         isOpenDeal={lead.status === "open"}
+        dealTitle={lead.title}
       />
 
       {!isMockDataSource && hasPermission(user.role, "records.edit") && (

@@ -35,6 +35,8 @@ export async function processAfterMeetingAction(
   const auth = await getActionAuth()
   const note = [values.summary, values.agreements && `Договорённости: ${values.agreements}`].filter(Boolean).join("\n")
   let outcomeSaved = false
+  // «Состоялась» и следующий шаг уходят одним запросом: backend создаёт задачу вместе с итогом
+  const stepWithOutcome = values.needsResult && values.result === "held" && values.nextTitle.length > 0
   try {
     if (values.needsResult && values.result) {
       await recordMeetingOutcome(auth, target.meetingId, {
@@ -42,10 +44,11 @@ export async function processAfterMeetingAction(
         newStart: values.result === "rescheduled" && values.rescheduledTo ? companyWallTimeToIso(values.rescheduledTo) : null,
         durationMinutes: DURATION_MINUTES,
         comment: note || null,
+        nextStep: stepWithOutcome ? { title: values.nextTitle, dueDate: values.nextDueAt.slice(0, 10) } : null,
       })
       outcomeSaved = true
     }
-    if (values.nextTitle) {
+    if (values.nextTitle && !stepWithOutcome) {
       await createDealTask(auth, target.dealId, {
         title: values.nextTitle,
         dueDate: values.nextDueAt.slice(0, 10),
@@ -54,6 +57,8 @@ export async function processAfterMeetingAction(
         assigneeId: null,
         description: values.agreements || null,
       })
+    }
+    if (values.nextTitle) {
       const deal = await apiRequest(`/api/v1/sales/deals/${encodeURIComponent(target.dealId)}/`, { auth, schema: dealVersionSchema })
       await updateDeal(
         auth,
@@ -68,9 +73,11 @@ export async function processAfterMeetingAction(
   } catch (error) {
     if (!(error instanceof ApiError)) throw error
     const message =
-      error.kind === "conflict" && values.nextTitle
-        ? "У сделки уже две открытые задачи — выполните одну, чтобы поставить следующий шаг."
-        : apiErrorMessage(error)
+      error.code === "next_step_required"
+        ? "После состоявшейся встречи нужен следующий шаг: заполните задачу и срок."
+        : error.kind === "conflict" && values.nextTitle
+          ? "У сделки уже две открытые задачи — выполните одну, чтобы поставить следующий шаг."
+          : apiErrorMessage(error)
     return outcomeSaved ? `Итог встречи сохранён, но следующий шаг — нет: ${message}` : message
   }
 }
