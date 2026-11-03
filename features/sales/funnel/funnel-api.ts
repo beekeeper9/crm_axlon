@@ -100,3 +100,35 @@ export function listDepartments(auth: ApiAuth): Promise<{ id: string; name: stri
     schema: z.union([z.array(departmentSchema), z.object({ results: z.array(departmentSchema) }).transform((page) => page.results)]),
   })
 }
+
+export const adoptionPreviewSchema = z.object({
+  fromPipelineId: z.string(),
+  fromPipelineName: z.string(),
+  total: z.int().nonnegative(),
+  stages: z.array(z.object({ stageId: z.string(), name: z.string(), kind: stageKindSchema, openDeals: z.int().nonnegative() })),
+})
+
+export type AdoptionPreview = z.infer<typeof adoptionPreviewSchema>
+
+/**
+ * `GET …/adopt-deals/?from_pipeline_id=` — сколько открытых сделок менеджеров отдела ещё стоит
+ * в общей воронке компании, по этапам. Ничего не переносит.
+ */
+export function adoptionPreview(auth: ApiAuth, pipelineId: string, fromPipelineId: string): Promise<AdoptionPreview> {
+  return apiRequest(`${pipelinePath(pipelineId)}adopt-deals/`, { auth, query: { fromPipelineId }, schema: adoptionPreviewSchema })
+}
+
+/** `POST …/adopt-deals/` — перенос по сопоставлению этапов, подтверждённому пользователем */
+export function adoptDeals(
+  auth: ApiAuth,
+  pipelineId: string,
+  fromPipelineId: string,
+  stageMap: Record<string, string>
+): Promise<{ moved: number }> {
+  return apiRequest(`${pipelinePath(pipelineId)}adopt-deals/`, {
+    method: "POST",
+    auth,
+    body: { fromPipelineId, stageMap },
+    schema: z.object({ moved: z.int().nonnegative() }),
+  })
+}

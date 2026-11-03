@@ -6,7 +6,8 @@ import { SegmentedLinks } from "@/components/shared/segmented-links"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
 import { CreateFunnelForm } from "@/features/sales/funnel/create-funnel-form"
-import { getFunnelWithCounts, listDepartments, listFunnels, type Funnel } from "@/features/sales/funnel/funnel-api"
+import { DealAdoption } from "@/features/sales/funnel/deal-adoption"
+import { adoptionPreview, getFunnelWithCounts, listDepartments, listFunnels, type Funnel } from "@/features/sales/funnel/funnel-api"
 import { FunnelEditor } from "@/features/sales/funnel/funnel-editor"
 import { activeStages } from "@/features/sales/funnel/funnel-rules"
 import { tryLoad } from "@/lib/api/load"
@@ -78,16 +79,43 @@ export async function FunnelSettingsView({ params, isDirector }: { params: Searc
           <CreateFunnelForm companyStages={companyStages} departments={isDirector ? (departments ?? []) : null} basePath={FUNNEL_SETTINGS_PATH} />
         </section>
       ) : selected ? (
-        <SelectedFunnel id={selected.id} />
+        <SelectedFunnel id={selected.id} companyPipelineIds={funnels.filter((funnel) => funnel.departmentId === null).map((funnel) => funnel.id)} />
       ) : null}
     </div>
   )
 }
 
-async function SelectedFunnel({ id }: { id: string }) {
+async function SelectedFunnel({ id, companyPipelineIds }: { id: string; companyPipelineIds: readonly string[] }) {
   const loaded = await tryLoad(async () => getFunnelWithCounts(await getRenderAuth(), id))
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
-  return <FunnelEditor key={id} funnel={loaded.data} />
+  const funnel = loaded.data
+  // Сделки отдела, оставшиеся в общих воронках компании: переносятся только по подтверждению
+  const previews =
+    funnel.departmentId === null
+      ? []
+      : await Promise.all(
+          companyPipelineIds.map(async (fromId) => {
+            const preview = await tryLoad(async () => adoptionPreview(await getRenderAuth(), funnel.id, fromId))
+            return preview.ok && preview.data.total > 0 ? preview.data : null
+          })
+        )
+  return (
+    <div className="space-y-4">
+      {previews.map(
+        (preview) =>
+          preview && (
+            <DealAdoption
+              key={`${funnel.id}-${preview.fromPipelineId}`}
+              pipelineId={funnel.id}
+              pipelineName={funnel.name}
+              targetStages={funnel.stages}
+              preview={preview}
+            />
+          )
+      )}
+      <FunnelEditor key={id} funnel={funnel} />
+    </div>
+  )
 }
 
 export function FunnelSettingsSkeleton() {

@@ -38,7 +38,11 @@ export const taskSchema = z.object({
   /** null — задача без исполнителя («ничья»), её можно взять */
   assignee: refSchema.nullable(),
   createdBy: refSchema,
-  lead: refSchema.nullable(),
+  /**
+   * К чему относится задача: сделка (по умолчанию — ссылка на её карточку) или клиент
+   * (`href` ведёт в «Базу клиентов»). null — привязка недоступна пользователю.
+   */
+  lead: refSchema.extend({ href: z.string().nullable().optional() }).nullable(),
   completedAt: z.iso.datetime({ offset: true }).nullable(),
   /** Результат, с которым закрыта задача */
   result: z.string().nullable(),

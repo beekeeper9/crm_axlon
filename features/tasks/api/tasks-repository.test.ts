@@ -54,7 +54,7 @@ describe("httpTasksRepository.listTasks", () => {
       expect.objectContaining({ query: expect.objectContaining({ kind: "task", assigneeId: "u-1", taskStatus: "open" }) })
     )
     expect(page.count).toBe(1)
-    expect(page.results.map((item) => item.lead)).toEqual([{ id: "d-1", name: "Окна ПВХ" }])
+    expect(page.results.map((item) => item.lead)).toEqual([{ id: "d-1", name: "Окна ПВХ", href: null }])
   })
 })
 
@@ -110,5 +110,32 @@ describe("создание задачи по любой привязке", () =>
     ])
     expect(apiRequest).toHaveBeenCalledWith("/api/v1/sales/deals/", expect.objectContaining({ query: expect.objectContaining({ search: "окна", status: "open" }) }))
     expect(apiRequest).toHaveBeenCalledWith("/api/v1/customers/", expect.objectContaining({ query: expect.objectContaining({ search: "окна", archived: "false" }) }))
+  })
+})
+
+describe("связь задачи со сделкой или клиентом", () => {
+  it("клиент — ссылка в «Базу клиентов», сделка — карточка сделки, недоступное — без ссылки", async () => {
+    apiRequest.mockReset()
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/activities/") {
+        return {
+          count: 3,
+          results: [
+            task("t-1"),
+            task("t-2", { subjectType: "customer", subjectId: "c-1" }),
+            task("t-3", { subjectType: "customer", subjectId: "c-hidden" }),
+          ],
+        }
+      }
+      if (path.startsWith("/api/v1/sales/deals/")) return { id: "d-1", title: "Окна ПВХ" }
+      if (path === "/api/v1/customers/c-1/") return { id: "c-1", name: "ОсОО Свет" }
+      throw new Error("404")
+    })
+    const page = await tasksRepository.listTasks(query)
+    expect(page.results.map((item) => item.lead)).toEqual([
+      { id: "d-1", name: "Окна ПВХ", href: null },
+      { id: "c-1", name: "ОсОО Свет", href: "/client-base?client=c-1" },
+      null,
+    ])
   })
 })

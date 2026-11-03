@@ -48,3 +48,23 @@ export function moveTargets(stages: readonly FunnelStage[], stageId: string): Fu
 export function isLastOfKind(stages: readonly FunnelStage[], stageId: string): boolean {
   return moveTargets(stages, stageId).length === 0
 }
+
+/**
+ * Предложение, куда перенести сделки каждого этапа общей воронки: этап воронки отдела с тем же
+ * названием, иначе этап на той же позиции среди рабочих (или последний рабочий). Это только
+ * подстановка в форму — пользователь меняет её и подтверждает перенос сам.
+ */
+export function suggestStageMap(
+  source: readonly { stageId: string; name: string; openDeals: number }[],
+  target: readonly FunnelStage[]
+): Record<string, string> {
+  const open = activeStages(target).filter((stage) => stage.kind === "open")
+  if (open.length === 0) return {}
+  const byName = new Map(open.map((stage) => [stage.name.trim().toLocaleLowerCase("ru"), stage.id]))
+  const map: Record<string, string> = {}
+  source.forEach((stage, index) => {
+    if (stage.openDeals === 0) return
+    map[stage.stageId] = byName.get(stage.name.trim().toLocaleLowerCase("ru")) ?? open[Math.min(index, open.length - 1)].id
+  })
+  return map
+}

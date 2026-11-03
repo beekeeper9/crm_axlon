@@ -18,6 +18,8 @@ const MESSAGES: Array<[RegExp, string]> = [
   [/at least one active won stage/i, "В воронке должен остаться этап успешного закрытия."],
   [/at least one active lost stage/i, "В воронке должен остаться этап отказа."],
   [/same kind/i, "Сделки можно перенести только на рабочий этап того же вида."],
+  [/active open stage of the department pipeline/i, "Открытые сделки можно перенести только на рабочий этап воронки отдела."],
+  [/only into a department pipeline/i, "Переносить сделки можно только в воронку отдела."],
   [/at most \d+ stages/i, "В воронке может быть не больше 20 этапов."],
   [/only your department/i, "Вы можете настраивать только воронку своего отдела."],
   [/not assigned to a department/i, "Вы не назначены в отдел — обратитесь к директору."],
@@ -26,6 +28,7 @@ const MESSAGES: Array<[RegExp, string]> = [
 function failure(error: unknown): FunnelActionResult<never> {
   if (!(error instanceof ApiError)) throw error
   if (error.code === "move_target_required") return { ok: false, message: "На этапе есть сделки: выберите, куда их перенести." }
+  if (error.code === "stage_mapping_required") return { ok: false, message: "Выберите этап воронки отдела для каждого этапа, на котором есть сделки." }
   const known = MESSAGES.find(([pattern]) => pattern.test(error.message))
   if (known) return { ok: false, message: known[1] }
   if (error.kind === "forbidden" && !error.code?.includes("plan")) return { ok: false, message: "У вашей роли нет права менять эту воронку." }
@@ -105,4 +108,9 @@ export async function makeDefaultFunnelAction(pipelineId: string): Promise<Funne
     await api.makeDefault(await getActionAuth(), pipelineId)
     return null
   })
+}
+
+/** Перенос открытых сделок менеджеров отдела из общей воронки — только после подтверждения пользователем */
+export async function adoptDealsAction(pipelineId: string, fromPipelineId: string, stageMap: Record<string, string>): Promise<FunnelActionResult<number>> {
+  return run(async () => (await api.adoptDeals(await getActionAuth(), pipelineId, fromPipelineId, stageMap)).moved)
 }

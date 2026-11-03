@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
+import { routes } from "@/config/routes"
 import { taskSchema, todayTasksSchema, type Task, type TaskType, type TodayTasks } from "@/features/tasks/schemas"
 import { loadPeopleNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
@@ -241,16 +242,31 @@ export async function completeTask(auth: ApiAuth, taskId: string, result: string
 }
 
 const dealTitleSchema = z.object({ id: z.string(), title: z.string() })
+const customerNameSchema = z.object({ id: z.string(), name: z.string() })
 
-/** Названия сделок для ссылок из общего списка: уникальные id одной страницы */
-async function dealRefs(auth: ApiAuth, tasks: readonly BackendTask[]): Promise<Map<string, string>> {
-  const ids = [...new Set(tasks.filter((task) => task.subjectType === "deal").map((task) => task.subjectId))]
-  const deals = await Promise.all(
-    ids.map((id) =>
-      apiRequest(`/api/v1/sales/deals/${encodeURIComponent(id)}/`, { auth, schema: dealTitleSchema }).catch(() => null)
-    )
-  )
-  return new Map(deals.filter((deal) => deal !== null).map((deal) => [deal.id, deal.title]))
+/** Ссылка на клиента задачи — его карточка в «Базе клиентов» */
+export function customerHref(customerId: string): string {
+  return `${routes.clientBase}?client=${encodeURIComponent(customerId)}`
+}
+
+/**
+ * Названия сделок и клиентов для ссылок из общего списка: уникальные id одной страницы.
+ * Недоступные пользователю (404) остаются без ссылки, а не подписываются выдуманным именем.
+ */
+async function subjectRefs(auth: ApiAuth, tasks: readonly BackendTask[]): Promise<Map<string, Task["lead"]>> {
+  const unique = (type: BackendTask["subjectType"]) => [...new Set(tasks.filter((task) => task.subjectType === type).map((task) => task.subjectId))]
+  const [deals, customers] = await Promise.all([
+    Promise.all(
+      unique("deal").map((id) => apiRequest(`/api/v1/sales/deals/${encodeURIComponent(id)}/`, { auth, schema: dealTitleSchema }).catch(() => null))
+    ),
+    Promise.all(
+      unique("customer").map((id) => apiRequest(`/api/v1/customers/${encodeURIComponent(id)}/`, { auth, schema: customerNameSchema }).catch(() => null))
+    ),
+  ])
+  const refs = new Map<string, Task["lead"]>()
+  for (const deal of deals) if (deal) refs.set(deal.id, { id: deal.id, name: deal.title, href: null })
+  for (const customer of customers) if (customer) refs.set(customer.id, { id: customer.id, name: customer.name, href: customerHref(customer.id) })
+  return refs
 }
 
 /**
@@ -288,11 +304,8 @@ const httpTasksRepository: TasksRepository = {
       loadPeopleNames(),
     ])
     const visible = page.results.filter((task) => task.taskStatus !== "cancelled")
-    const titles = leadId ? new Map<string, string>() : await dealRefs(auth, visible)
-    const tasks = visible.map((task) => {
-      const title = task.subjectType === "deal" ? titles.get(task.subjectId) : undefined
-      return { ...toTask(task, nameOf), lead: title ? { id: task.subjectId, name: title } : null }
-    })
+    const refs = leadId ? new Map<string, Task["lead"]>() : await subjectRefs(auth, visible)
+    const tasks = visible.map((task) => ({ ...toTask(task, nameOf), lead: refs.get(task.subjectId) ?? null }))
     return { count: page.count - (page.results.length - visible.length), results: tasks }
   },
 }

@@ -105,9 +105,9 @@ function TaskDetail({ task, editMode, isDemoChanged, canComplete, onComplete, on
           <DetailRow label="Срок">{task.dueAt ? formatTaskDue(task.dueAt) : "Без срока"}</DetailRow>
           <DetailRow label="Исполнитель">{task.assignee?.name ?? <span className="text-warning">Не назначен</span>}</DetailRow>
           <DetailRow label="Поставил(а)">{task.createdBy.name}</DetailRow>
-          <DetailRow label="Лид">
+          <DetailRow label={task.lead?.href ? "Клиент" : "Сделка"}>
             {task.lead ? (
-              <Link href={leadRoute(task.lead.id)} className="text-primary hover:underline">
+              <Link href={task.lead.href ?? leadRoute(task.lead.id)} className="text-primary hover:underline">
                 {task.lead.name}
               </Link>
             ) : (

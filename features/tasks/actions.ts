@@ -4,14 +4,15 @@ import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
 import {
-  SERVER_TASK_TYPES,
+  changeTaskState,
   completeTask,
   createTask,
-  changeTaskState,
+  customerHref,
   reassignTask,
   searchTaskSubjects,
-  toTask,
+  SERVER_TASK_TYPES,
   type TaskSubjectOption,
+  toTask,
   updateTask,
 } from "@/features/tasks/api/tasks-repository"
 import { loadPeopleNames } from "@/features/team"
@@ -90,8 +91,9 @@ export async function createTaskAction(subject: TaskSubjectOption, input: NewDea
     })
     const task = toTask(created, await loadPeopleNames())
     // В карточке сделки имя не передаётся: связь задачи подставит сам список
-    const linked = target.data.type === "deal" && target.data.name
-    return { ok: true, task: linked ? { ...task, lead: { id: target.data.id, name: target.data.name } } : task }
+    if (!target.data.name) return { ok: true, task }
+    const href = target.data.type === "customer" ? customerHref(target.data.id) : null
+    return { ok: true, task: { ...task, lead: { id: target.data.id, name: target.data.name, href } } }
   } catch (error) {
     return failure(error, "create")
   }

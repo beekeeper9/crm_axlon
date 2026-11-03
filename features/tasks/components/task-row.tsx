@@ -55,7 +55,7 @@ export function TaskRow({ task, showAssignee, showLead, isDemoChanged, canComple
             {type.label}
           </span>
           {showLead && task.lead && (
-            <Link href={leadRoute(task.lead.id)} className="truncate hover:text-foreground hover:underline">
+            <Link href={task.lead.href ?? leadRoute(task.lead.id)} className="truncate hover:text-foreground hover:underline">
               {task.lead.name}
             </Link>
           )}
