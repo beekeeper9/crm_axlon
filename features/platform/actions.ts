@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-import { routes } from "@/config/routes"
+import { platformCompanyRoute, routes } from "@/config/routes"
+import { LIMIT_METRICS, UNLIMITED, type MetricUsage } from "@/features/plan-limits/schemas"
 import * as platform from "@/features/platform/api/platform-repository"
 import { ERROR_STATUSES, FEATURES, PLAN_CODES, SUBSCRIPTION_STATUSES, TICKET_STATUSES, type CreatedCompany } from "@/features/platform/schemas"
 import { API_ERROR_MESSAGES, ApiError } from "@/lib/api/errors"
@@ -34,6 +35,8 @@ const BACKEND_FIELD_MESSAGES: Record<string, string> = {
   "This e-mail is already used by another account.": "Этот e-mail уже используется",
   "Tenant slug must be 3-40 chars: lowercase letters, digits and hyphens.": "3–40 символов: строчные латинские буквы, цифры и дефис",
   "The subscription must end after it starts.": "Окончание должно быть позже начала",
+  "Assign a subscription before changing its limits.": "Сначала назначьте компании подписку — лимиты меняются у подписки.",
+  "A limit is a whole number, 0 or more, or -1 for none.": "Лимит — целое число от 0 или «без лимита».",
 }
 
 function failure(error: unknown): ActionResult<never> {
@@ -136,6 +139,27 @@ export async function setSubscriptionAction(companyId: string, input: TermsForm)
   try {
     await platform.setSubscription(await getActionAuth(), companyId, parsed.data)
     revalidatePath(routes.platform, "layout")
+    return { ok: true, data: null }
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+const limitsSchema = z.partialRecord(z.enum(LIMIT_METRICS), z.int().min(UNLIMITED))
+
+/**
+ * Лимиты компании поверх тарифа. Передаются целиком: метрика, которой нет в limits, снова берётся
+ * из тарифа; пустой объект — сбросить все изменения. Backend пишет изменение в аудит платформы.
+ */
+export async function setCompanyLimitsAction(companyId: string, limits: Partial<Record<MetricUsage["metric"], number>>): Promise<ActionResult> {
+  if (!(await isPlatformAdmin())) return DENIED
+  const parsed = limitsSchema.safeParse(limits)
+  if (!parsed.success) {
+    return { ok: false, message: "Лимит — целое число от 0 или «без лимита».", fieldErrors: {}, requestId: null }
+  }
+  try {
+    await platform.setCompanyLimits(await getActionAuth(), companyId, parsed.data)
+    revalidatePath(platformCompanyRoute(companyId))
     return { ok: true, data: null }
   } catch (error) {
     return failure(error)

@@ -17,6 +17,7 @@ import { isMockDataSource } from "@/config/env"
 import { platformCompanyRoute, platformTicketRoute, routes } from "@/config/routes"
 import * as platform from "@/features/platform/api/platform-repository"
 import { CompanyCreateForm } from "@/features/platform/components/company-create-form"
+import { CompanyLimitsEditor } from "@/features/platform/components/company-limits-editor"
 import { CompanyActiveControl, CompanyNameForm, ErrorStatusControl, SubscriptionForm, TicketUpdateForm } from "@/features/platform/components/platform-controls"
 import { DirectorCredentialsButton } from "@/features/platform/components/director-credentials-button"
 import type { PlatformSection } from "@/features/platform/components/platform-nav"
@@ -522,6 +523,8 @@ export async function PlatformCompanyView({ companyId }: { companyId: string }) 
     const auth = await getRenderAuth()
     return Promise.all([platform.getCompany(auth, companyId), platform.getCatalog(auth)])
   })
+  // Лимиты — отдельно: их ошибка не должна закрывать всю карточку компании
+  const limits = await tryLoad(async () => platform.getCompanyLimits(await getRenderAuth(), companyId))
   if (!loaded.ok) {
     return (
       <PlatformPage section="companies" title="Компания">
@@ -551,6 +554,16 @@ export async function PlatformCompanyView({ companyId }: { companyId: string }) 
             )}
             <SubscriptionForm companyId={company.id} subscription={sub} catalog={catalog} today={companyDateOf(nowIso())} />
           </Panel>
+
+          {sub && (
+            <Panel title="Лимиты">
+              {limits.ok ? (
+                <CompanyLimitsEditor key={JSON.stringify(limits.data)} companyId={company.id} metrics={limits.data} />
+              ) : (
+                <ApiErrorState error={limits.error} bare />
+              )}
+            </Panel>
+          )}
 
           <Panel title="История изменений">
             {company.history.length === 0 ? (

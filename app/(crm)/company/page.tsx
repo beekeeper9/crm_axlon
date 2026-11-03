@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { homeRouteFor } from "@/config/navigation"
+import { CompanySetupChecklist } from "@/features/company-settings"
 import { CompanyView, StaffSkeleton } from "@/features/staff"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
@@ -13,7 +14,12 @@ export const metadata: Metadata = { title: "Компания" }
 async function Content() {
   const user = await getCurrentUser()
   if (!hasPermission(user.role, "company.view")) redirect(homeRouteFor(user.role))
-  return <CompanyView companyName={user.companyName} />
+  return (
+    <>
+      <CompanySetupChecklist />
+      <CompanyView companyName={user.companyName} />
+    </>
+  )
 }
 
 export default function Page() {

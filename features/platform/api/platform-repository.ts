@@ -20,6 +20,7 @@ import {
   type Ticket,
   type TicketStatus,
 } from "@/features/platform/schemas"
+import { planUsageSchema, type MetricUsage } from "@/features/plan-limits/schemas"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
 import { paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
@@ -93,6 +94,23 @@ export function setSubscription(auth: ApiAuth, companyId: string, terms: Terms):
     body: terms,
     schema: companyDetailSchema,
   })
+}
+
+/** Лимиты компании: из тарифа или изменённые платформой; used = null, пока база компании не готова */
+export function getCompanyLimits(auth: ApiAuth, companyId: string): Promise<MetricUsage[]> {
+  return apiRequest(`${BASE}/companies/${encodeURIComponent(companyId)}/limits/`, { auth, schema: planUsageSchema }).then(
+    (data) => data.metrics
+  )
+}
+
+/** Заменяет изменения лимитов целиком: метрики, которых нет в limits, возвращаются к тарифу; -1 — без лимита */
+export function setCompanyLimits(auth: ApiAuth, companyId: string, limits: Partial<Record<MetricUsage["metric"], number>>): Promise<MetricUsage[]> {
+  return apiRequest(`${BASE}/companies/${encodeURIComponent(companyId)}/limits/`, {
+    method: "PUT",
+    auth,
+    body: { limits },
+    schema: planUsageSchema,
+  }).then((data) => data.metrics)
 }
 
 export function listErrors(auth: ApiAuth, status: ErrorStatus | null, page: PageParams): Promise<Paginated<ErrorRecord>> {
