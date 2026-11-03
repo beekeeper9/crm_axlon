@@ -20,7 +20,7 @@ import {
 } from "@/features/leads/components/lead-sections"
 import { LeadTabs } from "@/features/leads/components/lead-tabs"
 import type { LeadDetail } from "@/features/leads/schemas"
-import { LeadCallsList } from "@/features/calls"
+import { LeadCallsList, LogCallButton } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
 import { salesRepository } from "@/features/sales"
 import { TasksList, tasksRepository } from "@/features/tasks"
@@ -95,8 +95,22 @@ export function LeadView({ lead, user }: LeadViewProps) {
             tabs={[
               { value: "work", label: "Работа", content: <Deferred><LeadWork lead={lead} user={user} /></Deferred> },
               { value: "history", label: "История", content: <Deferred><LeadTimeline leadId={lead.id} /></Deferred> },
-              // Звонки по сделке backend не фильтрует (телефония подключается отдельно) — вкладка только в демо
-              ...(isMockDataSource ? [{ value: "calls", label: "Звонки", content: <Deferred><LeadCallsList leadId={lead.id} /></Deferred> }] : []),
+              {
+                value: "calls",
+                label: "Звонки",
+                content: (
+                  <Deferred>
+                    <LeadCallsList
+                      leadId={lead.id}
+                      actions={
+                        !isMockDataSource && hasPermission(user.role, "records.edit") ? (
+                          <LogCallButton subject={{ type: "deal", id: lead.id, name: lead.title }} phone={primaryPhone ?? null} variant="outline" />
+                        ) : undefined
+                      }
+                    />
+                  </Deferred>
+                ),
+              },
               {
                 value: "payment",
                 label: "Оплата",

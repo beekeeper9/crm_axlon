@@ -172,10 +172,14 @@ export async function ClientsView({ user, params }: ClientsViewProps) {
             actions={
               isMockDataSource ? null : (
                 <ClientActions
-                  clientId={openClient.id}
+                  client={{ id: openClient.id, name: openClient.name, phone: openClient.phones[0] ?? null, email: openClient.email }}
                   isArchived={openClient.isArchived}
+                  isMerged={openClient.mergedIntoId !== null}
                   managerId={openClient.manager?.id ?? null}
                   members={hasPermission(user.role, "records.assign") ? members : []}
+                  canMerge={hasPermission(user.role, "records.assign")}
+                  hosts={members}
+                  currentUser={{ id: user.id, name: user.fullName }}
                 />
               )
             }

@@ -151,6 +151,7 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
                         ({entry.changedFields.map((field) => PROSPECT_FIELD_LABELS[field] ?? field).join(", ")})
                       </span>
                     )}
+                    {entry.transfer && <span className="text-muted-foreground"> — {entry.transfer}</span>}
                   </p>
                   <p className="text-meta text-muted-foreground">
                     {formatDateTime(entry.occurredAt)}

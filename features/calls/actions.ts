@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
-import { routes } from "@/config/routes"
-import { logCall } from "@/features/calls/api/calls-repository"
+import { leadRoute, routes } from "@/config/routes"
+import { linkCall, logCall, type CallSubject } from "@/features/calls/api/calls-repository"
 import { ApiError, apiErrorMessage } from "@/lib/api/errors"
 import { getActionAuth } from "@/lib/auth/token-store"
 import { companyWallTimeToIso } from "@/lib/datetime"
@@ -32,13 +32,31 @@ const callLogSchema = z.object({
   notes: z.string().trim().max(2000, "Не длиннее 2000 символов"),
 })
 
+const subjectSchema = z.object({ type: z.enum(["deal", "customer"]), id: z.string().min(1) }).nullable()
+
 export type CallLogInput = z.input<typeof callLogSchema>
 
-/** Записать уже состоявшийся звонок. Номера и права окончательно проверяет backend */
-export async function logCallAction(input: CallLogInput): Promise<CallActionResult> {
+function failure(error: unknown, validation: string): CallActionResult {
+  if (!(error instanceof ApiError)) throw error
+  const message =
+    error.kind === "validation"
+      ? validation
+      : error.kind === "not_found"
+        ? "Сделка или клиент недоступны: возможно, их передали другому сотруднику."
+        : apiErrorMessage(error)
+  return error.requestId ? `${message} Код запроса: ${error.requestId}` : message
+}
+
+/**
+ * Записать уже состоявшийся звонок; subject — сделка или клиент, из карточки которых его записывают.
+ * Номера и права окончательно проверяет backend; пропущенный звонок он сам превращает в задачу «перезвонить».
+ */
+export async function logCallAction(input: CallLogInput, subject: CallSubject | null = null): Promise<CallActionResult> {
   if (isMockDataSource) return "В демо-режиме звонки на сервер не отправляются."
   const parsed = callLogSchema.safeParse(input)
   if (!parsed.success) return parsed.error.issues[0]?.message ?? "Проверьте поля"
+  const link = subjectSchema.safeParse(subject)
+  if (!link.success) return "Не удалось определить сделку или клиента"
   const data = parsed.data
   const inbound = data.direction === "inbound"
   try {
@@ -50,12 +68,26 @@ export async function logCallAction(input: CallLogInput): Promise<CallActionResu
       startedAt: companyWallTimeToIso(data.startedAt),
       durationSeconds: data.status === "completed" ? data.durationMinutes * 60 + data.durationSeconds : 0,
       notes: data.notes || null,
+      subject: link.data,
     })
+    revalidatePath(routes.calls)
+    if (link.data?.type === "deal") revalidatePath(leadRoute(link.data.id))
+    return null
+  } catch (error) {
+    return failure(error, "Сервер не принял звонок: проверьте номера, время и длительность.")
+  }
+}
+
+/** Привязать звонок к клиенту или сделке (null — отвязать) */
+export async function linkCallAction(callId: string, subject: CallSubject | null): Promise<CallActionResult> {
+  if (isMockDataSource) return "В демо-режиме звонки на сервер не отправляются."
+  const link = subjectSchema.safeParse(subject)
+  if (!link.success) return "Не удалось определить сделку или клиента"
+  try {
+    await linkCall(await getActionAuth(), callId, link.data)
     revalidatePath(routes.calls)
     return null
   } catch (error) {
-    if (!(error instanceof ApiError)) throw error
-    const message = error.kind === "validation" ? "Сервер не принял звонок: проверьте номера, время и длительность." : apiErrorMessage(error)
-    return error.requestId ? `${message} Код запроса: ${error.requestId}` : message
+    return failure(error, "Сервер не принял привязку.")
   }
 }

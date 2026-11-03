@@ -39,6 +39,9 @@ const HISTORY_LABELS: Record<string, string> = {
   absences: "Отсутствия",
   work_sessions: "Рабочие смены",
   actions: "Действия в CRM",
+  transferred_leads: "Передано лидов",
+  transferred_customers: "Передано клиентов",
+  transferred_deals: "Передано сделок",
 }
 
 const TASK_STATUS: Record<string, string> = { open: "Открыта", completed: "Выполнена", cancelled: "Отменена" }

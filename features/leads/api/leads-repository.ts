@@ -12,6 +12,7 @@ import {
 } from "@/features/leads/schemas"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
+import { ownerChangeSchema, ownerChangeText } from "@/lib/api/owner-change"
 import { ApiError } from "@/lib/api/errors"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 import { PAGE_LIMIT_MAX, paginatedSchema } from "@/lib/api/pagination"
@@ -81,6 +82,7 @@ const backendHistorySchema = z.object({
       occurredAt: z.iso.datetime({ offset: true }),
       actor: z.object({ id: z.string(), name: z.string().nullable() }).nullable(),
       changedFields: z.array(z.string()),
+      details: ownerChangeSchema,
     })
   ),
 })
@@ -211,7 +213,10 @@ const httpLeadsRepository: LeadsRepository = {
         at: entry.occurredAt,
         kind: entry.action === "deal.stage_changed" || entry.action === "deal.won" || entry.action === "deal.lost" ? "stage" : "note",
         title: HISTORY_TITLES[entry.action] ?? entry.action,
-        body: entry.changedFields.length > 0 ? `Изменено: ${entry.changedFields.map((field) => FIELD_LABELS[field] ?? field).join(", ")}` : null,
+        // Передача сделки называет прежнего и нового ответственного
+        body:
+          (entry.action === "deal.reassigned" ? ownerChangeText(entry.details) : null) ??
+          (entry.changedFields.length > 0 ? `Изменено: ${entry.changedFields.map((field) => FIELD_LABELS[field] ?? field).join(", ")}` : null),
         author: entry.actor?.name ?? null,
       })
     )

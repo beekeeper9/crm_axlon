@@ -43,6 +43,8 @@ export type DealChanges = {
   amount: string
   nextStep: string
   expectedCloseDate: string | null
+  /** Откуда пришёл клиент; пустая строка очищает, без поля — не меняется */
+  source?: string
 }
 
 /** `PATCH` с версией: если сделку успели изменить, backend ответит 409 */

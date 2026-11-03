@@ -32,6 +32,8 @@ export const prospectHistoryEntrySchema = z.object({
   actor: refSchema.nullable(),
   /** Только названия полей: значения backend в историю не пишет */
   changedFields: z.array(z.string()),
+  /** Передача лида: «от … к …» (null — запись не про передачу) */
+  transfer: z.string().nullable().default(null),
 })
 
 /** Кандидат в дубли: другой лид или существующий клиент с тем же телефоном или e-mail */

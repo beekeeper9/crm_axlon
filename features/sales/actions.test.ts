@@ -33,6 +33,12 @@ describe("действия со сделкой", () => {
     expect(!result.ok && result.message).toMatch(/изменил кто-то другой/)
   })
 
+  it("источник сделки уходит в PATCH; пустой — очищает", async () => {
+    updateDeal.mockResolvedValue(undefined)
+    await updateDealAction("d-1", 3, { title: "Окна", amount: "1000", nextStep: "", expectedCloseDate: "", source: " Instagram " })
+    expect(updateDeal).toHaveBeenCalledWith({}, "d-1", expect.objectContaining({ source: "Instagram" }), 3)
+  })
+
   it("сумма проверяется до запроса", async () => {
     const result = await updateDealAction("d-1", 3, { title: "Окна", amount: "дорого", nextStep: "", expectedCloseDate: "" })
     expect(result.ok).toBe(false)

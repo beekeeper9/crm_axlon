@@ -14,16 +14,19 @@ import { createProspectAction } from "@/features/prospects/actions"
 import { PROSPECT_SOURCE_LABELS } from "@/features/prospects/lib/prospect-meta"
 import { prospectSourceSchema, type ProspectSource } from "@/features/prospects/schemas"
 
-const SOURCE_OPTIONS = prospectSourceSchema.options.map((value) => ({ value, label: PROSPECT_SOURCE_LABELS[value] }))
+const DEFAULT_SOURCES = prospectSourceSchema.options.map((value) => ({ value, label: PROSPECT_SOURCE_LABELS[value] }))
 const EMPTY = { name: "", phone: "", email: "" }
 
-/** Новый входящий лид; после создания открывается его карточка */
-export function NewProspectButton() {
+type SourceOption = { value: ProspectSource; label: string }
+
+/** Новый входящий лид; после создания открывается его карточка. Источники — справочник компании (включённые, с её подписями) */
+export function NewProspectButton({ sources = DEFAULT_SOURCES }: { sources?: readonly SourceOption[] }) {
+  const options = sources.length > 0 ? sources : DEFAULT_SOURCES
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [values, setValues] = useState(EMPTY)
-  const [source, setSource] = useState<ProspectSource>("phone")
+  const [source, setSource] = useState<ProspectSource>(options.find((option) => option.value === "phone")?.value ?? options[0].value)
   const [failure, setFailure] = useState<string | null>(null)
   const field = (key: keyof typeof EMPTY) => ({
     value: values[key],
@@ -72,12 +75,12 @@ export function NewProspectButton() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="prospect-source">Источник</Label>
-              <Select items={SOURCE_OPTIONS} value={source} onValueChange={(value) => value && setSource(prospectSourceSchema.parse(value))}>
+              <Select items={options} value={source} onValueChange={(value) => value && setSource(prospectSourceSchema.parse(value))}>
                 <SelectTrigger id="prospect-source" className="h-9 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SOURCE_OPTIONS.map((option) => (
+                  {options.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

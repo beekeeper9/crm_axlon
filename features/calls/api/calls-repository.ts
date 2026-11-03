@@ -5,10 +5,11 @@ import { callSchema, type Call, type CallDirection } from "@/features/calls/sche
 import { loadPeopleNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
-import { ApiError, contractPending } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { hasPermission } from "@/lib/permissions/roles"
+import { companyDateOf } from "@/lib/datetime"
 import { getCurrentUser } from "@/lib/session/current-user"
 import { demoCalls } from "@/mocks/calls"
 import { simulateLatency } from "@/mocks/latency"
@@ -19,6 +20,11 @@ export type CallsQuery = PageParams & {
   missedOnly: boolean
   managerId: string | null
   leadId: string | null
+  /** Звонки, привязанные к клиенту (не к его сделкам) */
+  clientId?: string | null
+  /** Дни компании YYYY-MM-DD, обе границы включительно */
+  dateFrom?: string | null
+  dateTo?: string | null
   search: string | null
 }
 
@@ -36,11 +42,17 @@ async function withAccessRules(calls: Call[]): Promise<Call[]> {
   return canSeeRating ? calls : calls.map((call) => ({ ...call, rating: null }))
 }
 
-function matches(call: Call, { direction, missedOnly, managerId, leadId, search }: Omit<CallsQuery, keyof PageParams>): boolean {
+function matches(
+  call: Call,
+  { direction, missedOnly, managerId, leadId, clientId, dateFrom, dateTo, search }: Omit<CallsQuery, keyof PageParams>
+): boolean {
   if (direction && call.direction !== direction) return false
   if (missedOnly && call.status !== "missed") return false
   if (managerId && call.manager.id !== managerId) return false
   if (leadId && call.lead?.id !== leadId) return false
+  if (clientId && call.client?.id !== clientId) return false
+  if (dateFrom && companyDateOf(call.at) < dateFrom) return false
+  if (dateTo && companyDateOf(call.at) > dateTo) return false
   if (!search) return true
   const needle = search.toLocaleLowerCase("ru")
   const digits = search.replace(/\D/g, "")
@@ -140,23 +152,25 @@ async function subjectNames(auth: ApiAuth, calls: readonly BackendCall[]): Promi
 }
 
 /**
- * `GET /telephony/calls/`: видимость (свои, команда, все) решает backend. Фильтры у него —
- * только направление и статус; по сотруднику, сделке и тексту он не фильтрует, поэтому такие
- * запросы не подменяются неотфильтрованным списком. «Пропущенные» — статус missed
- * (несостоявшиеся failed backend отдельным фильтром не объединяет).
+ * `GET /telephony/calls/`: видимость (свои, команда, все) решает backend, он же фильтрует по
+ * сотруднику, сделке или клиенту, дням компании и тексту (номер или заметка).
+ * «Пропущенные» — и без ответа (missed), и несостоявшиеся (failed): в интерфейсе это один статус.
  */
 const httpCallsRepository: CallsRepository = {
-  async listCalls({ direction, missedOnly, managerId, leadId, search, limit, offset }) {
-    if (search) return contractPending("поиск по звонкам")
-    if (leadId) return contractPending("звонки по сделке")
-    if (managerId) return contractPending("звонки сотрудника")
+  async listCalls({ direction, missedOnly, managerId, leadId, clientId, dateFrom, dateTo, search, limit, offset }) {
     const auth = await getRenderAuth()
+    const subject = leadId ? { subjectType: "deal", subjectId: leadId } : clientId ? { subjectType: "customer", subjectId: clientId } : {}
     const [page, nameOf] = await Promise.all([
       apiRequest("/api/v1/telephony/calls/", {
         auth,
         query: {
           direction: direction ? (direction === "incoming" ? "inbound" : "outbound") : undefined,
-          status: missedOnly ? "missed" : undefined,
+          statuses: missedOnly ? "missed,failed" : undefined,
+          ownerId: managerId ?? undefined,
+          ...subject,
+          dateFrom: dateFrom ?? undefined,
+          dateTo: dateTo ?? undefined,
+          search: search ?? undefined,
           limit,
           offset,
         },
@@ -191,7 +205,11 @@ export type NewCallLog = {
   startedAt: string
   durationSeconds: number
   notes: string | null
+  /** Сделка или клиент, к которым относится звонок */
+  subject: CallSubject | null
 }
+
+export type CallSubject = { type: "deal" | "customer"; id: string }
 
 /** `POST /telephony/calls/` — записать уже состоявшийся звонок (провайдер не нужен) */
 export async function logCall(auth: ApiAuth, call: NewCallLog): Promise<void> {
@@ -206,7 +224,18 @@ export async function logCall(auth: ApiAuth, call: NewCallLog): Promise<void> {
       startedAt: call.startedAt,
       durationSeconds: call.durationSeconds,
       ...(call.notes ? { notes: call.notes } : {}),
+      ...(call.subject ? { subjectType: call.subject.type, subjectId: call.subject.id } : {}),
     },
+    schema: z.unknown(),
+  })
+}
+
+/** `PATCH /telephony/calls/{id}/` — привязать звонок к сделке или клиенту; null — отвязать */
+export async function linkCall(auth: ApiAuth, callId: string, subject: CallSubject | null): Promise<void> {
+  await apiRequest(`/api/v1/telephony/calls/${encodeURIComponent(callId)}/`, {
+    method: "PATCH",
+    auth,
+    body: { subjectType: subject?.type ?? null, subjectId: subject?.id ?? null },
     schema: z.unknown(),
   })
 }

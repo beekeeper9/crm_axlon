@@ -17,9 +17,11 @@ import { prospectRoute, routes } from "@/config/routes"
 import { prospectsRepository } from "@/features/prospects/api/prospects-repository"
 import { NewProspectButton } from "@/features/prospects/components/new-prospect-button"
 import { PROSPECT_SOURCE_LABELS, PROSPECT_STATUS_META } from "@/features/prospects/lib/prospect-meta"
-import { prospectSourceSchema, prospectStatusSchema } from "@/features/prospects/schemas"
+import { prospectSourceSchema, prospectStatusSchema, type ProspectSource } from "@/features/prospects/schemas"
+import { fetchReferenceList } from "@/features/reference-lists"
 import { teamRepository } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { pageInfo, pageParams } from "@/lib/api/pagination"
 import { formatDayMonth } from "@/lib/format"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -27,6 +29,19 @@ import { getPageParam, getParam, hrefWithParams, type ParamPatch, type SearchPar
 import type { CurrentUser } from "@/lib/session/current-user"
 
 const PAGE_SIZE = 25
+
+/** Включённые источники с подписями компании; справочник недоступен — стандартный набор */
+async function leadSources(): Promise<{ value: ProspectSource; label: string }[]> {
+  try {
+    const items = await fetchReferenceList(await getRenderAuth(), "lead_source", true)
+    return items.flatMap((item) => {
+      const code = prospectSourceSchema.safeParse(item.ref)
+      return code.success ? [{ value: code.data, label: item.label }] : []
+    })
+  } catch {
+    return []
+  }
+}
 
 const STATUS_FILTERS = [null, ...prospectStatusSchema.options] as const
 
@@ -87,7 +102,7 @@ export async function ProspectsView({ user, params }: ProspectsViewProps) {
             options={members.map((member) => ({ value: member.id, label: member.name }))}
           />
         )}
-        {!isMockDataSource && hasPermission(user.role, "records.edit") && <NewProspectButton />}
+        {!isMockDataSource && hasPermission(user.role, "records.edit") && <NewProspectButton sources={await leadSources()} />}
       </Toolbar>
 
       {result.results.length === 0 ? (

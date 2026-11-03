@@ -84,6 +84,7 @@ const dealChangesSchema = z.object({
   amount: amountSchema,
   nextStep: z.string().trim().max(300, "Не длиннее 300 символов"),
   expectedCloseDate: z.union([z.iso.date(), z.literal("")]),
+  source: z.string().trim().max(100, "Источник — не длиннее 100 символов").optional(),
 })
 
 export async function updateDealAction(

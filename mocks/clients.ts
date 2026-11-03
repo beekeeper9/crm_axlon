@@ -35,6 +35,7 @@ function buildClient(name: string): ClientDetail {
     manager: (current ?? latest)?.manager ?? null,
     // В демо архив — клиенты без открытых сделок
     isArchived: open.length === 0,
+    mergedIntoId: null,
     openDealsCount: open.length,
     dealsCount: deals.length,
     currentDeal: current && { id: current.id, stageName: stages.get(current.stageId)?.stage.name ?? "" },
@@ -53,6 +54,7 @@ function buildClient(name: string): ClientDetail {
       }
     }),
     recentActivity: activity.slice(0, 6),
+    history: [],
   }
 }
 

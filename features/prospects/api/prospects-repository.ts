@@ -15,6 +15,7 @@ import {
 import { loadPeopleNames } from "@/features/team"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { apiRequest } from "@/lib/api/client"
+import { ownerChangeSchema, ownerChangeText } from "@/lib/api/owner-change"
 import { ApiError } from "@/lib/api/errors"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
@@ -85,6 +86,7 @@ const backendHistorySchema = z.object({
       occurredAt: z.iso.datetime({ offset: true }),
       actorUserId: z.string().nullable(),
       changedFields: z.array(z.string()),
+      details: ownerChangeSchema,
     })
   ),
 })
@@ -135,9 +137,10 @@ const httpProspectsRepository: ProspectsRepository = {
       apiRequest(leadPath(prospectId, "history/"), { auth: await getRenderAuth(), schema: backendHistorySchema }),
       loadPeopleNames(),
     ])
-    return history.results.map(({ actorUserId, ...entry }) => ({
+    return history.results.map(({ actorUserId, details, ...entry }) => ({
       ...entry,
       actor: actorUserId ? { id: actorUserId, name: nameOf(actorUserId) } : null,
+      transfer: ownerChangeText(details),
     }))
   },
 

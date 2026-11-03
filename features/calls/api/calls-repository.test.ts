@@ -55,19 +55,39 @@ describe("toCall", () => {
 describe("httpCallsRepository.listCalls", () => {
   beforeEach(() => apiRequest.mockReset())
 
-  it("«Пропущенные» и направление уходят в backend", async () => {
+  it("«Пропущенные» — и без ответа, и несостоявшиеся; направление уходит в backend", async () => {
     apiRequest.mockResolvedValueOnce({ count: 0, results: [] })
     await callsRepository.listCalls({ ...query, missedOnly: true, direction: "incoming" })
     expect(apiRequest).toHaveBeenCalledWith(
       "/api/v1/telephony/calls/",
-      expect.objectContaining({ query: expect.objectContaining({ status: "missed", direction: "inbound" }) })
+      expect.objectContaining({ query: expect.objectContaining({ statuses: "missed,failed", direction: "inbound" }) })
     )
   })
 
-  it("фильтры, которых нет у backend, не подменяются неотфильтрованным списком", async () => {
-    await expect(callsRepository.listCalls({ ...query, search: "555" })).rejects.toMatchObject({ kind: "contract_pending" })
-    await expect(callsRepository.listCalls({ ...query, managerId: "u-2" })).rejects.toMatchObject({ kind: "contract_pending" })
-    await expect(callsRepository.listCalls({ ...query, leadId: "d-1" })).rejects.toMatchObject({ kind: "contract_pending" })
-    expect(apiRequest).not.toHaveBeenCalled()
+  it("сотрудник, сделка, дни и поиск фильтруются на backend", async () => {
+    apiRequest.mockResolvedValueOnce({ count: 0, results: [] })
+    await callsRepository.listCalls({ ...query, managerId: "u-2", leadId: "d-1", dateFrom: "2026-11-01", dateTo: "2026-11-02", search: "555" })
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/api/v1/telephony/calls/",
+      expect.objectContaining({
+        query: expect.objectContaining({
+          ownerId: "u-2",
+          subjectType: "deal",
+          subjectId: "d-1",
+          dateFrom: "2026-11-01",
+          dateTo: "2026-11-02",
+          search: "555",
+        }),
+      })
+    )
+  })
+
+  it("звонки клиента — по привязке к клиенту", async () => {
+    apiRequest.mockResolvedValueOnce({ count: 0, results: [] })
+    await callsRepository.listCalls({ ...query, clientId: "c-9" })
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/api/v1/telephony/calls/",
+      expect.objectContaining({ query: expect.objectContaining({ subjectType: "customer", subjectId: "c-9" }) })
+    )
   })
 })

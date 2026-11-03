@@ -1,11 +1,14 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import { ArrowUpRight, Mail, MapPin, Phone } from "lucide-react"
 
 import { PersonAvatar } from "@/components/shared/person-avatar"
 import { StatusBadge, type StatusTone } from "@/components/shared/status-badge"
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { leadRoute } from "@/config/routes"
+import { isMockDataSource } from "@/config/env"
+import { leadRoute, routes } from "@/config/routes"
 import type { ClientDetail } from "@/features/clients/schemas"
+import { ClientConversations, ClientConversationsSkeleton } from "@/features/communications"
 import type { StageKind } from "@/features/sales"
 import { formatDateTime, formatDayMonth, formatDecimalMoney, formatNumber, pluralize } from "@/lib/format"
 
@@ -28,10 +31,19 @@ export function ClientDetailContent({ client, actions }: { client: ClientDetail;
       </SheetHeader>
 
       <div className="space-y-5 px-4 pb-6">
-        {client.isArchived && (
+        {client.mergedIntoId ? (
           <p className="rounded-lg bg-muted/60 px-3 py-2 text-meta text-muted-foreground">
-            Клиент в архиве: только просмотр. Сделки и история сохранены.
+            Карточка-дубль объединена с основной: сделки и история перенесены туда.{" "}
+            <Link href={`${routes.clientBase}?client=${encodeURIComponent(client.mergedIntoId)}`} className="text-primary hover:underline">
+              Открыть основную карточку
+            </Link>
           </p>
+        ) : (
+          client.isArchived && (
+            <p className="rounded-lg bg-muted/60 px-3 py-2 text-meta text-muted-foreground">
+              Клиент в архиве: только просмотр. Сделки и история сохранены.
+            </p>
+          )
         )}
         {actions}
         <section className="space-y-1.5" aria-label="Контакты">
@@ -85,6 +97,12 @@ export function ClientDetailContent({ client, actions }: { client: ClientDetail;
           </ul>
         </section>
 
+        {!isMockDataSource && (
+          <Suspense fallback={<ClientConversationsSkeleton />}>
+            <ClientConversations customerId={client.id} />
+          </Suspense>
+        )}
+
         {client.recentActivity.length > 0 && (
           <section className="space-y-2" aria-labelledby="client-activity">
             <h3 id="client-activity" className="text-xs font-medium text-muted-foreground">Последние события</h3>
@@ -93,6 +111,23 @@ export function ClientDetailContent({ client, actions }: { client: ClientDetail;
                 <li key={item.id} className="text-meta">
                   <p>{item.title}</p>
                   <p className="text-xs text-muted-foreground">{formatDateTime(item.at)}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {client.history.length > 0 && (
+          <section className="space-y-2" aria-labelledby="client-history">
+            <h3 id="client-history" className="text-xs font-medium text-muted-foreground">История карточки</h3>
+            <ol className="space-y-2">
+              {client.history.map((item) => (
+                <li key={item.id} className="text-meta">
+                  <p>{item.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(item.at)}
+                    {item.author && ` · ${item.author}`}
+                  </p>
                 </li>
               ))}
             </ol>

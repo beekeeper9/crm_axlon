@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { logCallAction, type CallLogInput } from "@/features/calls/actions"
+import type { CallSubject } from "@/features/calls/api/calls-repository"
 
 const DIRECTIONS = [
   { value: "outbound", label: "Исходящий" },
@@ -34,18 +35,27 @@ const EMPTY: CallLogInput = {
   notes: "",
 }
 
+type LogCallButtonProps = {
+  /** Карточка сделки или клиента: звонок сразу привязывается к ним */
+  subject?: CallSubject & { name: string }
+  /** Номер клиента, если он известен карточке */
+  phone?: string | null
+  variant?: "default" | "outline"
+}
+
 /** Записать звонок, который уже состоялся (например, с мобильного): телефония для этого не нужна */
-export function LogCallButton() {
+export function LogCallButton({ subject, phone, variant = "default" }: LogCallButtonProps = {}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const [values, setValues] = useState<CallLogInput>(EMPTY)
+  const initial: CallLogInput = { ...EMPTY, clientPhone: phone ?? "" }
+  const [values, setValues] = useState<CallLogInput>(initial)
   const [failure, setFailure] = useState<string | null>(null)
   const set = <K extends keyof CallLogInput>(key: K, value: CallLogInput[K]) => setValues((current) => ({ ...current, [key]: value }))
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" variant={variant} onClick={() => setOpen(true)}>
         <PhoneCall data-icon="inline-start" aria-hidden />
         Записать звонок
       </Button>
@@ -53,7 +63,9 @@ export function LogCallButton() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Записать звонок</DialogTitle>
-            <DialogDescription>Для звонка, который уже состоялся. Время — по часовому поясу компании.</DialogDescription>
+            <DialogDescription>
+              {subject ? `${subject.name}. ` : ""}Для звонка, который уже состоялся. Время — по часовому поясу компании.
+            </DialogDescription>
           </DialogHeader>
           <form
             className="grid gap-3"
@@ -61,11 +73,11 @@ export function LogCallButton() {
             onSubmit={(event) => {
               event.preventDefault()
               startTransition(async () => {
-                const error = await logCallAction(values)
+                const error = await logCallAction(values, subject ? { type: subject.type, id: subject.id } : null)
                 setFailure(error)
                 if (!error) {
                   setOpen(false)
-                  setValues(EMPTY)
+                  setValues(initial)
                   router.refresh()
                 }
               })

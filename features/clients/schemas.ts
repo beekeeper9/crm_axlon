@@ -37,12 +37,18 @@ export const clientSummarySchema = z.object({
   lastInteractionAt: z.iso.datetime({ offset: true }).nullable(),
   /** Клиент в архиве: исключён из активной работы, только чтение (backend `archived_at`) */
   isArchived: z.boolean().default(false),
+  /** Карточка-дубль объединена с этой основной: только история, восстановить нельзя */
+  mergedIntoId: z.string().nullable().default(null),
 })
 
 export const clientDetailSchema = clientSummarySchema.extend({
   deals: z.array(clientDealSchema),
   /** Последние события по всем сделкам клиента */
   recentActivity: z.array(z.object({ id: z.string(), at: z.iso.datetime({ offset: true }), title: z.string(), dealTitle: z.string() })),
+  /** Журнал изменений карточки клиента: кто, когда и что сделал; передача — «от … к …» */
+  history: z
+    .array(z.object({ id: z.string(), at: z.iso.datetime({ offset: true }), title: z.string(), author: z.string().nullable() }))
+    .default([]),
 })
 
 export type ClientSummary = z.infer<typeof clientSummarySchema>

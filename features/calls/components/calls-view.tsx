@@ -25,6 +25,8 @@ import {
   RatingStars,
 } from "@/features/calls/components/call-parts"
 import type { Call } from "@/features/calls/schemas"
+import { CallDateFilter } from "@/features/calls/components/call-date-filter"
+import { CallLinkForm } from "@/features/calls/components/call-link-form"
 import { LogCallButton } from "@/features/calls/components/log-call-button"
 import { teamRepository } from "@/features/team"
 import { companyDateOf } from "@/lib/datetime"
@@ -49,6 +51,14 @@ type CallsViewProps = {
   params: SearchParamsRecord
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/** День из адреса (?from=, ?to=) — только YYYY-MM-DD, иначе без фильтра */
+function dayParam(params: SearchParamsRecord, name: string): string | null {
+  const value = getParam(params, name)
+  return value && DAY.test(value) ? value : null
+}
+
 function groupByDay(calls: readonly Call[]): { day: string; calls: Call[] }[] {
   const groups = new Map<string, Call[]>()
   for (const call of calls) {
@@ -70,13 +80,15 @@ export async function CallsView({ user, params }: CallsViewProps) {
     Promise.all([
       callsRepository.listCalls({
         ...kind.query,
-        // В режиме api видимость решает backend, а фильтров по сотруднику и тексту у него нет
-        managerId: isMockDataSource ? (isTeamView ? getParam(params, "manager") : user.id) : null,
+        // Видимость (свои, команда, все) решает backend; менеджер видит только свои звонки
+        managerId: isTeamView ? getParam(params, "manager") : isMockDataSource ? user.id : null,
         leadId: null,
-        search: isMockDataSource ? getParam(params, "q") : null,
+        dateFrom: dayParam(params, "from"),
+        dateTo: dayParam(params, "to"),
+        search: getParam(params, "q"),
         ...paging,
       }),
-      isTeamView && isMockDataSource ? teamRepository.listMembers() : Promise.resolve([]),
+      isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
       openCallId ? callsRepository.getCall(openCallId) : Promise.resolve(null),
     ])
   )
@@ -87,7 +99,11 @@ export async function CallsView({ user, params }: CallsViewProps) {
   return (
     <div className="space-y-3">
       <Toolbar>
-        {isMockDataSource && <SearchInput label="Поиск звонков" placeholder="Клиент или номер" className="w-full sm:w-64" />}
+        <SearchInput
+          label="Поиск звонков"
+          placeholder={isMockDataSource ? "Клиент или номер" : "Номер или заметка"}
+          className="w-full sm:w-64"
+        />
         <SegmentedLinks
           label="Тип звонка"
           variant="pill"
@@ -98,7 +114,8 @@ export async function CallsView({ user, params }: CallsViewProps) {
             isActive: item.value === kind.value,
           }))}
         />
-        {isTeamView && isMockDataSource && (
+        <CallDateFilter />
+        {isTeamView && (
           <FilterSelect
             label="Менеджер"
             param="manager"
@@ -162,14 +179,14 @@ export async function CallsView({ user, params }: CallsViewProps) {
 
       {openCall && (
         <UrlSheet closeHref={callHref(null)}>
-          <CallDetail call={openCall} />
+          <CallDetail call={openCall} canLink={!isMockDataSource && hasPermission(user.role, "records.edit")} />
         </UrlSheet>
       )}
     </div>
   )
 }
 
-function CallDetail({ call }: { call: Call }) {
+function CallDetail({ call, canLink }: { call: Call; canLink: boolean }) {
   return (
     <>
       <SheetHeader className="pr-10">
@@ -180,6 +197,7 @@ function CallDetail({ call }: { call: Call }) {
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">
         <CallFacts call={call} />
+        {canLink && <CallLinkForm callId={call.id} isLinked={Boolean(call.lead ?? call.client)} />}
         {/* Разбор и транскрипт телефония не отдаёт (ИИ-модуль — отдельная задача): в режиме api блоков нет */}
         {isMockDataSource && <CallAnalysis call={call} isDemoData />}
         <CallRating call={call} />
@@ -195,49 +213,60 @@ function CallDetail({ call }: { call: Call }) {
 }
 
 /** Звонки во вкладке карточки лида: тот же модуль, развёрнутый вид без отдельной панели */
-export async function LeadCallsList({ leadId }: { leadId: string }) {
+export async function LeadCallsList({ leadId, actions }: { leadId: string; actions?: React.ReactNode }) {
   const result = await tryLoad(() =>
     callsRepository.listCalls({ direction: null, missedOnly: false, managerId: null, leadId, search: null, limit: 50, offset: 0 })
   )
   if (!result.ok) return <ApiErrorState error={result.error} bare />
   if (result.data.results.length === 0) {
     return (
-      <EmptyState
-        icon={PhoneOff}
-        title="Звонков пока нет"
-        description="Звонки появятся после подключения телефонии; разговоры от 30 секунд разбираются автоматически."
-      />
+      <div className="space-y-3">
+        {actions}
+        <EmptyState
+          icon={PhoneOff}
+          title="Звонков пока нет"
+          description={
+            isMockDataSource
+              ? "Звонки появятся после подключения телефонии; разговоры от 30 секунд разбираются автоматически."
+              : "Запишите состоявшийся звонок или привяжите его к сделке. Звонки телефонии появятся здесь автоматически."
+          }
+        />
+      </div>
     )
   }
   return (
-    <ul className="space-y-3">
-      {result.data.results.map((call) => (
-        <li key={call.id} className="space-y-3 rounded-xl bg-card p-3 ring-1 ring-border">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <CallDirectionIcon call={call} className="size-4" />
-              {callTitle(call)}
-              <span className="font-normal text-muted-foreground">
-                · {formatDateTime(call.at)} · {call.manager.name}
-              </span>
-            </p>
-            {call.rating && <RatingStars score={call.rating.score} />}
-          </div>
-          {call.status === "answered" && isMockDataSource && <CallAnalysis call={call} isDemoData />}
-          {call.rating?.comment && <p className="text-meta text-muted-foreground">Комментарий руководителя: {call.rating.comment}</p>}
-          {call.transcript && (
-            <details className="rounded-lg bg-muted/40 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground">
-                Транскрипция
-              </summary>
-              <div className="mt-2">
-                <CallTranscript call={call} />
-              </div>
-            </details>
-          )}
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-3">
+      {actions}
+      <ul className="space-y-3">
+        {result.data.results.map((call) => (
+          <li key={call.id} className="space-y-3 rounded-xl bg-card p-3 ring-1 ring-border">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <CallDirectionIcon call={call} className="size-4" />
+                {callTitle(call)}
+                <span className="font-normal text-muted-foreground">
+                  · {formatDateTime(call.at)} · {call.manager.name}
+                </span>
+              </p>
+              {call.rating && <RatingStars score={call.rating.score} />}
+            </div>
+            {call.status === "answered" && isMockDataSource && <CallAnalysis call={call} isDemoData />}
+            {call.notes && <p className="text-meta">{call.notes}</p>}
+            {call.rating?.comment && <p className="text-meta text-muted-foreground">Комментарий руководителя: {call.rating.comment}</p>}
+            {call.transcript && (
+              <details className="rounded-lg bg-muted/40 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground">
+                  Транскрипция
+                </summary>
+                <div className="mt-2">
+                  <CallTranscript call={call} />
+                </div>
+              </details>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

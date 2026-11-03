@@ -113,7 +113,7 @@ export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
   )
 }
 
-type DealFormValues = { title: string; amount: string; nextStep: string; expectedCloseDate: string }
+type DealFormValues = { title: string; amount: string; nextStep: string; expectedCloseDate: string; source: string }
 
 function EditDealDialog({
   lead,
@@ -133,6 +133,7 @@ function EditDealDialog({
     amount: lead.amount ?? "0",
     nextStep: lead.nextStep ?? "",
     expectedCloseDate: lead.expectedCloseDate ?? "",
+    source: lead.source ?? "",
   })
   const field = (key: keyof DealFormValues) => ({
     value: values[key],
@@ -163,6 +164,10 @@ function EditDealDialog({
           <div className="grid gap-1.5">
             <Label htmlFor="deal-edit-next">Следующий шаг</Label>
             <Input id="deal-edit-next" {...field("nextStep")} maxLength={300} placeholder="Например: созвониться в пятницу и согласовать договор" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="deal-edit-source">Источник</Label>
+            <Input id="deal-edit-source" {...field("source")} maxLength={100} placeholder="Например: сайт, Instagram, рекомендация" />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="deal-edit-close">Ожидаемая дата закрытия</Label>
