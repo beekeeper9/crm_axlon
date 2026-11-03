@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import type { TaskSubjectOption } from "@/features/tasks/api/tasks-repository"
+import { TaskSubjectPicker } from "@/features/tasks/components/task-subject-picker"
 import { TASK_TYPE_META, isDateOnlyDue } from "@/features/tasks/lib/task-meta"
 import { taskFormSchema, taskTypeSchema, type Task, type TaskFormValues, type TaskType } from "@/features/tasks/schemas"
 import { isoToCompanyWallTime } from "@/lib/datetime"
@@ -38,7 +40,9 @@ type TaskFormDialogProps = {
   mode: "demo" | "server"
   onOpenChange: (open: boolean) => void
   /** В режиме server — сообщение об ошибке сервера или null, если задача сохранена */
-  onSave: (values: TaskFormValues) => void | Promise<string | null>
+  onSave: (values: TaskFormValues, subject: TaskSubjectOption | null) => void | Promise<string | null>
+  /** Новая задача вне карточки сделки: пользователь выбирает сделку или клиента */
+  needsSubject?: boolean
 }
 
 const SERVER_TYPES: readonly TaskType[] = ["call", "meeting", "todo"]
@@ -64,8 +68,11 @@ function TaskForm({
   mode,
   onSave,
   onCancel,
+  needsSubject = false,
 }: Omit<TaskFormDialogProps, "open" | "onOpenChange"> & { onCancel: () => void }) {
   const isServer = mode === "server"
+  const [subject, setSubject] = useState<TaskSubjectOption | null>(null)
+  const [subjectError, setSubjectError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [values, setValues] = useState<TaskFormValues>(() => ({
@@ -87,6 +94,8 @@ function TaskForm({
   function submit(event: React.FormEvent) {
     event.preventDefault()
     const parsed = taskFormSchema.safeParse(values)
+    const missingSubject = needsSubject && !subject
+    setSubjectError(missingSubject ? "Выберите сделку или клиента, к которым относится задача" : null)
     if (!parsed.success) {
       const next: FieldErrors = {}
       for (const issue of parsed.error.issues) {
@@ -96,7 +105,8 @@ function TaskForm({
       setErrors(next)
       return
     }
-    const saving = onSave(parsed.data)
+    if (missingSubject) return
+    const saving = onSave(parsed.data, subject)
     if (!saving) return
     setIsSaving(true)
     setServerError(null)
@@ -124,6 +134,20 @@ function TaskForm({
         <DialogTitle>{task ? "Изменить задачу" : "Новая задача"}</DialogTitle>
         {leadName && <DialogDescription>По лиду «{leadName}»</DialogDescription>}
       </DialogHeader>
+
+      {needsSubject && (
+        <div className="grid gap-2">
+          <Label htmlFor="task-subject">Сделка или клиент</Label>
+          <TaskSubjectPicker
+            value={subject}
+            onChange={(next) => {
+              setSubject(next)
+              setSubjectError(null)
+            }}
+            error={subjectError ?? undefined}
+          />
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="task-title">Что сделать</Label>

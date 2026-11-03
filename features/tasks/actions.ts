@@ -6,10 +6,12 @@ import { isMockDataSource } from "@/config/env"
 import {
   SERVER_TASK_TYPES,
   completeTask,
-  createDealTask,
+  createTask,
   changeTaskState,
   reassignTask,
+  searchTaskSubjects,
   toTask,
+  type TaskSubjectOption,
   updateTask,
 } from "@/features/tasks/api/tasks-repository"
 import { loadPeopleNames } from "@/features/team"
@@ -48,7 +50,7 @@ function failure(error: unknown, operation: Operation): TaskActionResult {
           : "Задача уже выполнена или отменена. Обновите страницу, чтобы увидеть актуальный статус.",
     not_found:
       operation === "create"
-        ? "Сделка недоступна: возможно, её передали другому сотруднику."
+        ? "Сделка или клиент недоступны: возможно, их передали другому сотруднику."
         : "Задача недоступна: возможно, её передали другому сотруднику.",
     forbidden:
       operation === "create" ? "У вашей роли нет права ставить задачу этому сотруднику." : "У вашей роли нет права менять эту задачу.",
@@ -65,19 +67,49 @@ const DEMO_ONLY: TaskActionResult = {
   requestId: null,
 }
 
-/** Новая задача по сделке. Права, лимит открытых задач и исполнителя окончательно проверяет backend */
-export async function createDealTaskAction(dealId: string, input: NewDealTaskInput): Promise<TaskActionResult> {
+const subjectSchema = z.object({
+  type: z.enum(["deal", "customer"]),
+  id: z.string().min(1, "Выберите сделку или клиента"),
+  name: z.string(),
+})
+
+/**
+ * Новая задача по сделке или клиенту. Права, лимит открытых задач на сделку и исполнителя
+ * окончательно проверяет backend. Сделка становится ссылкой задачи в списке.
+ */
+export async function createTaskAction(subject: TaskSubjectOption, input: NewDealTaskInput): Promise<TaskActionResult> {
   if (isMockDataSource) return DEMO_ONLY
+  const target = subjectSchema.safeParse(subject)
+  if (!target.success) return { ok: false, message: "Выберите сделку или клиента, к которым относится задача.", requestId: null }
   const parsed = newDealTaskSchema.safeParse(input)
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? API_ERROR_MESSAGES.validation, requestId: null }
   try {
-    const created = await createDealTask(await getActionAuth(), dealId, {
+    const created = await createTask(await getActionAuth(), target.data, {
       ...parsed.data,
       description: parsed.data.description || null,
     })
-    return { ok: true, task: toTask(created, await loadPeopleNames()) }
+    const task = toTask(created, await loadPeopleNames())
+    // В карточке сделки имя не передаётся: связь задачи подставит сам список
+    const linked = target.data.type === "deal" && target.data.name
+    return { ok: true, task: linked ? { ...task, lead: { id: target.data.id, name: target.data.name } } : task }
   } catch (error) {
     return failure(error, "create")
+  }
+}
+
+/** Новая задача по сделке (карточка сделки) */
+export async function createDealTaskAction(dealId: string, input: NewDealTaskInput): Promise<TaskActionResult> {
+  return createTaskAction({ type: "deal", id: dealId, name: "" }, input)
+}
+
+/** Поиск сделок и клиентов для привязки новой задачи; видимость решает backend */
+export async function searchTaskSubjectsAction(search: string): Promise<{ ok: true; options: TaskSubjectOption[] } | { ok: false; message: string }> {
+  if (isMockDataSource) return { ok: false, message: "В демо-режиме поиск по серверу недоступен." }
+  try {
+    return { ok: true, options: await searchTaskSubjects(await getActionAuth(), search.slice(0, 100)) }
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error
+    return { ok: false, message: apiErrorMessage(error) }
   }
 }
 

@@ -76,3 +76,39 @@ describe("фильтры задач уходят в backend", () => {
     expect(apiRequest).toHaveBeenCalledWith("/api/v1/activities/", expect.objectContaining({ query: expect.objectContaining({ noDueDate: "true" }) }))
   })
 })
+
+describe("создание задачи по любой привязке", () => {
+  it("тело запроса: клиент, исполнитель и описание; без исполнителя — себе", async () => {
+    const { taskCreateBody } = await import("@/features/tasks/api/tasks-repository")
+    const base = { title: "Позвонить", dueDate: "2026-11-05", type: "todo" as const, priority: "high" as const, assigneeId: "u-2", description: "Про договор" }
+    expect(taskCreateBody({ type: "customer", id: "c-1" }, base)).toEqual({
+      kind: "task",
+      subjectType: "customer",
+      subjectId: "c-1",
+      title: "Позвонить",
+      dueDate: "2026-11-05",
+      taskType: "other",
+      priority: "high",
+      assigneeUserId: "u-2",
+      body: "Про договор",
+    })
+    const own = taskCreateBody({ type: "deal", id: "d-1" }, { ...base, assigneeId: null, description: null })
+    expect(own).not.toHaveProperty("assigneeUserId")
+    expect(own).not.toHaveProperty("body")
+  })
+
+  it("поиск привязки: открытые сделки и клиенты не в архиве", async () => {
+    const { searchTaskSubjects } = await import("@/features/tasks/api/tasks-repository")
+    apiRequest.mockReset()
+    apiRequest.mockImplementation(async (path: string) =>
+      path === "/api/v1/sales/deals/" ? { count: 1, results: [{ id: "d-1", title: "Окна" }] } : { count: 1, results: [{ id: "c-1", name: "ОсОО Свет" }] }
+    )
+    const options = await searchTaskSubjects({ tokens: {} as never }, " окна ")
+    expect(options).toEqual([
+      { type: "deal", id: "d-1", name: "Окна" },
+      { type: "customer", id: "c-1", name: "ОсОО Свет" },
+    ])
+    expect(apiRequest).toHaveBeenCalledWith("/api/v1/sales/deals/", expect.objectContaining({ query: expect.objectContaining({ search: "окна", status: "open" }) }))
+    expect(apiRequest).toHaveBeenCalledWith("/api/v1/customers/", expect.objectContaining({ query: expect.objectContaining({ search: "окна", archived: "false" }) }))
+  })
+})

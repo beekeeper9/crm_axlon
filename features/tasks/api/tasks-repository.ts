@@ -145,24 +145,57 @@ export type NewDealTask = {
   description: string | null
 }
 
-/** `POST /activities/` — задача, привязанная к сделке. Права, лимит открытых задач и исполнителя проверяет backend */
-export async function createDealTask(auth: ApiAuth, dealId: string, task: NewDealTask): Promise<BackendTask> {
+/** К чему привязана задача: сделка или клиент (backend не принимает задачу без привязки) */
+export type TaskSubject = { type: "deal" | "customer"; id: string }
+
+/**
+ * `POST /activities/` — задача по сделке или клиенту. Права, исполнителя и лимит открытых задач
+ * на сделку (не больше двух) проверяет backend.
+ */
+export async function createTask(auth: ApiAuth, subject: TaskSubject, task: NewDealTask): Promise<BackendTask> {
   return apiRequest("/api/v1/activities/", {
     method: "POST",
     auth,
-    body: {
-      kind: "task",
-      subjectType: "deal",
-      subjectId: dealId,
-      title: task.title,
-      dueDate: task.dueDate,
-      taskType: BACKEND_TASK_TYPE[task.type],
-      priority: task.priority,
-      ...(task.assigneeId ? { assigneeUserId: task.assigneeId } : {}),
-      ...(task.description ? { body: task.description } : {}),
-    },
+    body: taskCreateBody(subject, task),
     schema: backendTaskSchema,
   })
+}
+
+/** Тело `POST /activities/`: поля приходят в camelCase и уходят в snake_case */
+export function taskCreateBody(subject: TaskSubject, task: NewDealTask): Record<string, string> {
+  return {
+    kind: "task",
+    subjectType: subject.type,
+    subjectId: subject.id,
+    title: task.title,
+    dueDate: task.dueDate,
+    taskType: BACKEND_TASK_TYPE[task.type],
+    priority: task.priority,
+    ...(task.assigneeId ? { assigneeUserId: task.assigneeId } : {}),
+    ...(task.description ? { body: task.description } : {}),
+  }
+}
+
+/** Задача по сделке (карточка сделки) */
+export async function createDealTask(auth: ApiAuth, dealId: string, task: NewDealTask): Promise<BackendTask> {
+  return createTask(auth, { type: "deal", id: dealId }, task)
+}
+
+const subjectSearchSchema = paginatedSchema(z.object({ id: z.string(), title: z.string().optional(), name: z.string().optional() }))
+
+export type TaskSubjectOption = TaskSubject & { name: string }
+
+/** Сделки (открытые) и клиенты (не в архиве), видимые пользователю, — для выбора привязки задачи */
+export async function searchTaskSubjects(auth: ApiAuth, search: string): Promise<TaskSubjectOption[]> {
+  const query = search.trim() || undefined
+  const [deals, customers] = await Promise.all([
+    apiRequest("/api/v1/sales/deals/", { auth, query: { search: query, status: "open", ordering: "-created_at", limit: 8 }, schema: subjectSearchSchema }),
+    apiRequest("/api/v1/customers/", { auth, query: { search: query, archived: "false", ordering: "-created_at", limit: 8 }, schema: subjectSearchSchema }),
+  ])
+  return [
+    ...deals.results.map((deal) => ({ type: "deal" as const, id: deal.id, name: deal.title ?? "Сделка" })),
+    ...customers.results.map((customer) => ({ type: "customer" as const, id: customer.id, name: customer.name ?? "Клиент" })),
+  ]
 }
 
 export type TaskChanges = {

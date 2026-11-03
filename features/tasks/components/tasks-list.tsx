@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet"
 import { TaskFormDialog } from "@/features/tasks/components/task-form-dialog"
 import { TaskRow } from "@/features/tasks/components/task-row"
-import { changeTaskStateAction, completeTaskAction, createDealTaskAction, updateTaskAction, type TaskActionResult } from "@/features/tasks/actions"
+import { changeTaskStateAction, completeTaskAction, createDealTaskAction, createTaskAction, updateTaskAction, type TaskActionResult } from "@/features/tasks/actions"
+import type { TaskSubjectOption } from "@/features/tasks/api/tasks-repository"
 import { DUE_GROUPS } from "@/features/tasks/lib/task-meta"
 import type { Task, TaskFormValues } from "@/features/tasks/schemas"
 import { companyWallTimeToIso } from "@/lib/datetime"
@@ -80,7 +81,8 @@ export function TasksList({
   const canEdit = editMode === "demo"
   // Через backend работают создание (только в карточке сделки) и выполнение; права окончательно проверяет он
   const isRemote = !canEdit && editMode !== "read-only"
-  const canCreate = canEdit || (isRemote && remoteDealId !== null)
+  // Вне карточки сделки задача тоже создаётся через backend: сделку или клиента выбирают в форме
+  const canCreate = canEdit || isRemote
   const canWrite = canEdit || isRemote
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
   const [listError, setListError] = useState<{ message: string; requestId: string | null } | null>(null)
@@ -105,9 +107,22 @@ export function TasksList({
     return null
   }
 
-  async function saveRemote(dealId: string | null, values: TaskFormValues): Promise<string | null> {
+  async function saveRemote(dealId: string | null, values: TaskFormValues, subject: TaskSubjectOption | null): Promise<string | null> {
     const editing = form.task
-    if (!editing && !dealId) return "Задача создаётся в карточке сделки."
+    const fields = {
+      title: values.title,
+      dueDate: values.dueAt,
+      type: values.type === "email" ? ("todo" as const) : values.type,
+      priority: values.priority,
+      assigneeId: canAssign ? values.assigneeId : null,
+      description: values.description,
+    }
+    if (!editing && !dealId) {
+      if (!subject) return "Выберите сделку или клиента, к которым относится задача."
+      const error = applyServerTask(await createTaskAction(subject, fields))
+      if (!error) setForm({ open: false, task: null })
+      return error
+    }
     const error = applyServerTask(
       editing
         ? await updateTaskAction(
@@ -121,14 +136,7 @@ export function TasksList({
             },
             editing.assignee?.id ?? null
           )
-        : await createDealTaskAction(dealId ?? "", {
-        title: values.title,
-        dueDate: values.dueAt,
-        type: values.type === "email" ? "todo" : values.type,
-        priority: values.priority,
-        assigneeId: canAssign ? values.assigneeId : null,
-        description: values.description,
-      })
+        : await createDealTaskAction(dealId ?? "", fields)
     )
     if (!error) setForm({ open: false, task: null })
     return error
@@ -149,8 +157,8 @@ export function TasksList({
     }
   }
 
-  function save(values: TaskFormValues) {
-    if (isRemote) return saveRemote(remoteDealId, values)
+  function save(values: TaskFormValues, subject: TaskSubjectOption | null) {
+    if (isRemote) return saveRemote(remoteDealId, values, subject)
     const fields = {
       title: values.title,
       type: values.type,
@@ -210,7 +218,7 @@ export function TasksList({
               setForm({ open: true, task: null })
             }}
             disabled={!canCreate}
-            title={canCreate ? undefined : remoteDealId === null && isRemote ? "Задача создаётся в карточке сделки" : EDIT_UNAVAILABLE_HINT}
+            title={canCreate ? undefined : EDIT_UNAVAILABLE_HINT}
           >
             <Plus data-icon="inline-start" aria-hidden />
             Новая задача
@@ -295,6 +303,7 @@ export function TasksList({
         onOpenChange={(open) => !open && setForm({ open: false, task: null })}
         mode={isRemote ? "server" : "demo"}
         onSave={save}
+        needsSubject={isRemote && remoteDealId === null && form.task === null}
       />
     </div>
   )
