@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ReceiptText,
+  Globe,
   Shuffle,
   CalendarDays,
   ClipboardList,
@@ -67,6 +68,7 @@ const item = {
   settingsIntegrations: { title: "Интеграции", href: routes.settingsIntegrations, icon: Plug, permission: "company.settings" },
   settingsTemplates: { title: "Шаблоны сообщений", href: routes.settingsTemplates, icon: MessageSquareText },
   settingsLeadRouting: { title: "Распределение лидов", href: routes.settingsLeadRouting, icon: Shuffle, permission: "staff.manage" },
+  settingsWebForms: { title: "Заявки с сайта", href: routes.settingsWebForms, icon: Globe, permission: "staff.manage" },
   paymentReview: { title: "Проверка оплат", href: routes.paymentReview, icon: ReceiptText, permission: "staff.manage" },
   settingsImport: { title: "Импорт", href: routes.settingsImport, icon: Upload, permission: "records.edit" },
   profileNotifications: { title: "Уведомления", href: routes.profileNotifications, icon: Bell },
@@ -133,6 +135,7 @@ const directorSections: readonly NavGroup[] = [
       item.settingsCompany,
       item.settingsReferenceLists,
       item.settingsLeadRouting,
+      item.settingsWebForms,
       item.settingsAudit,
       item.settingsIntegrations,
       item.settingsTemplates,
@@ -152,7 +155,7 @@ const teamSections: readonly NavGroup[] = [
   { title: "Управление", items: [item.staff, item.workspace, item.support] },
   {
     title: "Настройки",
-    items: [item.settingsReferenceLists, item.settingsLeadRouting, item.settingsAudit, item.settingsTemplates, item.settingsImport, item.profileNotifications],
+    items: [item.settingsReferenceLists, item.settingsLeadRouting, item.settingsWebForms, item.settingsAudit, item.settingsTemplates, item.settingsImport, item.profileNotifications],
   },
 ]
 
