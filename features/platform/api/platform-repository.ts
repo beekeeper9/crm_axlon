@@ -16,6 +16,7 @@ import {
   type ErrorRecord,
   type ErrorStatus,
   type Overview,
+  type PlanCode,
   type Terms,
   type Ticket,
   type TicketStatus,
@@ -32,8 +33,8 @@ import { paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagi
 
 const BASE = "/api/v1/platform"
 
-export function getOverview(auth: ApiAuth, periodDays: number): Promise<Overview> {
-  return apiRequest(`${BASE}/overview/`, { auth, query: { periodDays }, schema: overviewSchema })
+export function getOverview(auth: ApiAuth, periodDays: number, plan: PlanCode | null = null): Promise<Overview> {
+  return apiRequest(`${BASE}/overview/`, { auth, query: { periodDays, plan }, schema: overviewSchema })
 }
 
 export function getCatalog(auth: ApiAuth): Promise<Catalog> {

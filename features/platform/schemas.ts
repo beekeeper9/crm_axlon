@@ -5,7 +5,7 @@ import { z } from "zod"
  * модуль platform_admin); ответы приходят в camelCase после клиента API.
  */
 
-export const PLAN_CODES = ["free", "pro", "enterprise"] as const
+export const PLAN_CODES = ["trial", "free", "pro", "enterprise"] as const
 export const FEATURES = ["telephony", "communications", "payments", "analytics", "ai", "operations", "risk"] as const
 export const ACCESS_STATES = ["active", "expiring", "expired", "past_due", "cancelled"] as const
 export const SUBSCRIPTION_STATUSES = ["active", "past_due", "cancelled"] as const
@@ -87,6 +87,8 @@ const moneySchema = z.object({ currency: z.string(), amount: z.string() })
 
 export const overviewSchema = z.object({
   periodDays: z.int(),
+  /** Тариф, по которому сужен обзор; null — все тарифы */
+  plan: planCodeSchema.nullable(),
   companies: z.object({ total: z.int(), active: z.int(), suspended: z.int(), newInPeriod: z.int() }),
   subscriptions: z.object({
     active: z.int(),
@@ -100,6 +102,8 @@ export const overviewSchema = z.object({
   }),
   users: z.object({ active: z.int() }),
   revenue: z.object({
+    /** По каждому тарифу каталога: подписки с доступом и сумма их цен в месяц */
+    byPlan: z.array(z.object({ plan: planCodeSchema, companies: z.int(), currency: z.string(), amount: z.string() })),
     /** Сумма прейскурантных цен назначенных тарифов — НЕ полученные деньги */
     assignedMonthly: z.array(moneySchema),
     received: z.array(moneySchema).nullable(),
@@ -119,6 +123,8 @@ export const catalogSchema = z.object({
       currency: z.string(),
       limits: z.record(z.string(), z.int()),
       features: z.array(featureSchema),
+      /** Длительность пробного тарифа в днях; null — тариф без пробного срока */
+      trialDays: z.int().nullable(),
     })
   ),
   features: z.array(featureSchema),

@@ -166,7 +166,7 @@ function CreateForm({ catalog, today, onCreated }: { catalog: Catalog; today: st
           <FormField id="startsOn" label="Начало" error={errors["subscription.startsOn"]}>
             <Input id="startsOn" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} className="h-10" />
           </FormField>
-          <FormField id="endsOn" label="Последний день доступа" error={errors["subscription.endsOn"]} hint="Пусто — бессрочно">
+          <FormField id="endsOn" label="Последний день доступа" error={errors["subscription.endsOn"]} hint={planCode === "trial" ? "Пусто — 7 дней с начала" : "Пусто — бессрочно"}>
             <Input id="endsOn" type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} className="h-10" />
           </FormField>
         </div>

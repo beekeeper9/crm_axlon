@@ -150,7 +150,7 @@ export function SubscriptionForm({ companyId, subscription, catalog, today }: { 
         <FormField id="startsOn" label="Начало" error={failure?.fieldErrors.startsOn}>
           <Input id="startsOn" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} className="h-10" />
         </FormField>
-        <FormField id="endsOn" label="Последний день доступа" error={failure?.fieldErrors.endsOn} hint="Пусто — бессрочно">
+        <FormField id="endsOn" label="Последний день доступа" error={failure?.fieldErrors.endsOn} hint={planCode === "trial" ? "Пусто — 7 дней с начала" : "Пусто — бессрочно"}>
           <Input id="endsOn" type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} className="h-10" />
         </FormField>
       </div>

@@ -3,9 +3,10 @@ import type { AccessState, ErrorStatus, Feature, PlanCode, SubscriptionStatus, T
 
 /** Названия тарифов в интерфейсе; коды и цены — из каталога backend */
 export const PLAN_LABELS: Record<PlanCode, string> = {
-  free: "Базовый",
-  pro: "Расширенный",
-  enterprise: "Корпоративный",
+  trial: "Пробный 7 дней",
+  free: "Standard",
+  pro: "Pro",
+  enterprise: "Premium",
 }
 
 /** Платные модули. Основа CRM (клиенты, сделки, задачи, встречи, сотрудники, планы) есть в любом тарифе */

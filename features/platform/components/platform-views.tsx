@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { AlertTriangle, Building2, CircleDollarSign, Inbox, Plus, Users } from "lucide-react"
+import { AlertTriangle, Building2, Inbox, Plus, Users } from "lucide-react"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -31,6 +31,7 @@ import {
   type CompanySummary,
   type ErrorStatus,
   type Overview,
+  type PlanCode,
   type TicketStatus,
 } from "@/features/platform/schemas"
 import { tryLoad } from "@/lib/api/load"
@@ -44,10 +45,10 @@ import { applyParamPatch, getPageParam, getParam, toUrlSearchParams, type Search
 const PAGE_SIZE = 25
 
 /** Обёртка раздела: заголовок и честное сообщение для демо-режима. Разделы панели — в верхнем меню */
-function PlatformPage({ title, description, actions, children }: { section: PlatformSection; title: string; description?: string; actions?: React.ReactNode; children: React.ReactNode }) {
+function PlatformPage({ title, titleClassName, description, actions, children }: { section: PlatformSection; title: string; titleClassName?: string; description?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-5">
-      <PageHeader title={title} description={description} actions={actions} />
+      <PageHeader title={title} titleClassName={titleClassName} description={description} actions={actions} />
       {isMockDataSource ? (
         <ListPanel>
           <EmptyState
@@ -70,20 +71,24 @@ function hrefWith(base: string, params: SearchParamsRecord, patch: Record<string
 
 // --- обзор ------------------------------------------------------------------------------
 
+// Короткие подписи: переключатель стоит внутри карточки «Подключено за период»
 const PERIODS = [
-  { days: 7, label: "7 дней" },
-  { days: 30, label: "30 дней" },
-  { days: 90, label: "90 дней" },
+  { days: 7, label: "7 дн." },
+  { days: 30, label: "30 дн." },
+  { days: 90, label: "90 дн." },
   { days: 365, label: "Год" },
 ] as const
 
 export async function PlatformOverviewView({ params }: { params: SearchParamsRecord }) {
   const requested = Number(getParam(params, "period") ?? "30")
   const days = PERIODS.some((p) => p.days === requested) ? requested : 30
+  const requestedPlan = getParam(params, "plan")
+  const plan = PLAN_CODES.find((code) => code === requestedPlan) ?? null
   return (
     <PlatformPage
       section="overview"
-      title="Администратор платформы"
+      title="Wall Street"
+      titleClassName="font-[family-name:var(--font-montserrat)] text-2xl font-semibold"
       description="Подключённые компании, подписки и состояние платформы"
       actions={
         <Link href={routes.platformCompanyNew} className={buttonVariants({ size: "lg" })}>
@@ -92,54 +97,60 @@ export async function PlatformOverviewView({ params }: { params: SearchParamsRec
         </Link>
       }
     >
-      <OverviewContent days={days} params={params} />
+      <OverviewContent days={days} plan={plan} params={params} />
     </PlatformPage>
   )
 }
 
-async function OverviewContent({ days, params }: { days: number; params: SearchParamsRecord }) {
-  const loaded = await tryLoad(async () => platform.getOverview(await getRenderAuth(), days))
+async function OverviewContent({ days, plan, params }: { days: number; plan: PlanCode | null; params: SearchParamsRecord }) {
+  const loaded = await tryLoad(async () => platform.getOverview(await getRenderAuth(), days, plan))
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
   const o = loaded.data
   return (
     <div className="space-y-5">
       <SegmentedLinks
-        label="Период"
+        label="Тариф"
         variant="pill"
         className="w-fit"
-        items={PERIODS.map((p) => ({ key: String(p.days), label: p.label, href: hrefWith(routes.platform, params, { period: String(p.days) }), isActive: p.days === days }))}
+        items={[
+          { key: "all", label: "Все тарифы", href: hrefWith(routes.platform, params, { plan: null }), isActive: plan === null },
+          ...PLAN_CODES.map((code) => ({ key: code, label: PLAN_LABELS[code], href: hrefWith(routes.platform, params, { plan: code }), isActive: code === plan })),
+        ]}
       />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat icon={Building2} label="Компаний всего" value={o.companies.total} note={`${formatNumber(o.companies.active)} активны · ${formatNumber(o.companies.suspended)} приостановлены`} />
-        <Stat icon={Building2} label="Подключено за период" value={o.companies.newInPeriod} />
+        <div className="space-y-2 rounded-xl bg-card p-4 ring-1 ring-border">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Building2 className="size-3.5" aria-hidden />
+            Подключено за период
+          </p>
+          <p className="text-2xl font-semibold tabular-nums">{formatNumber(o.companies.newInPeriod)}</p>
+          <SegmentedLinks
+            label="Период подключений"
+            variant="pill"
+            className="w-fit"
+            items={PERIODS.map((p) => ({ key: String(p.days), label: p.label, href: hrefWith(routes.platform, params, { period: String(p.days) }), isActive: p.days === days }))}
+          />
+        </div>
         <Stat icon={Users} label="Пользователей" value={o.users.active} note="Активные аккаунты в активных компаниях" />
-        <Stat icon={CircleDollarSign} label="Подписок дают доступ" value={o.subscriptions.givingAccess} />
       </div>
 
       <section className="grid gap-3 lg:grid-cols-2">
         <Panel title="Подписки">
-          <dl className="divide-y text-sm">
+          <ul className="divide-y text-sm">
             {(["active", "expiring", "expired", "pastDue", "cancelled"] as const).map((key) => {
               const state = key === "pastDue" ? "past_due" : key
-              const filterHref = `${routes.platformCompanies}?access=${state}`
+              const filterHref = `${routes.platformCompanies}?${new URLSearchParams({ access: state, ...(plan ? { plan } : {}) })}`
               return (
-                <div key={key} className="flex items-center justify-between gap-3 py-2">
-                  <dt>
+                <li key={key}>
+                  <Link href={filterHref} className="-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-muted/60">
                     <StatusBadge tone={ACCESS_META[state].tone}>{ACCESS_META[state].label}</StatusBadge>
-                  </dt>
-                  <dd>
-                    <Link href={filterHref} className="font-medium tabular-nums hover:text-primary">
-                      {formatNumber(o.subscriptions[key])}
-                    </Link>
-                  </dd>
-                </div>
+                    <span className="font-medium tabular-nums">{formatNumber(o.subscriptions[key])}</span>
+                  </Link>
+                </li>
               )
             })}
-            <div className="flex items-center justify-between gap-3 py-2 text-muted-foreground">
-              <dt>Без подписки</dt>
-              <dd className="tabular-nums">{formatNumber(o.subscriptions.none)}</dd>
-            </div>
-          </dl>
+          </ul>
         </Panel>
 
         <Panel title="Выручка">
@@ -153,7 +164,9 @@ async function OverviewContent({ days, params }: { days: number; params: SearchP
             </Link>{" "}
             новых · {formatNumber(o.errors.inPeriod)} за период
           </p>
-          <p className="text-meta text-muted-foreground">Непредвиденные ошибки сервера (HTTP 500) — без текста ошибки и данных запроса.</p>
+          <p className="text-meta text-muted-foreground">
+            Непредвиденные ошибки сервера (HTTP 500) — без текста ошибки и данных запроса.{plan && " Считаются по всей платформе, без фильтра по тарифу."}
+          </p>
         </Panel>
 
         <Panel title="Обращения компаний">
@@ -171,26 +184,34 @@ async function OverviewContent({ days, params }: { days: number; params: SearchP
 
 function Revenue({ overview }: { overview: Overview }) {
   const { revenue } = overview
+  // Пробный тариф бесплатен и в выручку не входит
+  const rows = revenue.byPlan.filter((row) => row.plan !== "trial" && (overview.plan === null || row.plan === overview.plan))
   return (
-    <div className="space-y-3 text-sm">
-      <div>
-        <p className="text-xs text-muted-foreground">Сумма назначенных тарифов в месяц</p>
-        <p className="font-semibold tabular-nums">
-          {revenue.assignedMonthly.length ? revenue.assignedMonthly.map((m) => formatDecimalMoney(m.amount, m.currency)).join(" · ") : "0"}
-        </p>
-        <p className="text-xs text-muted-foreground">По прейскуранту действующих подписок. Это не полученные деньги.</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Получено оплат за период</p>
-        <p className="font-medium text-muted-foreground">Нет данных</p>
-        <p className="text-xs text-muted-foreground">
-          Платежи за подписки на платформе пока не учитываются. Для показателя нужен учёт оплат (вручную или от платёжного провайдера).
-        </p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">Просроченные платежи</p>
-        <p className="font-medium text-muted-foreground">Нет данных</p>
-      </div>
+    <div className="space-y-2 text-sm">
+      <p className="text-xs text-muted-foreground">Сумма назначенных тарифов в месяц, по прейскуранту. Это не полученные деньги.</p>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground">Пробный тариф бесплатный — выручки нет.</p>
+      ) : (
+        <dl className="divide-y">
+          {rows.map((row) => (
+            <div key={row.plan} className="flex items-baseline justify-between gap-3 py-2">
+              <dt>
+                <span className="font-medium">{PLAN_LABELS[row.plan]}</span>{" "}
+                <span className="text-xs text-muted-foreground">· {formatNumber(row.companies)} комп.</span>
+              </dt>
+              <dd className="font-semibold tabular-nums">{formatDecimalMoney(row.amount, row.currency)}</dd>
+            </div>
+          ))}
+          {rows.length > 1 && (
+            <div className="flex items-baseline justify-between gap-3 py-2 text-muted-foreground">
+              <dt>Итого</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {revenue.assignedMonthly.length ? revenue.assignedMonthly.map((m) => formatDecimalMoney(m.amount, m.currency)).join(" · ") : formatDecimalMoney("0", rows[0].currency)}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
     </div>
   )
 }
