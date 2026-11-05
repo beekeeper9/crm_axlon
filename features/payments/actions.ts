@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 import { isMockDataSource } from "@/config/env"
-import { leadRoute } from "@/config/routes"
+import { leadRoute, routes } from "@/config/routes"
 import { confirmPayment, rejectPayment } from "@/features/payments/api/payments-api"
 import { paymentErrorMessage } from "@/features/payments/messages"
 import { PAYMENT_REVIEW_PATH } from "@/features/payments/paths"
@@ -18,6 +18,8 @@ const reasonSchema = z.string().trim().min(3, "Напишите причину: 
 
 function revalidate(dealId: string | null) {
   revalidatePath(PAYMENT_REVIEW_PATH)
+  // Очередь проверки открывается и из «Что делать сегодня» в кабинете РОПа
+  revalidatePath(routes.team)
   if (dealId) revalidatePath(leadRoute(dealId))
 }
 

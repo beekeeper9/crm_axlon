@@ -39,6 +39,8 @@ const managerDaySchema = z.object({
   meetingsNoShow: z.int().nonnegative(),
   meetingsOverdueOutcome: z.int().nonnegative(),
   paymentsCount: z.int().nonnegative(),
+  /** Из оплат дня — предоплаты */
+  prepayments: z.int().nonnegative().default(0),
   received: decimalStringSchema,
   openTasks: z.int().nonnegative(),
   overdueTasks: z.int().nonnegative(),
@@ -61,6 +63,8 @@ const teamBoardSchema = z.object({
   /** Валюта денежных сумм ответа: backend складывает только оплаты в валюте компании */
   currency: z.string().nullable().default(null),
   asOf: z.iso.datetime({ offset: true }),
+  /** День, за который построена доска (дата компании) */
+  date: z.iso.date().nullable().default(null),
   managers: z.array(managerDaySchema),
   totals: z.object({
     managers: z.int().nonnegative(),
@@ -68,6 +72,7 @@ const teamBoardSchema = z.object({
     meetingsTotal: z.int().nonnegative(),
     meetingsHeld: z.int().nonnegative(),
     paymentsCount: z.int().nonnegative(),
+    prepayments: z.int().nonnegative().default(0),
     received: decimalStringSchema,
     meetingsConfirmed: z.int().nonnegative().default(0),
     meetingsToConfirm: z.int().nonnegative().default(0),
@@ -129,9 +134,10 @@ async function namer(): Promise<(row: { userId: string; username: string }) => s
   }
 }
 
-export async function fetchTeamBoard(): Promise<TeamBoard> {
+/** `date` — прошедший день (ГГГГ-ММ-ДД), например вчера; без него — сегодня */
+export async function fetchTeamBoard(date: string | null = null): Promise<TeamBoard> {
   const [board, nameOf] = await Promise.all([
-    apiRequest("/api/v1/team/today/", { auth: await getRenderAuth(), schema: teamBoardSchema }),
+    apiRequest("/api/v1/team/today/", { auth: await getRenderAuth(), query: { date }, schema: teamBoardSchema }),
     namer(),
   ])
   return { ...board, managers: board.managers.map((row) => ({ ...row, name: nameOf(row) })) }

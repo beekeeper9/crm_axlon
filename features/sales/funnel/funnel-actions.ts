@@ -46,6 +46,8 @@ async function run<T>(operation: () => Promise<T>): Promise<FunnelActionResult<T
     const data = await operation()
     // Доска менеджеров отдела читает те же этапы: обновляем и её
     revalidatePath(routes.sales, "layout")
+    // Этапы правятся и во вкладке «Воронка» кабинета РОПа
+    revalidatePath(routes.team)
     return { ok: true, data }
   } catch (error) {
     return failure(error)

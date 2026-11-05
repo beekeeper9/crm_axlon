@@ -2,9 +2,8 @@ import Link from "next/link"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
 import { ListPanel } from "@/components/shared/list-panel"
-import { MetricHint } from "@/components/shared/metric-hint"
 import { SegmentedLinks } from "@/components/shared/segmented-links"
-import { routes, teamMemberRoute } from "@/config/routes"
+import { routes } from "@/config/routes"
 import { listMembersIfAllowed } from "@/features/team"
 import {
   fetchAbsences,
@@ -12,20 +11,17 @@ import {
   fetchInactivity,
   fetchPlanHistory,
   fetchPlansProgress,
-  fetchTeamBoard,
-  fetchTeamPlanFact,
-  type DayScore,
   type PlanProgressRow,
-  type TeamBoard,
-  type TeamPlanFact,
 } from "@/features/team-cabinet/api/team-board"
 import { FunnelSection, LossesSection } from "@/features/team-cabinet/components/analytics-sections"
 import { AbsenceForm, PlanForm } from "@/features/team-cabinet/components/cabinet-forms"
 import { KpiExport } from "@/features/team-cabinet/components/kpi-export"
-import { TodayActionsSection } from "@/features/team-cabinet/components/today-actions"
-import { CabinetSection, LevelDot, NumLink } from "@/features/team-cabinet/components/cabinet-parts"
+import { DepartmentPlanSection } from "@/features/team-cabinet/components/department-plan"
+import { FunnelStagesSection } from "@/features/team-cabinet/components/funnel-stages"
+import { PlanFactSection, TeamDaySection } from "@/features/team-cabinet/components/team-day"
+import { TODAY_WIDGETS, TodayActionsSection } from "@/features/team-cabinet/components/today-actions"
+import { CabinetSection, LevelDot } from "@/features/team-cabinet/components/cabinet-parts"
 import { ABSENCE_LABELS, PLAN_METRIC_LABELS } from "@/features/team-cabinet/lib/plan-absence-meta"
-import { cabinetMoney } from "@/features/team-cabinet/lib/money"
 import { tryLoad } from "@/lib/api/load"
 import { nowIso } from "@/lib/clock"
 import { companyDateOf } from "@/lib/datetime"
@@ -45,51 +41,43 @@ const TABS = [
 
 type Tab = (typeof TABS)[number]["value"]
 
-/** Правила светофора backend простыми словами */
-const REASONS: Record<string, string> = {
-  no_activity: "Нет активности за рабочий день",
-  meeting_without_outcome: "Встреча прошла, итог не записан",
-  morning_confirmations_below_threshold: "Мало подтверждённых утренних встреч",
-  overdue_tasks: "Есть просроченные задачи",
-  reschedules_without_date: "Переносы без новой даты",
-}
-
-const meetingsOf = (userId: string) => hrefWithParams(routes.meetings, {}, { host: userId })
-const tasksOf = (userId: string) => hrefWithParams(routes.tasks, {}, { assignee: userId })
-
 /**
- * «Мой кабинет» РОПа (директору — «Кабинет отдела»): план отдела сверху, затем день отдела,
- * план-факт, планы и тишина. Все числа считает backend.
+ * «Мой кабинет» РОПа (директору — «Кабинет отдела»): сверху планы отдела в продажах и деньгах,
+ * под ними «Что делать сегодня», ниже вкладки. Все числа считает backend.
  */
 export async function ServerCabinetView({ params }: { params: SearchParamsRecord }) {
   const user = await getCurrentUser()
-  const title = hasPermission(user.role, "company.view") ? "Кабинет отдела" : "Мой кабинет"
+  const isDirector = hasPermission(user.role, "company.view")
   const tabParam = getParam(params, "tab")
   const tab: Tab = TABS.find((item) => item.value === tabParam)?.value ?? "today"
+  const focusParam = getParam(params, "focus")
+  const focus = TODAY_WIDGETS.find((widget) => widget === focusParam) ?? null
   const href = (patch: Record<string, string | null>) => hrefWithParams(routes.team, params, patch)
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-0.5">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-meta text-muted-foreground">Показатели считает сервер; продажа — каждая сделка с первой оплатой.</p>
-        </div>
-        <KpiExport defaultStart={`${currentMonth()}-01`} defaultEnd={companyDateOf(nowIso())} />
-      </header>
-      <TodayActionsSection />
-      <DepartmentPlanSection plansHref={hasPermission(user.role, "company.view") ? href({ tab: "plans" }) : null} />
+      <h1 className="sr-only">{isDirector ? "Кабинет отдела" : "Мой кабинет"}</h1>
+      <DepartmentPlanSection
+        plansHref={isDirector ? href({ tab: "plans" }) : null}
+        action={<KpiExport defaultStart={`${currentMonth()}-01`} defaultEnd={companyDateOf(nowIso())} />}
+      />
+      <TodayActionsSection focus={focus} params={params} />
       <div className="border-b">
         <SegmentedLinks
           label="Разделы кабинета"
           items={TABS.map((item) => ({ key: item.value, label: item.label, href: href({ tab: item.value === "today" ? null : item.value }), isActive: item.value === tab }))}
         />
       </div>
-      {tab === "today" && <TodaySection />}
+      {tab === "today" && <TeamDaySection params={params} />}
       {tab === "plan" && <PlanFactSection />}
       {tab === "plans" && <PlansSection params={params} />}
       {tab === "silence" && <SilenceSection />}
-      {tab === "funnel" && <FunnelSection params={params} />}
+      {tab === "funnel" && (
+        <div className="space-y-8">
+          <FunnelSection params={params} />
+          <FunnelStagesSection pipelineId={getParam(params, "pipeline")} isDirector={isDirector} />
+        </div>
+      )}
       {tab === "losses" && <LossesSection params={params} />}
     </div>
   )
@@ -242,249 +230,5 @@ async function SilenceSection() {
   )
 }
 
-/** План отдела на месяц против факта; без плана отдела — предложение его задать */
-async function DepartmentPlanSection({ plansHref }: { plansHref: string | null }) {
-  const result = await tryLoad(fetchTeamPlanFact)
-  if (!result.ok) return <ApiErrorState error={result.error} bare />
-  const pf = result.data
-  // Директор без выбранного отдела смотрит всю компанию — у неё свой план на странице «Продажи»
-  if (!pf.departmentId) return null
-  const percent = pf.departmentPercent === null ? null : Number(pf.departmentPercent)
-  return (
-    <section aria-labelledby="department-plan" className="space-y-2 rounded-xl px-4 py-3 ring-1 ring-border">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="department-plan" className="text-base font-semibold">
-          План отдела · {pf.month}
-        </h2>
-        <span className="text-meta text-muted-foreground">
-          Осталось рабочих дней: {formatNumber(pf.workingDaysLeft)} (календарных — рабочий календарь не настроен)
-        </span>
-      </div>
-      {pf.departmentPlanSales === null ? (
-        <p className="text-sm text-muted-foreground">
-          План отдела на этот месяц не задан. Продаж по отделу: <span className="font-medium text-foreground">{formatNumber(pf.salesActualTotal)}</span>.{" "}
-          {plansHref ? (
-            <Link href={plansHref} className="text-primary hover:underline">
-              Задать план отдела
-            </Link>
-          ) : (
-            "План отдела задаёт директор."
-          )}
-        </p>
-      ) : (
-        <>
-          <p className="text-sm">
-            <span className="text-2xl font-semibold tabular-nums">{formatNumber(pf.salesActualTotal)}</span>
-            <span className="text-muted-foreground"> из {formatDecimal(Number(pf.departmentPlanSales))} продаж</span>
-            {percent !== null && <span className="ml-2 font-medium tabular-nums">{formatDecimal(percent)}%</span>}
-          </p>
-          <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(percent ?? 0, 100)}>
-            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(percent ?? 0, 100)}%` }} />
-          </div>
-          <p className="text-meta text-muted-foreground">
-            Осталось: {formatDecimal(Number(pf.departmentRemaining ?? 0))} · нужно в день: {formatDecimal(Number(pf.departmentPerDayNeeded ?? 0))} · сумма личных планов: {formatDecimal(Number(pf.planSalesTotal))}
-          </p>
-        </>
-      )}
-    </section>
-  )
-}
-
-async function TodaySection() {
-  const result = await tryLoad(fetchTeamBoard)
-  return result.ok ? <TodayTable board={result.data} /> : <ApiErrorState error={result.error} />
-}
-
-async function PlanFactSection() {
-  const result = await tryLoad(fetchTeamPlanFact)
-  return result.ok ? <PlanFactTable planFact={result.data} /> : <ApiErrorState error={result.error} />
-}
-
 const th = "px-3 py-2 text-left font-medium text-muted-foreground"
 const td = "px-3 py-2 tabular-nums"
-
-const SCORE_DEFINITION =
-  "0–100 баллов: до 50 — результат (продажи месяца против плана, пропорционально прошедшим дням), до 50 — дисциплина CRM (итоги прошедших встреч, подтверждения, переносы с датой, нет просроченных задач). Без личного плана считается только дисциплина (×2). 5 — от 90, 4 — 75–89, 3 — 60–74, 2 — ниже 60. Без активности за день и в плановом отсутствии оценки нет. Пороги — предложение ТЗ, владелец может их изменить."
-
-const GRADE_TONES: Record<number, string> = {
-  5: "bg-success/15 text-success",
-  4: "bg-success/10 text-success",
-  3: "bg-warning/15 text-warning",
-  2: "bg-destructive/15 text-destructive",
-}
-
-function ScoreBadge({ score }: { score: DayScore | null }) {
-  if (!score) return <span className="text-muted-foreground">—</span>
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${GRADE_TONES[score.grade] ?? ""}`}
-      title={`${score.points} баллов: результат ${score.result ?? "— (нет плана)"}, дисциплина ${score.discipline}`}
-    >
-      {score.grade}
-      <span className="font-normal opacity-80">· {score.points}</span>
-    </span>
-  )
-}
-
-function TodayTable({ board }: { board: TeamBoard }) {
-  const { totals } = board
-  return (
-    <CabinetSection
-      id="team-today"
-      title="День отдела"
-      description={`Данные на ${formatTime(board.asOf)} · нужно вмешаться: ${formatNumber(totals.red)}, есть хвосты: ${formatNumber(totals.yellow)}, в порядке: ${formatNumber(totals.green)}`}
-    >
-      {board.managers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">В отделе пока нет менеджеров.</p>
-      ) : (
-        <ListPanel>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[72rem] text-sm">
-              <thead className="border-b">
-                <tr>
-                  <th className={th}>Сотрудник</th>
-                  <th className={th}>
-                    <span className="inline-flex items-center gap-1">
-                      Оценка дня
-                      <MetricHint label="Оценка дня" definition={SCORE_DEFINITION} isOpenQuestion />
-                    </span>
-                  </th>
-                  <th className={th}>Встречи</th>
-                  <th className={th}>Подтверждено</th>
-                  <th className={th}>Осталось подтвердить</th>
-                  <th className={th}>Состоялись</th>
-                  <th className={th}>Не пришли</th>
-                  <th className={th}>Перенос без даты</th>
-                  <th className={th}>Отмена</th>
-                  <th className={th}>Без итога</th>
-                  <th className={th}>Звонки</th>
-                  <th className={th}>Оплаты</th>
-                  <th className={th}>Получено</th>
-                  <th className={th}>Задачи: сегодня · открыто / просрочено</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {board.managers.map((row) => {
-                  const reasons = [...row.redReasons, ...row.yellowReasons].map((code) => REASONS[code] ?? code)
-                  return (
-                    <tr key={row.userId} className="align-top">
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <LevelDot level={row.status} />
-                          <Link href={teamMemberRoute(row.userId)} className="font-medium hover:text-primary hover:underline">
-                            {row.name}
-                          </Link>
-                        </div>
-                        {row.onAbsence && <p className="text-xs text-muted-foreground">Отсутствует по графику</p>}
-                        {reasons.length > 0 && <p className="text-xs text-muted-foreground">{reasons.join(" · ")}</p>}
-                      </td>
-                      <td className="px-3 py-2"><ScoreBadge score={row.score} /></td>
-                      <td className={td}><NumLink value={row.meetingsTotal} href={meetingsOf(row.userId)} /></td>
-                      <td className={td}><NumLink value={row.meetingsConfirmed} /></td>
-                      <td className={td}>
-                        <NumLink value={row.meetingsToConfirm} tone="warning" href={meetingsOf(row.userId)} />
-                        {row.nextToConfirmAt && <span className="block text-xs text-muted-foreground">ближайшая {formatTime(row.nextToConfirmAt)}</span>}
-                      </td>
-                      <td className={td}><NumLink value={row.meetingsHeld} /></td>
-                      <td className={td}><NumLink value={row.meetingsNoShow} tone="warning" /></td>
-                      <td className={td}><NumLink value={row.reschedulesWithoutDate} tone="warning" href={hrefWithParams(routes.meetings, {}, { host: row.userId, status: "rescheduled" })} /></td>
-                      <td className={td}><NumLink value={row.meetingsCancelled} /></td>
-                      <td className={td}>
-                        <NumLink value={row.meetingsOverdueOutcome} tone="danger" href={hrefWithParams(routes.meetings, {}, { host: row.userId, outcome: "required" })} />
-                      </td>
-                      <td className={td}><NumLink value={row.calls} /></td>
-                      <td className={td}><NumLink value={row.paymentsCount} /></td>
-                      <td className={td}>{cabinetMoney(row.received, board.currency)}</td>
-                      <td className={td}>
-                        <NumLink value={row.tasksDueToday} href={hrefWithParams(routes.tasks, {}, { assignee: row.userId, due: "today" })} />
-                        {" · "}
-                        <Link href={tasksOf(row.userId)} className="rounded underline-offset-2 hover:underline">
-                          {formatNumber(row.openTasks)}
-                        </Link>
-                        {" / "}
-                        <NumLink value={row.overdueTasks} tone="danger" href={hrefWithParams(routes.tasks, {}, { assignee: row.userId, due: "overdue" })} />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot className="border-t font-medium">
-                <tr>
-                  <td className="px-3 py-2">Отдел · {formatNumber(totals.managers)}</td>
-                  <td className={td} />
-                  <td className={td}>{formatNumber(totals.meetingsTotal)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsConfirmed)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsToConfirm)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsHeld)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsNoShow)}</td>
-                  <td className={td}>{formatNumber(totals.reschedulesWithoutDate)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsCancelled)}</td>
-                  <td className={td}>{formatNumber(totals.meetingsOverdueOutcome)}</td>
-                  <td className={td}>{formatNumber(totals.calls)}</td>
-                  <td className={td}>{formatNumber(totals.paymentsCount)}</td>
-                  <td className={td}>{cabinetMoney(totals.received, board.currency)}</td>
-                  <td className={td}>
-                    {formatNumber(totals.openTasks)} / {formatNumber(totals.overdueTasks)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </ListPanel>
-      )}
-    </CabinetSection>
-  )
-}
-
-function PlanFactTable({ planFact }: { planFact: TeamPlanFact }) {
-  return (
-    <CabinetSection
-      id="team-plan-fact"
-      title={`План — факт · ${planFact.month}`}
-      description={`Прошло дней: ${formatNumber(planFact.workingDaysElapsed)} из ${formatNumber(planFact.workingDaysTotal)}. Прогноз — линейный по темпу, это оценка, а не факт.`}
-    >
-      {planFact.rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">В отделе пока нет менеджеров.</p>
-      ) : (
-        <ListPanel>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead className="border-b">
-                <tr>
-                  <th className={th}>Сотрудник</th>
-                  <th className={th}>План продаж</th>
-                  <th className={th}>Продажи</th>
-                  <th className={th}>Осталось</th>
-                  <th className={th}>Прогноз</th>
-                  <th className={th}>Получено</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {planFact.rows.map((row) => (
-                  <tr key={row.userId}>
-                    <td className="px-3 py-2 font-medium">{row.name}</td>
-                    <td className={td}>{Number(row.planSales) > 0 ? formatDecimal(Number(row.planSales)) : <span className="text-muted-foreground">не задан</span>}</td>
-                    <td className={td}>{formatNumber(row.salesActual)}</td>
-                    <td className={td}>{formatDecimal(Number(row.remainingSales))}</td>
-                    <td className={td}>{formatDecimal(Number(row.forecastSales))}</td>
-                    <td className={td}>{cabinetMoney(row.receivedActual, planFact.currency)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t font-medium">
-                <tr>
-                  <td className="px-3 py-2">Отдел</td>
-                  <td className={td}>{formatDecimal(Number(planFact.planSalesTotal))}</td>
-                  <td className={td}>{formatNumber(planFact.salesActualTotal)}</td>
-                  <td className={td} />
-                  <td className={td}>{formatDecimal(Number(planFact.forecastSalesTotal))}</td>
-                  <td className={td}>{cabinetMoney(planFact.receivedTotal, planFact.currency)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </ListPanel>
-      )}
-    </CabinetSection>
-  )
-}

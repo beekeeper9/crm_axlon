@@ -1,5 +1,5 @@
 import { leadRoute, prospectRoute, routes, teamMemberRoute } from "@/config/routes"
-import { isTodayActionKind, type TodayActionItem } from "@/features/team-cabinet/api/today-actions"
+import { isTodayActionKind, type TodayActionGroup, type TodayActionItem } from "@/features/team-cabinet/api/today-actions"
 import { cabinetLinks } from "@/features/team-cabinet/lib/links"
 import { formatDateTime, formatDecimalMoney, pluralize } from "@/lib/format"
 import { hrefWithParams } from "@/lib/search-params"
@@ -103,4 +103,26 @@ export function todayItemMeta(kind: string, item: TodayActionItem, today: string
       break
   }
   return parts.filter((part): part is string => Boolean(part))
+}
+
+export type ManagerBlock = { id: string; name: string; total: number; groups: { group: TodayActionGroup; items: TodayActionItem[] }[] }
+
+/** Строки групп, разложенные по менеджерам: у кого больше дел — выше */
+export function groupByManager(groups: readonly TodayActionGroup[]): ManagerBlock[] {
+  const blocks = new Map<string, ManagerBlock>()
+  for (const group of groups) {
+    for (const item of group.items) {
+      const id = item.managerId ?? "none"
+      const block = blocks.get(id) ?? { id, name: item.managerName ?? "Без ответственного", total: 0, groups: [] }
+      let entry = block.groups.find((g) => g.group.kind === group.kind)
+      if (!entry) {
+        entry = { group, items: [] }
+        block.groups.push(entry)
+      }
+      entry.items.push(item)
+      block.total += 1
+      blocks.set(id, block)
+    }
+  }
+  return [...blocks.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "ru"))
 }

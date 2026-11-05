@@ -93,11 +93,14 @@ function nameWith(nameOf: (id: string) => string) {
   }
 }
 
-export async function fetchTodayActions(departmentId?: string | null): Promise<TodayActions> {
+/** Сколько строк группы показываем в развёрнутом списке (максимум backend) */
+export const TODAY_ACTIONS_LIMIT_MAX = 50
+
+export async function fetchTodayActions(departmentId?: string | null, limit: number = TODAY_ACTIONS_LIMIT): Promise<TodayActions> {
   const [response, nameOf] = await Promise.all([
     apiRequest("/api/v1/team/today/", {
       auth: await getRenderAuth(),
-      query: { include: "actions", actionsLimit: TODAY_ACTIONS_LIMIT, departmentId: departmentId ?? undefined },
+      query: { include: "actions", actionsLimit: limit, departmentId: departmentId ?? undefined },
       schema: responseSchema,
     }),
     loadPeopleNames(),

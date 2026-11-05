@@ -206,6 +206,8 @@
 
 ### «Что делать сегодня» — `features/team-cabinet`
 
+`GET /team/today/?date=ГГГГ-ММ-ДД` — доска прошедшего дня (например, вчера: кабинет показывает её утром, пока сегодня оценок нет); дата в будущем — 400. В ответе `date` — день доски, у менеджера и в итогах `prepayments` — сколько из оплат дня предоплаты.
+
 `GET /team/today/?include=actions[&actions_limit=1..50][&department_id=]` — кроме доски дня возвращает `actions` с восемью группами в постоянном порядке: `payments_to_verify`, `overdue_tasks`, `tasks_due_soon`, `meetings_without_outcome`, `deals_without_next_step`, `deals_to_push`, `leads_without_contact`, `managers_without_activity`. У группы: `kind`, `title`, `rule`, полный `count`, `by_manager`, `amounts` по валютам (не суммируются между валютами) и до `actions_limit` элементов (по умолчанию 5). Оплачено и долг — только подтверждённые оплаты в валюте сделки. Пороги — в `thresholds` (застой сделки — настройка компании, по умолчанию 14 дней; первый ответ на лид — 15 минут). РОП — свой отдел, директор — компания или `department_id`, остальные — 403. Модуль operations по тарифу не требуется.
 
 ### База клиентов — `features/clients/schemas.ts`

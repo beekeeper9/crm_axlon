@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/token-store", () => ({ getRenderAuth: async () => ({}) }))
 vi.mock("@/features/team", () => ({ loadPeopleNames: async () => (id: string) => (id === "u-1" ? "Айбек Садыков" : "Сотрудник") }))
 
 const { fetchTodayActions } = await import("@/features/team-cabinet/api/today-actions")
-const { todayGroupHref, todayItemHref, todayItemMeta } = await import("@/features/team-cabinet/lib/today-actions")
+const { groupByManager, todayGroupHref, todayItemHref, todayItemMeta } = await import("@/features/team-cabinet/lib/today-actions")
 
 const group = (kind: string, priority: number, extra: Record<string, unknown> = {}) => ({
   kind,
@@ -118,5 +118,28 @@ describe("«Что делать сегодня»: ответ backend", () => {
       expect.arrayContaining(["на этапе 20 дней", "есть предоплата", expect.stringContaining("долг 700")])
     )
     expect(todayItemMeta("tasks_due_soon", { ...push!.items[0]!, date: "2026-11-03" }, actions.date)).toEqual(["срок сегодня"])
+  })
+})
+
+describe("groupByManager", () => {
+  const item = (id: string, managerId: string | null, managerName: string | null) =>
+    ({ id, title: id, managerId, managerName }) as unknown as import("@/features/team-cabinet/api/today-actions").TodayActionItem
+  const g = (kind: string, items: ReturnType<typeof item>[]) =>
+    ({ kind, priority: 1, title: kind, rule: "", count: items.length, amounts: [], byManager: [], items }) as import("@/features/team-cabinet/api/today-actions").TodayActionGroup
+
+  it("раскладывает строки групп по менеджерам: у кого больше дел — выше", () => {
+    const blocks = groupByManager([
+      g("deals_without_next_step", [item("d1", "u-1", "Айбек"), item("d2", "u-2", "Алиса")]),
+      g("leads_without_contact", [item("l1", "u-2", "Алиса"), item("l2", null, null)]),
+    ])
+    expect(blocks.map((b) => [b.name, b.total])).toEqual([
+      ["Алиса", 2],
+      ["Айбек", 1],
+      ["Без ответственного", 1],
+    ])
+    expect(blocks[0].groups.map((entry) => [entry.group.kind, entry.items.map((i) => i.id)])).toEqual([
+      ["deals_without_next_step", ["d2"]],
+      ["leads_without_contact", ["l1"]],
+    ])
   })
 })
