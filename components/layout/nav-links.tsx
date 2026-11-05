@@ -14,12 +14,19 @@ import type { Role } from "@/lib/permissions/roles"
 const LINK_CLASSES =
   "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
 
+/** Сколько пунктов с подписями помещается в шапке шириной 1280 px */
+const COMPACT_UNTIL_XL = 6
+
 export function PrimaryNav({ role }: { role: Role }) {
   const pathname = usePathname()
+  const items = primaryNavigationFor(role)
+  // Подписи с иконками помещаются в 1280 px лишь при коротком меню; длинному (менеджеру — 7
+  // пунктов) нужно 1440 px, иначе последний пункт наезжает на «Прочее»
+  const labelClass = items.length > COMPACT_UNTIL_XL ? "max-[90rem]:sr-only" : "max-xl:sr-only"
 
   return (
     <nav aria-label="Основные разделы" className="hidden items-center gap-0.5 lg:flex">
-      {primaryNavigationFor(role).map((navItem) => {
+      {items.map((navItem) => {
         const isActive = isNavItemActive(navItem, pathname)
         return (
           <Link
@@ -30,8 +37,8 @@ export function PrimaryNav({ role }: { role: Role }) {
             className={cn(LINK_CLASSES, isActive && "bg-accent text-foreground")}
           >
             <navItem.icon className="size-4" aria-hidden />
-            {/* На ноутбуках 1024–1279 px — только иконки, чтобы панель помещалась */}
-            <span className="max-xl:sr-only">{navItem.title}</span>
+            {/* На узких ноутбуках — только иконки (подпись — во всплывающей подсказке), чтобы панель помещалась */}
+            <span className={labelClass}>{navItem.title}</span>
           </Link>
         )
       })}
