@@ -124,7 +124,7 @@ export function homeRouteFor(role: Role): AppRoute {
 /** Отдельная кнопка ИИ-помощника в верхней панели */
 export const assistantNavItem: NavItem = item.assistant
 
-/** Меню «Все разделы» директора — согласованный состав */
+/** Меню «Прочее» директора — согласованный состав */
 const directorSections: readonly NavGroup[] = [
   { title: "Работа", items: [item.tasks, item.calls, item.sales, item.focus] },
   { title: "Контроль", items: [item.dailyReports, item.paymentReview, item.clientBase] },
@@ -145,7 +145,7 @@ const directorSections: readonly NavGroup[] = [
   },
 ]
 
-/** Меню «Все разделы» остальных ролей — полный каталог экранов */
+/** Меню «Прочее» остальных ролей — полный каталог экранов */
 const teamSections: readonly NavGroup[] = [
   { title: "Рабочее", items: [item.myDay, item.meetings, item.tasks, item.calls] },
   { title: "Продажи", items: [item.sales, item.afterMeeting, item.focus] },

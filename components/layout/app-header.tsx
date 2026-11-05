@@ -32,7 +32,7 @@ function BrandLink({ href }: { href: string }) {
   )
 }
 
-/** Верхняя панель: основные разделы, каталог «Все разделы», ИИ-помощник и профиль. */
+/** Верхняя панель: основные разделы, каталог «Прочее», ИИ-помощник и профиль. */
 export async function AppHeader() {
   const user = await getCurrentUser()
   const isPlatformAdmin = hasPermission(user.role, "platform.manage")

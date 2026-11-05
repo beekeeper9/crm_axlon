@@ -34,7 +34,7 @@ describe("навигация по ролям", () => {
     ])
   })
 
-  it("«Все разделы» директора — согласованный состав", () => {
+  it("«Прочее» директора — согласованный состав", () => {
     expect(catalog("director")).toEqual(
       expect.arrayContaining([routes.tasks, routes.calls, routes.sales, routes.focus, routes.dailyReports, routes.clientBase, routes.assistant, routes.support])
     )
