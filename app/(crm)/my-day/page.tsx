@@ -39,17 +39,8 @@ function monthLabel(month: string): string {
 async function MyDayContent({ searchParams }: Pick<MyDayPageProps, "searchParams">) {
   const [user, params] = await Promise.all([getCurrentUser(), searchParams])
   if (!hasPermission(user.role, "my_day.view")) redirect(homeRouteFor(user.role))
-  if (!isMockDataSource) {
-    return (
-      <>
-        <header className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">Мой день</h1>
-          <span className="text-meta text-muted-foreground">{user.fullName}</span>
-        </header>
-        <ServerMyDayView userId={user.id} />
-      </>
-    )
-  }
+  // Заголовка нет: верх страницы — рабочая смена (первый блок раскладки)
+  if (!isMockDataSource) return <ServerMyDayView userId={user.id} />
 
   const currentMonth = nowIso().slice(0, 7)
   const requested = getParam(params, "month")

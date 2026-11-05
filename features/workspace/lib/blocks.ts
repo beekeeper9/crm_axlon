@@ -6,8 +6,8 @@ export type WorkspaceBlockId = (typeof WORKSPACE_BLOCKS)[number]
 export const BLOCK_LABELS: Record<WorkspaceBlockId, { title: string; description: string }> = {
   work_session: { title: "Рабочая смена", description: "Начало и конец работы" },
   counters: { title: "Дела на сегодня", description: "Задачи на сегодня, просроченные задачи, встречи сегодня" },
-  plans: { title: "Мои планы", description: "Личный план и выполнение" },
-  month_metrics: { title: "Этот месяц", description: "Продажи, новые клиенты, оборот, получено, долг" },
+  plans: { title: "Оборот и заработок", description: "Оборот месяца против плана и заработок: оклад + процент от полученных денег" },
+  month_metrics: { title: "Этот месяц", description: "Продажи, предоплаты, долг, встречи, получено, показатели месяца и продукты" },
   focus_deals: { title: "Сделки в приоритете", description: "Первые записи из «Фокуса»" },
 }
 

@@ -145,6 +145,8 @@ export type NewDealTask = {
   /** null — себе (так backend поступает и без поля) */
   assigneeId: string | null
   description: string | null
+  /** «По проколу»: тип задачи review — «Работа над ошибками», первая в «Фокусе» менеджера */
+  isMiss?: boolean
 }
 
 /** К чему привязана задача: сделка или клиент (backend не принимает задачу без привязки) */
@@ -170,7 +172,7 @@ export function taskCreateBody(subject: TaskSubject | null, task: NewDealTask): 
     ...(subject ? { subjectType: subject.type, subjectId: subject.id } : {}),
     title: task.title,
     dueDate: task.dueDate,
-    taskType: BACKEND_TASK_TYPE[task.type],
+    taskType: task.isMiss ? "review" : BACKEND_TASK_TYPE[task.type],
     priority: task.priority,
     ...(task.assigneeId ? { assigneeUserId: task.assigneeId } : {}),
     ...(task.description ? { body: task.description } : {}),

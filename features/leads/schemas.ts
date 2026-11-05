@@ -73,6 +73,8 @@ export const leadDetailSchema = z.object({
   expectedCloseDate: z.iso.date().nullable().default(null),
   closedAt: z.iso.datetime({ offset: true }).nullable().default(null),
   lostReason: z.string().nullable().default(null),
+  /** Продукт компании, который продаёт сделка */
+  productId: z.string().nullable().default(null),
 })
 
 export const activityKindSchema = z.enum(["call", "chat", "note", "stage", "task", "meeting", "payment"])

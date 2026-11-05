@@ -95,6 +95,8 @@ describe("создание задачи по любой привязке", () =>
     const own = taskCreateBody({ type: "deal", id: "d-1" }, { ...base, assigneeId: null, description: null })
     expect(own).not.toHaveProperty("assigneeUserId")
     expect(own).not.toHaveProperty("body")
+    // «По проколу» — задача «Работы над ошибками»: тип review, первая в «Фокусе» менеджера
+    expect(taskCreateBody(null, { ...base, type: "call", isMiss: true }).taskType).toBe("review")
   })
 
   it("поиск привязки: открытые сделки и клиенты не в архиве", async () => {

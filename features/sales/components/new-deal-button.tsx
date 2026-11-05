@@ -9,18 +9,27 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { leadRoute } from "@/config/routes"
+import { ProductSelect } from "@/features/products/components/product-select"
 import { createDealAction } from "@/features/sales/actions"
 
 /**
  * Новая сделка в текущей воронке (первый этап выбирает backend). Сделку для существующего
  * клиента создают из его карточки в «Базе клиентов», а клиента из заявки — конвертацией лида.
  */
-export function NewDealButton({ pipelineId, pipelineName }: { pipelineId: string; pipelineName: string }) {
+type NewDealButtonProps = {
+  pipelineId: string
+  pipelineName: string
+  /** Активные продукты компании; пусто — поле не показывается */
+  products: readonly { id: string; name: string }[]
+}
+
+export function NewDealButton({ pipelineId, pipelineName, products }: NewDealButtonProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [failure, setFailure] = useState<string | null>(null)
   const [values, setValues] = useState({ title: "", amount: "", nextStep: "" })
+  const [productId, setProductId] = useState<string | null>(null)
   const field = (key: keyof typeof values) => ({
     value: values[key],
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => setValues((current) => ({ ...current, [key]: event.target.value })),
@@ -40,7 +49,7 @@ export function NewDealButton({ pipelineId, pipelineName }: { pipelineId: string
             onSubmit={(event) => {
               event.preventDefault()
               startTransition(async () => {
-                const result = await createDealAction({ ...values, pipelineId })
+                const result = await createDealAction({ ...values, pipelineId, productId })
                 if (result.ok) {
                   setOpen(false)
                   router.push(leadRoute(result.data))
@@ -60,6 +69,7 @@ export function NewDealButton({ pipelineId, pipelineName }: { pipelineId: string
               <Label htmlFor="new-deal-amount">Сумма</Label>
               <Input id="new-deal-amount" {...field("amount")} inputMode="decimal" placeholder="15000" />
             </div>
+            <ProductSelect id="new-deal-product" products={products} value={productId} onChange={setProductId} />
             <div className="grid gap-1.5">
               <Label htmlFor="new-deal-next">Следующий шаг</Label>
               <Input id="new-deal-next" {...field("nextStep")} maxLength={300} />

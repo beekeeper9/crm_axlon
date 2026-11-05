@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LeadDetail } from "@/features/leads/schemas"
+import { ProductSelect } from "@/features/products/components/product-select"
 import { assignDealAction, reopenDealAction, updateDealAction, type DealActionResult } from "@/features/sales/actions"
 import { CloseDealDialog, type CloseDealResult } from "@/features/sales/components/close-deal-dialog"
 import { useStageMove } from "@/features/sales/components/stage-move-dialog"
@@ -22,10 +23,12 @@ type DealActionsProps = {
   lossReasons: readonly LossReason[]
   /** Кому можно передать сделку; пусто — передавать нельзя */
   members: readonly Person[]
+  /** Активные продукты компании для поля «Продукт» */
+  products: readonly { id: string; name: string }[]
 }
 
 /** Правка, передача, закрытие и повторное открытие сделки через backend */
-export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
+export function DealActions({ lead, lossReasons, members, products }: DealActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [failure, setFailure] = useState<string | null>(null)
@@ -83,6 +86,7 @@ export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
       {dialog === "edit" && lead.version !== null && (
         <EditDealDialog
           lead={lead}
+          products={products}
           isPending={isPending}
           onCancel={() => setDialog(null)}
           onSave={(values) => act(() => updateDealAction(lead.id, lead.version ?? 0, values))}
@@ -120,16 +124,18 @@ export function DealActions({ lead, lossReasons, members }: DealActionsProps) {
   )
 }
 
-type DealFormValues = { title: string; amount: string; nextStep: string; expectedCloseDate: string; source: string }
+type DealFormValues = { title: string; amount: string; nextStep: string; expectedCloseDate: string; source: string; productId: string | null }
 
 function EditDealDialog({
   lead,
+  products,
   isPending,
   failure,
   onCancel,
   onSave,
 }: {
   lead: LeadDetail
+  products: readonly { id: string; name: string }[]
   isPending: boolean
   failure: string | null
   onCancel: () => void
@@ -141,8 +147,9 @@ function EditDealDialog({
     nextStep: lead.nextStep ?? "",
     expectedCloseDate: lead.expectedCloseDate ?? "",
     source: lead.source ?? "",
+    productId: lead.productId,
   })
-  const field = (key: keyof DealFormValues) => ({
+  const field = (key: Exclude<keyof DealFormValues, "productId">) => ({
     value: values[key],
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => setValues((current) => ({ ...current, [key]: event.target.value })),
   })
@@ -168,6 +175,13 @@ function EditDealDialog({
             <Label htmlFor="deal-edit-amount">Сумма{lead.currency ? `, ${lead.currency}` : ""}</Label>
             <Input id="deal-edit-amount" {...field("amount")} inputMode="decimal" />
           </div>
+          <ProductSelect
+            id="deal-edit-product"
+            // Отключённый продукт старой сделки остаётся в списке, чтобы не потерять его молча
+            products={lead.productId && !products.some((p) => p.id === lead.productId) ? [...products, { id: lead.productId, name: "Отключённый продукт" }] : products}
+            value={values.productId}
+            onChange={(productId) => setValues((current) => ({ ...current, productId }))}
+          />
           <div className="grid gap-1.5">
             <Label htmlFor="deal-edit-next">Следующий шаг</Label>
             <Input id="deal-edit-next" {...field("nextStep")} maxLength={300} placeholder="Например: созвониться в пятницу и согласовать договор" />

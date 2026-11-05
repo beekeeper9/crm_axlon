@@ -63,6 +63,8 @@ export const taskFormSchema = z.object({
   priority: taskPrioritySchema,
   assigneeId: z.string().nullable(),
   description: z.string().trim().max(2000, "Не длиннее 2000 символов"),
+  /** «По проколу»: задача руководителя по ошибкам менеджера — первой в его «Фокусе» */
+  isMiss: z.boolean().default(false),
 })
 
 export type TaskType = z.infer<typeof taskTypeSchema>

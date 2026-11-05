@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { prospectRoute, routes } from "@/config/routes"
 import { prospectsRepository } from "@/features/prospects/api/prospects-repository"
-import { loadConvertPipelines } from "@/features/prospects/api/convert-pipelines"
+import { loadConvertOptions } from "@/features/prospects/api/convert-pipelines"
+import { NO_CONVERT_OPTIONS } from "@/features/prospects/components/convert-dialog"
 import { NewProspectButton } from "@/features/prospects/components/new-prospect-button"
 import { ProspectsBoard, type ProspectColumn } from "@/features/prospects/components/prospects-board"
 import { PROSPECT_SOURCE_LABELS, PROSPECT_STATUS_META } from "@/features/prospects/lib/prospect-meta"
@@ -92,11 +93,11 @@ async function ProspectsBoardView({ user, params }: ProspectsViewProps) {
         })
       ),
       isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
-      canEdit ? loadConvertPipelines() : Promise.resolve([]),
+      canEdit ? loadConvertOptions() : Promise.resolve(NO_CONVERT_OPTIONS),
     ])
   )
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
-  const [columns, members, pipelines] = loaded.data
+  const [columns, members, convertOptions] = loaded.data
   return (
     <div className="space-y-3">
       <Toolbar>
@@ -114,7 +115,7 @@ async function ProspectsBoardView({ user, params }: ProspectsViewProps) {
         {canEdit && <NewProspectButton sources={await leadSources()} members={isTeamView ? members.map(({ id, name }) => ({ id, name })) : []} />}
       </Toolbar>
       <p className="text-meta text-muted-foreground">Перетащите карточку: в «Квалифицирован», «Не подходит» (с причиной) или «Стал клиентом» — со сделкой и следующим шагом.</p>
-      <ProspectsBoard columns={columns} pipelines={pipelines} showOwner={isTeamView} canEdit={canEdit} />
+      <ProspectsBoard columns={columns} options={convertOptions} showOwner={isTeamView} canEdit={canEdit} />
     </div>
   )
 }

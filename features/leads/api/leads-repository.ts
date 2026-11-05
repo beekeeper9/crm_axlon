@@ -68,6 +68,7 @@ const backendDealDetailSchema = z.object({
   expectedCloseDate: z.iso.date().nullable(),
   closedAt: z.iso.datetime({ offset: true }).nullable(),
   lostReason: z.string().nullable(),
+  productId: z.string().nullable().default(null),
   createdAt: z.iso.datetime({ offset: true }),
   customer: z
     .object({ id: z.string(), name: z.string(), email: z.string().nullable(), phone: z.string().nullable() })
@@ -199,6 +200,7 @@ const httpLeadsRepository: LeadsRepository = {
       expectedCloseDate: deal.expectedCloseDate,
       closedAt: deal.closedAt,
       lostReason: deal.lostReason,
+      productId: deal.productId,
     })
   },
   /** `GET /sales/deals/{id}/history/` — журнал изменений (какие поля, кто и когда, без значений) */

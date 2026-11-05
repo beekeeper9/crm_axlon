@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { focusRepository } from "@/features/focus/api/focus-repository"
 import { FocusItemRow } from "@/features/focus/components/focus-item-row"
+import { MyFocus } from "@/features/focus/components/my-focus"
 import { ManagerFilter } from "@/features/focus/components/manager-filter"
 import type { FocusGroup, FocusList } from "@/features/focus/schemas"
 import { fetchTeamPlanFact, type TeamPlanFact } from "@/features/team-cabinet/api/team-board"
@@ -27,6 +28,8 @@ type FocusViewProps = {
 }
 
 export async function FocusView({ isTeamView, managerId }: FocusViewProps) {
+  // Менеджер в режиме api — свой «Фокус» по приоритетам: проколы, просрочки, дожим, долги…
+  if (!isTeamView && !isMockDataSource) return <MyFocus />
   const byManager = isTeamView && managerId === null
   const [loaded, planFact] = await Promise.all([
     tryLoad(() => focusRepository.getFocusList({ managerId })),

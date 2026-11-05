@@ -22,7 +22,9 @@ import { DealsTable } from "@/features/sales/components/deals-table"
 import { PipelineBoard } from "@/features/sales/components/pipeline-board"
 import type { Pipeline } from "@/features/sales/schemas"
 import { listMembersIfAllowed } from "@/features/team"
+import { listProducts } from "@/features/products"
 import { tryLoad } from "@/lib/api/load"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { pageInfo, pageParams } from "@/lib/api/pagination"
 import { editModeFor } from "@/lib/permissions/edit-mode"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -39,11 +41,17 @@ type SalesViewProps = {
 
 export async function SalesView({ user, params }: SalesViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
+  const canCreate = !isMockDataSource && hasPermission(user.role, "records.edit")
   const loaded = await tryLoad(() =>
-    Promise.all([salesRepository.getConfig(), isTeamView ? listMembersIfAllowed() : Promise.resolve([])])
+    Promise.all([
+      salesRepository.getConfig(),
+      isTeamView ? listMembersIfAllowed() : Promise.resolve([]),
+      // Продукты нужны только форме новой сделки; без них форма работает «без продукта»
+      canCreate ? tryLoad(async () => listProducts(await getRenderAuth(), true)) : Promise.resolve(null),
+    ])
   )
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
-  const [config, members] = loaded.data
+  const [config, members, products] = loaded.data
 
   if (config.pipelines.length === 0) {
     return (
@@ -69,9 +77,7 @@ export async function SalesView({ user, params }: SalesViewProps) {
       <Toolbar
         end={
           <>
-            {!isMockDataSource && hasPermission(user.role, "records.edit") && (
-              <NewDealButton pipelineId={pipeline.id} pipelineName={pipeline.name} />
-            )}
+            {canCreate && <NewDealButton pipelineId={pipeline.id} pipelineName={pipeline.name} products={products?.ok ? products.data : []} />}
             <SegmentedLinks
               label="Вид"
               variant="pill"

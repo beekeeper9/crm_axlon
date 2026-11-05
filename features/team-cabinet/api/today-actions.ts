@@ -20,6 +20,9 @@ export const TODAY_ACTION_KINDS = [
   "deals_to_push",
   "leads_without_contact",
   "managers_without_activity",
+  // Только в «Фокусе» менеджера (`/team/my-focus/`)
+  "miss_tasks",
+  "debts_to_collect",
 ] as const
 
 export type TodayActionKind = (typeof TODAY_ACTION_KINDS)[number]
@@ -96,17 +99,8 @@ function nameWith(nameOf: (id: string) => string) {
 /** Сколько строк группы показываем в развёрнутом списке (максимум backend) */
 export const TODAY_ACTIONS_LIMIT_MAX = 50
 
-export async function fetchTodayActions(departmentId?: string | null, limit: number = TODAY_ACTIONS_LIMIT): Promise<TodayActions> {
-  const [response, nameOf] = await Promise.all([
-    apiRequest("/api/v1/team/today/", {
-      auth: await getRenderAuth(),
-      query: { include: "actions", actionsLimit: limit, departmentId: departmentId ?? undefined },
-      schema: responseSchema,
-    }),
-    loadPeopleNames(),
-  ])
+function withNames(actions: z.infer<typeof todayActionsSchema>, nameOf: (id: string) => string): TodayActions {
   const name = nameWith(nameOf)
-  const { actions } = response
   return {
     ...actions,
     groups: [...actions.groups]
@@ -120,4 +114,28 @@ export async function fetchTodayActions(departmentId?: string | null, limit: num
         })),
       })),
   }
+}
+
+/**
+ * «Фокус» менеджера: `GET /team/my-focus/` — его собственные записи по тем же правилам, плюс
+ * задачи по проколам (первыми) и долги к сбору. Порядок групп задаёт backend.
+ */
+export async function fetchMyFocus(limit: number = TODAY_ACTIONS_LIMIT_MAX): Promise<TodayActions> {
+  const [actions, nameOf] = await Promise.all([
+    apiRequest("/api/v1/team/my-focus/", { auth: await getRenderAuth(), query: { actionsLimit: limit }, schema: todayActionsSchema }),
+    loadPeopleNames(),
+  ])
+  return withNames(actions, nameOf)
+}
+
+export async function fetchTodayActions(departmentId?: string | null, limit: number = TODAY_ACTIONS_LIMIT): Promise<TodayActions> {
+  const [response, nameOf] = await Promise.all([
+    apiRequest("/api/v1/team/today/", {
+      auth: await getRenderAuth(),
+      query: { include: "actions", actionsLimit: limit, departmentId: departmentId ?? undefined },
+      schema: responseSchema,
+    }),
+    loadPeopleNames(),
+  ])
+  return withNames(response.actions, nameOf)
 }

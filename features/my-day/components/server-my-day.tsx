@@ -2,35 +2,23 @@ import { Fragment, Suspense } from "react"
 import Link from "next/link"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
-import { ProgressChart } from "@/components/shared/inline-charts"
-import { ListPanel } from "@/components/shared/list-panel"
 import { WidgetErrorBoundary } from "@/components/shared/widget-error-boundary"
 import { Skeleton } from "@/components/ui/skeleton"
 import { routes } from "@/config/routes"
-import { fetchServerDay, type PlanProgress } from "@/features/my-day/api/my-day-server"
+import { fetchServerDay } from "@/features/my-day/api/my-day-server"
 import { FocusDeals, FocusDealsSkeleton } from "@/features/my-day/components/focus-deals"
-import { MonthMetrics } from "@/features/my-day/components/month-metrics"
+import { MonthOverview } from "@/features/my-day/components/month-overview"
+import { MonthSummary } from "@/features/my-day/components/month-summary"
 import { WorkSessionCard } from "@/features/my-day/components/work-session-card"
 import { fetchEffectiveLayout, type WorkspaceBlockId } from "@/features/workspace"
 import { DEFAULT_LAYOUT } from "@/features/workspace/lib/blocks"
 import { tryLoad } from "@/lib/api/load"
-import { formatDecimal, formatDecimalMoney, formatNumber } from "@/lib/format"
-
-const METRIC_LABELS: Record<string, string> = {
-  monthly_sales: "Продажи за месяц",
-  monthly_turnover: "Оборот за месяц",
-  weekly_leads: "Лиды за неделю",
-  weekly_prepayments: "Предоплаты за неделю",
-  daily_calls: "Звонки за день",
-}
-
-function amount(plan: PlanProgress, value: string): string {
-  return plan.unit === "money" && plan.currency ? formatDecimalMoney(value, plan.currency) : formatDecimal(Number(value))
-}
+import { formatNumber } from "@/lib/format"
 
 /**
- * «Мой день» в режиме api: только то, что считает backend. Порядок и видимость блоков задаёт
- * руководитель в «Рабочем пространстве»; если раскладку загрузить не удалось — порядок по умолчанию.
+ * «Мой день» в режиме api: только то, что считает backend. Наверху — смена, затем дела на
+ * сегодня, оборот и заработок, месяц и продукты. Порядок и видимость блоков задаёт руководитель
+ * в «Рабочем пространстве»; если раскладку загрузить не удалось — порядок по умолчанию.
  */
 export async function ServerMyDayView({ userId }: { userId: string }) {
   const [result, layout] = await Promise.all([tryLoad(() => fetchServerDay(userId)), tryLoad(fetchEffectiveLayout)])
@@ -46,11 +34,19 @@ export async function ServerMyDayView({ userId }: { userId: string }) {
         <Counter label="Встречи сегодня" value={day.meetingsToday} href={routes.meetings} />
       </div>
     ),
-    plans: <PlansBlock plans={day.plans} />,
+    plans: (
+      <WidgetErrorBoundary title="Оборот и заработок">
+        <Suspense fallback={<Skeleton className="h-48 w-full rounded-xl" />}>
+          <MonthSummary />
+        </Suspense>
+      </WidgetErrorBoundary>
+    ),
     month_metrics: (
-      <Suspense fallback={<Skeleton className="h-24 w-full rounded-xl" />}>
-        <MonthMetrics />
-      </Suspense>
+      <WidgetErrorBoundary title="Этот месяц">
+        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+          <MonthOverview />
+        </Suspense>
+      </WidgetErrorBoundary>
     ),
     focus_deals: (
       <WidgetErrorBoundary title="Сделки в приоритете">
@@ -68,64 +64,6 @@ export async function ServerMyDayView({ userId }: { userId: string }) {
         <Fragment key={block.id}>{blocks[block.id]}</Fragment>
       ))}
     </div>
-  )
-}
-
-function PlansBlock({ plans }: { plans: readonly PlanProgress[] }) {
-  return (
-    <section aria-labelledby="my-plans" className="space-y-2.5">
-      <h2 id="my-plans" className="text-base font-semibold">
-        Мои планы
-      </h2>
-      {plans.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Личный план на текущий период не задан — его ставит руководитель.</p>
-      ) : (
-        <ListPanel>
-          <ul className="divide-y">
-            {plans.map((plan) => {
-              const percent = plan.percent === null ? null : Number(plan.percent)
-              return (
-                <li key={plan.id} className="space-y-1.5 px-4 py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                    <span className="font-medium">{METRIC_LABELS[plan.metric] ?? plan.metric}</span>
-                    <span className="tabular-nums">
-                      {plan.actual === null ? "—" : amount(plan, plan.actual)} из {amount(plan, plan.target)}
-                      {percent !== null && <span className="text-muted-foreground"> · {formatNumber(Math.round(percent))}%</span>}
-                    </span>
-                  </div>
-                  {percent !== null && (
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(percent, 100)}%` }} />
-                    </div>
-                  )}
-                  {plan.remaining !== null && Number(plan.remaining) > 0 && (
-                    <p className="text-meta text-muted-foreground">Осталось: {amount(plan, plan.remaining)}</p>
-                  )}
-                  {plan.daily.length > 1 && <PlanChart plan={plan} />}
-                </li>
-              )
-            })}
-          </ul>
-        </ListPanel>
-      )}
-    </section>
-  )
-}
-
-/** Накопительный факт по дням против равномерного плана (пунктир); числа — backend */
-function PlanChart({ plan }: { plan: PlanProgress }) {
-  const totalDays = Math.round((Date.parse(plan.periodEnd) - Date.parse(plan.periodStart)) / 86_400_000) + 1
-  return (
-    <figure className="space-y-1">
-      <ProgressChart
-        label={`${METRIC_LABELS[plan.metric] ?? plan.metric}: факт по дням против равномерного плана`}
-        points={plan.daily.map((day) => ({ day: day.date, value: Number(day.actual) }))}
-        target={Number(plan.target)}
-        totalDays={totalDays}
-        height={140}
-      />
-      <figcaption className="text-meta text-muted-foreground">Линия — факт с начала периода, пунктир — сколько положено к дню при равномерном темпе.</figcaption>
-    </figure>
   )
 }
 

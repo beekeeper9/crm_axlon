@@ -7,7 +7,8 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { prospectRoute, routes } from "@/config/routes"
-import { loadConvertPipelines } from "@/features/prospects/api/convert-pipelines"
+import { loadConvertOptions } from "@/features/prospects/api/convert-pipelines"
+import { NO_CONVERT_OPTIONS } from "@/features/prospects/components/convert-dialog"
 import { listProspectNotes, prospectsRepository } from "@/features/prospects/api/prospects-repository"
 import { ProspectActions } from "@/features/prospects/components/prospect-actions"
 import { ProspectNoteForm } from "@/features/prospects/components/prospect-notes"
@@ -36,12 +37,12 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
   const canAssign = hasPermission(user.role, "records.assign")
   const canEdit = !isMockDataSource && hasPermission(user.role, "records.edit")
   // Разделы грузятся независимо: ошибка истории не прячет карточку
-  const [duplicates, history, members, notes, pipelines] = await Promise.all([
+  const [duplicates, history, members, notes, convertOptions] = await Promise.all([
     tryLoad(() => prospectsRepository.getDuplicates(prospect.id)),
     tryLoad(() => prospectsRepository.getHistory(prospect.id)),
     canAssign && canEdit ? tryLoad(() => teamRepository.listMembers()) : Promise.resolve(null),
     isMockDataSource ? Promise.resolve(null) : tryLoad(async () => listProspectNotes(await getRenderAuth(), prospect.id, await loadPeopleNames())),
-    canEdit ? tryLoad(loadConvertPipelines) : Promise.resolve(null),
+    canEdit ? tryLoad(loadConvertOptions) : Promise.resolve(null),
   ])
   const status = PROSPECT_STATUS_META[prospect.status]
   const customerCandidates = duplicates.ok ? duplicates.data.filter((candidate) => candidate.kind === "customer") : []
@@ -94,7 +95,7 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
             prospect={prospect}
             members={members?.ok ? members.data.map(({ id, name }) => ({ id, name })) : []}
             customerCandidates={customerCandidates.map(({ id, name, phone, email }) => ({ id, name, contact: phone ?? email }))}
-            pipelines={pipelines?.ok ? pipelines.data : []}
+            options={convertOptions?.ok ? convertOptions.data : NO_CONVERT_OPTIONS}
           />
         ) : (
           isMockDataSource && <p className="text-meta text-muted-foreground">Демо-режим: действия с лидом доступны только с подключённым backend.</p>

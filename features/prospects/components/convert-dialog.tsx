@@ -9,11 +9,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { ProductSelect } from "@/features/products/components/product-select"
 import { convertProspectAction } from "@/features/prospects/actions"
 import type { ConversionResult } from "@/features/prospects/api/prospects-repository"
 
 /** Воронка и её рабочие этапы, куда может встать новая сделка */
 export type ConvertPipeline = { id: string; name: string; stages: readonly { id: string; name: string }[] }
+
+/** Из чего выбирают при переводе в клиенты: воронки с этапами и продукты компании */
+export type ConvertOptions = { pipelines: readonly ConvertPipeline[]; products: readonly { id: string; name: string }[] }
+
+export const NO_CONVERT_OPTIONS: ConvertOptions = { pipelines: [], products: [] }
 
 export type ConvertTarget = {
   id: string
@@ -28,7 +34,7 @@ const NEW_CUSTOMER = "new"
 
 type ConvertDialogProps = {
   target: ConvertTarget | null
-  pipelines: readonly ConvertPipeline[]
+  options: ConvertOptions
   /** Пояснение под заголовком (например, где проверить дубли) */
   note?: string
   onClose: () => void
@@ -39,23 +45,25 @@ type ConvertDialogProps = {
  * «Стал клиентом»: клиент (новый или существующий), сделка, этап воронки продаж и следующий
  * шаг. Без шага конвертировать нельзя — сделка не придёт на «Продажи» без следующего шага.
  */
-export function ConvertDialog({ target, pipelines, note, onClose, onConverted }: ConvertDialogProps) {
+export function ConvertDialog({ target, options, note, onClose, onConverted }: ConvertDialogProps) {
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        {target && <ConvertForm key={target.id} target={target} pipelines={pipelines} note={note} onClose={onClose} onConverted={onConverted} />}
+        {target && <ConvertForm key={target.id} target={target} options={options} note={note} onClose={onClose} onConverted={onConverted} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function ConvertForm({ target, pipelines, note, onClose, onConverted }: Omit<ConvertDialogProps, "target"> & { target: ConvertTarget }) {
+function ConvertForm({ target, options, note, onClose, onConverted }: Omit<ConvertDialogProps, "target"> & { target: ConvertTarget }) {
+  const { pipelines, products } = options
   const [isPending, startTransition] = useTransition()
   const [failure, setFailure] = useState<string | null>(null)
   const [customer, setCustomer] = useState(target.customerCandidates[0]?.id ?? NEW_CUSTOMER)
   const [pipelineId, setPipelineId] = useState<string | null>(pipelines[0]?.id ?? null)
   const pipeline = pipelines.find((item) => item.id === pipelineId) ?? null
   const [stageId, setStageId] = useState<string | null>(pipeline?.stages[0]?.id ?? null)
+  const [productId, setProductId] = useState<string | null>(null)
   const [deal, setDeal] = useState({ title: target.name, amount: "", nextStepTitle: "", nextStepDue: "" })
   const field = (key: keyof typeof deal) => ({
     value: deal[key],
@@ -67,7 +75,7 @@ function ConvertForm({ target, pipelines, note, onClose, onConverted }: Omit<Con
     startTransition(async () => {
       const result = await convertProspectAction(target.id, {
         customerId: customer === NEW_CUSTOMER ? null : customer,
-        deal: { ...deal, pipelineId, stageId },
+        deal: { ...deal, pipelineId, stageId, productId },
         qualifyFirst: target.needsQualification,
       })
       if (!result.ok) {
@@ -113,6 +121,8 @@ function ConvertForm({ target, pipelines, note, onClose, onConverted }: Omit<Con
           <Input id="convert-deal-amount" {...field("amount")} inputMode="decimal" placeholder="15000" className="h-9" />
         </div>
       </div>
+
+      <ProductSelect id="convert-product" products={products} value={productId} onChange={setProductId} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         {pipelines.length > 1 && (

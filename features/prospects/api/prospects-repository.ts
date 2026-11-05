@@ -217,6 +217,8 @@ export type ProspectConversion = {
     amount: string
     pipelineId: string | null
     stageId: string | null
+    /** Продукт компании, который продаёт сделка; null — без продукта */
+    productId?: string | null
     nextStep: { title: string; dueDate: string }
   } | null
 }
@@ -240,6 +242,7 @@ export function conversionBody({ customerId, deal }: ProspectConversion): Record
             amount: deal.amount,
             ...(deal.pipelineId ? { pipelineId: deal.pipelineId } : {}),
             ...(deal.stageId ? { stageId: deal.stageId } : {}),
+            ...(deal.productId ? { productId: deal.productId } : {}),
             nextStep: deal.nextStep,
           },
         }

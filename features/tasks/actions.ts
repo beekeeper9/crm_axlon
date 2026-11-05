@@ -31,6 +31,7 @@ const newDealTaskSchema = z.object({
   priority: taskPrioritySchema,
   assigneeId: z.string().min(1).nullable(),
   description: z.string().trim().max(2000, "Не длиннее 2000 символов"),
+  isMiss: z.boolean().default(false),
 })
 
 export type NewDealTaskInput = z.input<typeof newDealTaskSchema>

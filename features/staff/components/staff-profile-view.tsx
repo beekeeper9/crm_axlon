@@ -10,16 +10,18 @@ import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
+import { fetchPayTerms } from "@/features/staff/api/compensation"
 import { staffRepository } from "@/features/staff/api/staff-repository"
 import { fetchFormerBase, fetchMemberDetail } from "@/features/staff/api/staff-profile"
 import { companyDays, listWorkSessions } from "@/features/staff/api/work-sessions"
 import { BaseRedistribution } from "@/features/staff/components/base-redistribution"
 import { DeleteMemberButton } from "@/features/staff/components/delete-member-button"
+import { PayTermsForm } from "@/features/staff/components/pay-terms-form"
 import { formatWorkDuration } from "@/features/staff/lib/staff-structure"
 import { tryLoad } from "@/lib/api/load"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { formatDateTime, formatDayMonth, formatFullDate, formatNumber, formatTime } from "@/lib/format"
-import { ROLE_LABELS } from "@/lib/permissions/roles"
+import { ROLE_LABELS, type Role } from "@/lib/permissions/roles"
 
 /** Подписи видов истории работы — ключи `history` из `GET /staff/{id}/` */
 const HISTORY_LABELS: Record<string, string> = {
@@ -44,6 +46,9 @@ const HISTORY_LABELS: Record<string, string> = {
   transferred_deals: "Передано сделок",
 }
 
+/** Кому директор задаёт оклад и процент: сотрудники, которые продают */
+const PAID_ROLES: readonly Role[] = ["manager", "head_of_sales", "lead_caller"]
+
 const TASK_STATUS: Record<string, string> = { open: "Открыта", completed: "Выполнена", cancelled: "Отменена" }
 
 /**
@@ -64,12 +69,15 @@ export async function StaffProfileView({ membershipId, isDirector }: { membershi
   if (!detail.ok) return <ApiErrorState error={detail.error} />
   const member = detail.data
   const { today, from } = companyDays(29)
-  const [base, staff, sessions] = await Promise.all([
+  const isDismissed = member.status === "deactivated"
+  // Оклад и процент — только директору и только действующим сотрудникам продаж
+  const showPay = isDirector && !isDismissed && PAID_ROLES.includes(member.role)
+  const [base, staff, sessions, pay] = await Promise.all([
     tryLoad(() => fetchFormerBase(auth, member.userId)),
     tryLoad(() => staffRepository.listStaff()),
     tryLoad(() => listWorkSessions({ userId: member.userId, dateFrom: from, dateTo: today }, auth)),
+    showPay ? tryLoad(() => fetchPayTerms(auth, member.userId)) : Promise.resolve(null),
   ])
-  const isDismissed = member.status === "deactivated"
   // Кому передать базу: действующие сотрудники продаж (РОПу backend даст только его отдел)
   const recipients = staff.ok
     ? staff.data
@@ -117,6 +125,25 @@ export async function StaffProfileView({ membershipId, isDirector }: { membershi
           <dd className="pt-1 font-medium">{member.lastLogin ? formatDateTime(member.lastLogin) : "—"}</dd>
         </div>
       </dl>
+
+      {pay && (
+        <section aria-labelledby="pay-terms" className="space-y-2 rounded-xl px-4 py-3 ring-1 ring-border">
+          <div className="space-y-0.5">
+            <h2 id="pay-terms" className="text-base font-semibold">
+              Оклад и процент с продаж
+            </h2>
+            <p className="text-meta text-muted-foreground">
+              Заработок в «Моём дне» = оклад + процент от подтверждённых в месяце предоплат, доплат и полных оплат по продажам сотрудника. Видит только директор и
+              сам сотрудник.
+            </p>
+          </div>
+          {pay.ok ? (
+            <PayTermsForm membershipId={membershipId} userId={member.userId} terms={pay.data} currency={pay.data?.currency ?? null} />
+          ) : (
+            <ApiErrorState error={pay.error} bare />
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="work-history" className="space-y-2">
         <h2 id="work-history" className="text-base font-semibold">

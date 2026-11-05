@@ -90,6 +90,7 @@ const newDealSchema = z.object({
   title: z.string().trim().min(2, "Укажите название сделки").max(200, "Не длиннее 200 символов"),
   amount: amountSchema,
   pipelineId: z.string().nullable(),
+  productId: z.string().nullable().default(null),
   nextStep: z.string().trim().max(300, "Не длиннее 300 символов"),
 })
 
@@ -107,6 +108,7 @@ const dealChangesSchema = z.object({
   nextStep: z.string().trim().max(300, "Не длиннее 300 символов"),
   expectedCloseDate: z.union([z.iso.date(), z.literal("")]),
   source: z.string().trim().max(100, "Источник — не длиннее 100 символов").optional(),
+  productId: z.string().nullable().optional(),
 })
 
 export async function updateDealAction(

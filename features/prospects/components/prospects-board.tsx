@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { prospectRoute } from "@/config/routes"
 import { disqualifyProspectAction, qualifyProspectAction } from "@/features/prospects/actions"
-import { ConvertDialog, type ConvertPipeline, type ConvertTarget } from "@/features/prospects/components/convert-dialog"
+import { ConvertDialog, type ConvertOptions, type ConvertTarget } from "@/features/prospects/components/convert-dialog"
 import { PROSPECT_SOURCE_LABELS, PROSPECT_STATUS_META } from "@/features/prospects/lib/prospect-meta"
 import type { Prospect, ProspectStatus } from "@/features/prospects/schemas"
 import { formatDayMonth, formatNumber } from "@/lib/format"
@@ -23,7 +23,7 @@ export type ProspectColumn = { status: ProspectStatus; count: number; prospects:
 
 type ProspectsBoardProps = {
   columns: readonly ProspectColumn[]
-  pipelines: readonly ConvertPipeline[]
+  options: ConvertOptions
   showOwner: boolean
   canEdit: boolean
 }
@@ -41,7 +41,7 @@ function canMove(from: ProspectStatus, to: ProspectStatus): boolean {
  * отклоняет с причиной или переводит в клиенты (со сделкой, этапом и следующим шагом).
  * После каждого шага доска — снова ответ сервера.
  */
-export function ProspectsBoard({ columns, pipelines, showOwner, canEdit }: ProspectsBoardProps) {
+export function ProspectsBoard({ columns, options, showOwner, canEdit }: ProspectsBoardProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [dragged, setDragged] = useState<Prospect | null>(null)
@@ -175,7 +175,7 @@ export function ProspectsBoard({ columns, pipelines, showOwner, canEdit }: Prosp
       />
       <ConvertDialog
         target={converting}
-        pipelines={pipelines}
+        options={options}
         note="Совпадения с существующими клиентами видны в карточке лида — откройте её, если клиента нужно привязать."
         onClose={() => setConverting(null)}
         onConverted={() => {

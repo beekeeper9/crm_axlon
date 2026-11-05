@@ -22,12 +22,14 @@ import { LeadTabs } from "@/features/leads/components/lead-tabs"
 import type { LeadDetail } from "@/features/leads/schemas"
 import { LeadCallsList, LogCallButton } from "@/features/calls"
 import { MeetingsList, meetingsRepository } from "@/features/meetings"
+import { listProducts } from "@/features/products"
 import { salesRepository } from "@/features/sales"
 import { TasksList, tasksRepository } from "@/features/tasks"
 import { listMembersIfAllowed } from "@/features/team"
 import type { ApiError } from "@/lib/api/errors"
 import { tryLoad } from "@/lib/api/load"
 import { PAGE_LIMIT_MAX } from "@/lib/api/pagination"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { formatDayMonth, formatDecimalMoney, formatFullDate } from "@/lib/format"
 import { editModeFor } from "@/lib/permissions/edit-mode"
 import { hasPermission } from "@/lib/permissions/roles"
@@ -135,12 +137,20 @@ export function LeadView({ lead, user }: LeadViewProps) {
 /** Справочники для действий со сделкой: причины отказа и (для руководителя) сотрудники */
 async function DealActionsSection({ lead, user }: LeadViewProps) {
   const canAssign = hasPermission(user.role, "records.assign")
-  const [config, members] = await Promise.all([
+  const [config, members, products] = await Promise.all([
     tryLoad(() => salesRepository.getConfig()),
     tryLoad(() => (canAssign ? listMembersIfAllowed() : Promise.resolve([]))),
+    tryLoad(async () => (isMockDataSource ? [] : listProducts(await getRenderAuth(), true))),
   ])
   if (!config.ok) return <ApiErrorState error={config.error} bare />
-  return <DealActions lead={lead} lossReasons={config.data.lossReasons} members={members.ok ? members.data : []} />
+  return (
+    <DealActions
+      lead={lead}
+      lossReasons={config.data.lossReasons}
+      members={members.ok ? members.data : []}
+      products={products.ok ? products.data.map(({ id, name }) => ({ id, name })) : []}
+    />
+  )
 }
 
 /** Каждая вкладка загружается независимо: медленная история не задерживает остальную карточку */

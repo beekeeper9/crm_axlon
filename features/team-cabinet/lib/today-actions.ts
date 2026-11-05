@@ -1,7 +1,7 @@
 import { leadRoute, prospectRoute, routes, teamMemberRoute } from "@/config/routes"
 import { isTodayActionKind, type TodayActionGroup, type TodayActionItem } from "@/features/team-cabinet/api/today-actions"
 import { cabinetLinks } from "@/features/team-cabinet/lib/links"
-import { formatDateTime, formatDecimalMoney, pluralize } from "@/lib/format"
+import { formatDateTime, formatDayMonth, formatDecimalMoney, pluralize } from "@/lib/format"
 import { hrefWithParams } from "@/lib/search-params"
 
 /** Подписи кодов причин backend */
@@ -35,6 +35,10 @@ export function todayGroupHref(kind: string): string | null {
       return routes.prospects
     case "managers_without_activity":
       return hrefWithParams(routes.team, {}, { tab: "silence" })
+    case "miss_tasks":
+      return routes.tasks
+    case "debts_to_collect":
+      return routes.leads
   }
 }
 
@@ -64,6 +68,10 @@ export function todayItemHref(kind: string, item: TodayActionItem): string | nul
       return prospectRoute(item.id)
     case "managers_without_activity":
       return teamMemberRoute(item.id)
+    case "miss_tasks":
+      return subjectHref(item) ?? hrefWithParams(routes.tasks, {}, { assignee: item.managerId })
+    case "debts_to_collect":
+      return leadRoute(item.id)
   }
 }
 
@@ -100,6 +108,16 @@ export function todayItemMeta(kind: string, item: TodayActionItem, today: string
       break
     case "managers_without_activity":
       parts.push(...item.reasons.map((code) => TODAY_REASON_LABELS[code] ?? code))
+      break
+    case "miss_tasks":
+      parts.push(item.ageDays ? `просрочена на ${days(item.ageDays)}` : item.date ? `срок ${item.date === today ? "сегодня" : formatDayMonth(item.date)}` : null)
+      break
+    case "debts_to_collect":
+      parts.push(
+        item.debt ? `долг ${money(item.debt, item.currency)}` : null,
+        item.paid ? `оплачено ${money(item.paid, item.currency)} из ${money(item.amount, item.currency)}` : null,
+        item.stageName
+      )
       break
   }
   return parts.filter((part): part is string => Boolean(part))

@@ -84,6 +84,7 @@ function TaskForm({
     priority: task?.priority ?? "normal",
     assigneeId: task ? (task.assignee?.id ?? null) : currentUser.id,
     description: task?.description ?? "",
+    isMiss: false,
   }))
   const [errors, setErrors] = useState<FieldErrors>({})
 
@@ -153,6 +154,17 @@ function TaskForm({
             </SelectContent>
           </Select>
         </div>
+      )}
+
+      {/* Отметку ставит руководитель при новой задаче: у менеджера она встанет первой в «Фокусе» */}
+      {isServer && canAssign && !task && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-(--primary)" checked={values.isMiss} onChange={(event) => set("isMiss", event.target.checked)} />
+          <span>
+            По проколу менеджера
+            <span className="block text-xs text-muted-foreground">Задача из «Работы над ошибками»: у исполнителя она будет первой в «Фокусе».</span>
+          </span>
+        </label>
       )}
 
       {needsSubject && (

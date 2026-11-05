@@ -66,4 +66,11 @@ describe("conversionBody", () => {
       createDeal: { title: "Окна", amount: "15000", stageId: "s-2", nextStep },
     })
   })
+
+  it("продукт сделки уходит в create_deal, только если выбран", () => {
+    const nextStep = { title: "Перезвонить", dueDate: "2026-11-10" }
+    const deal = { title: "Польша", amount: "1000", pipelineId: null, stageId: null, nextStep }
+    expect(conversionBody({ customerId: null, deal: { ...deal, productId: "p-1" } })).toEqual({ createDeal: { title: "Польша", amount: "1000", productId: "p-1", nextStep } })
+    expect(conversionBody({ customerId: null, deal: { ...deal, productId: null } }).createDeal).not.toHaveProperty("productId")
+  })
 })

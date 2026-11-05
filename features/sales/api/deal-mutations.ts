@@ -19,6 +19,8 @@ export type NewDeal = {
   pipelineId: string | null
   customerId: string | null
   nextStep: string | null
+  /** Продукт компании; null — без продукта */
+  productId?: string | null
 }
 
 export async function createDeal(auth: ApiAuth, deal: NewDeal): Promise<string> {
@@ -31,6 +33,7 @@ export async function createDeal(auth: ApiAuth, deal: NewDeal): Promise<string> 
       ...(deal.pipelineId ? { pipelineId: deal.pipelineId } : {}),
       ...(deal.customerId ? { customerId: deal.customerId } : {}),
       ...(deal.nextStep ? { nextStep: deal.nextStep } : {}),
+      ...(deal.productId ? { productId: deal.productId } : {}),
     },
     schema: dealRefSchema,
   })
@@ -44,6 +47,8 @@ export type DealChanges = {
   expectedCloseDate: string | null
   /** Откуда пришёл клиент; пустая строка очищает, без поля — не меняется */
   source?: string
+  /** Продукт; null снимает, без поля — не меняется */
+  productId?: string | null
 }
 
 /** `PATCH` с версией: если сделку успели изменить, backend ответит 409 */

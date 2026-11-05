@@ -26,7 +26,7 @@ describe("convertProspectAction", () => {
     const result = await convertProspectAction("l-1", { customerId: "c-1", deal })
     expect(convertLead).toHaveBeenCalledWith({ tenant: "demo" }, "l-1", {
       customerId: "c-1",
-      deal: { title: "Окна", amount: "1500.50", pipelineId: "p-1", stageId: "s-2", nextStep: { title: "Перезвонить по КП", dueDate: "2026-11-10" } },
+      deal: { title: "Окна", amount: "1500.50", pipelineId: "p-1", stageId: "s-2", productId: null, nextStep: { title: "Перезвонить по КП", dueDate: "2026-11-10" } },
     })
     expect(result).toEqual({ ok: true, data: { customerId: "c-1", alreadyConverted: false, dealId: "d-1" } })
   })

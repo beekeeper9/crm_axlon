@@ -5,6 +5,7 @@ import { z } from "zod"
 
 import { routes } from "@/config/routes"
 import { staffRepository } from "@/features/staff/api/staff-repository"
+import { setPayTerms } from "@/features/staff/api/compensation"
 import { assignMemberDepartment, assignRecord, deleteMember, fetchFormerBase, type RecordKind } from "@/features/staff/api/staff-profile"
 import { DEPARTMENT_REQUIRED_MESSAGE, STAFF_BACKEND_MESSAGES, STAFF_ERROR_CODES, staffErrorMessage } from "@/features/staff/lib/staff-messages"
 import { createStaffFormSchema, type ApprovedRequest } from "@/features/staff/schemas"
@@ -213,4 +214,32 @@ export async function reassignRecordsAction(
   }
   revalidatePath(routes.staff, "layout")
   return { ok: true, data: { moved, failed, firstError } }
+}
+
+const payTermsSchema = z.object({
+  baseSalary: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/\s/g, "").replace(",", "."))
+    .refine((value) => /^\d{1,13}(\.\d{1,2})?$/.test(value), "Оклад — число, например 25000 (можно 0)"),
+  commissionPercent: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(",", "."))
+    .refine((value) => /^\d{1,3}(\.\d{1,2})?$/.test(value) && Number(value) <= 100, "Процент — от 0 до 100, например 5 или 7.5"),
+})
+
+/** Оклад и процент с продаж сотрудника — только директор (backend проверяет ещё раз) */
+export async function setPayTermsAction(
+  membershipId: string,
+  userId: string,
+  input: z.input<typeof payTermsSchema>
+): Promise<RequestActionResult> {
+  if (!hasPermission((await getCurrentUser()).role, "company.settings")) return { ok: false, message: "Оклад и процент задаёт директор.", requestId: null }
+  const parsed = payTermsSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Проверьте поля", requestId: null }
+  const result = await run(async () => setPayTerms(await getActionAuth(), userId, parsed.data))
+  if (!result.ok) return result
+  revalidatePath(`${routes.staff}/${encodeURIComponent(membershipId)}`)
+  return { ok: true, data: null }
 }

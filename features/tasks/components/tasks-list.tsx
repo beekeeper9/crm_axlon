@@ -116,6 +116,7 @@ export function TasksList({
       priority: values.priority,
       assigneeId: canAssign ? values.assigneeId : null,
       description: values.description,
+      isMiss: canAssign && values.isMiss,
     }
     if (!editing && !dealId) {
       // Сделка или клиент — по желанию: без них задача просто ставится исполнителю

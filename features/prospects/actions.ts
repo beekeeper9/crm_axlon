@@ -142,6 +142,7 @@ const dealSchema = z.object({
   amount: z.string().trim().regex(/^\d{1,13}([.,]\d{1,2})?$/, "Сумма — число, например 15000"),
   pipelineId: z.string().nullable(),
   stageId: z.string().nullable(),
+  productId: z.string().nullable().default(null),
   nextStepTitle: z.string().trim().min(3, "Следующий шаг — что сделать, хотя бы 3 символа").max(200, "Шаг — не длиннее 200 символов"),
   nextStepDue: z.iso.date("Укажите срок следующего шага"),
 })
@@ -157,6 +158,7 @@ export async function convertProspectAction(
     amount: parsed.data.amount.replace(",", "."),
     pipelineId: parsed.data.pipelineId,
     stageId: parsed.data.stageId,
+    productId: parsed.data.productId,
     nextStep: { title: parsed.data.nextStepTitle, dueDate: parsed.data.nextStepDue },
   }
   return run(async () => {

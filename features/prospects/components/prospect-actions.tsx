@@ -18,7 +18,7 @@ import {
   updateProspectAction,
   type ProspectActionResult,
 } from "@/features/prospects/actions"
-import { ConvertDialog, type ConvertPipeline } from "@/features/prospects/components/convert-dialog"
+import { ConvertDialog, type ConvertOptions } from "@/features/prospects/components/convert-dialog"
 import type { Prospect } from "@/features/prospects/schemas"
 
 type Person = { id: string; name: string }
@@ -31,11 +31,11 @@ type ProspectActionsProps = {
   /** Существующие клиенты с тем же телефоном или e-mail */
   customerCandidates: readonly { id: string; name: string; contact: string | null }[]
   /** Воронки продаж с рабочими этапами — куда встанет сделка нового клиента */
-  pipelines: readonly ConvertPipeline[]
+  options: ConvertOptions
 }
 
 /** Работа с входящим лидом. Переходы статусов и права окончательно проверяет backend */
-export function ProspectActions({ prospect, members, customerCandidates, pipelines }: ProspectActionsProps) {
+export function ProspectActions({ prospect, members, customerCandidates, options }: ProspectActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mode, setMode] = useState<Mode>("idle")
@@ -210,7 +210,7 @@ export function ProspectActions({ prospect, members, customerCandidates, pipelin
             ? { id: prospect.id, name: prospect.name, needsQualification: prospect.status === "new", customerCandidates }
             : null
         }
-        pipelines={pipelines}
+        options={options}
         onClose={() => setMode("idle")}
         onConverted={(result) => {
           setMode("idle")
