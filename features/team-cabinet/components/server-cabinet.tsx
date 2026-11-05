@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { connection } from "next/server"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
 import { ListPanel } from "@/components/shared/list-panel"
@@ -46,6 +47,8 @@ type Tab = (typeof TABS)[number]["value"]
  * под ними «Что делать сегодня», ниже вкладки. Все числа считает backend.
  */
 export async function ServerCabinetView({ params }: { params: SearchParamsRecord }) {
+  // Месяц и «сегодня» — момент запроса, а не сборки: страница всегда рендерится на запрос
+  await connection()
   const user = await getCurrentUser()
   const isDirector = hasPermission(user.role, "company.view")
   const tabParam = getParam(params, "tab")
