@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { leadRoute } from "@/config/routes"
 import type { Deal, PipelineStage } from "@/features/sales/schemas"
-import { formatDateTime, formatDecimalMoney } from "@/lib/format"
+import { formatDateTime, formatDayMonth, formatDecimalMoney } from "@/lib/format"
 
 type DealCardProps = {
   deal: Deal
@@ -101,10 +101,10 @@ function NextAction({ deal }: { deal: Deal }) {
   return (
     <p className={cn("flex min-w-0 items-center gap-1.5 text-meta", next.isOverdue ? "text-destructive" : "text-muted-foreground")}>
       <CalendarClock className="size-3.5 shrink-0" aria-hidden />
-      {next.dueAt && (
+      {(next.dueAt || next.dueDate) && (
         <span className="shrink-0 tabular-nums">
           {next.isOverdue && <span className="sr-only">Просрочено: </span>}
-          {formatDateTime(next.dueAt)}
+          {next.dueAt ? formatDateTime(next.dueAt) : formatDayMonth(next.dueDate ?? "")}
         </span>
       )}
       <span className={cn("truncate", !next.isOverdue && "text-foreground/85")}>{next.title}</span>

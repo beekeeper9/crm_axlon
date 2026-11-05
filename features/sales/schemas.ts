@@ -55,6 +55,8 @@ export const dealSchema = z.object({
     .object({
       title: z.string(),
       dueAt: z.iso.datetime({ offset: true }).nullable(),
+      /** Срок-дата (задача следующего шага хранит только дату); dueAt тогда пустой */
+      dueDate: z.iso.date().nullable().default(null),
       /** Просрочку считает backend */
       isOverdue: z.boolean(),
     })

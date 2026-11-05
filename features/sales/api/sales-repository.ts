@@ -20,6 +20,8 @@ import { ApiError } from "@/lib/api/errors"
 import { currencyCodeSchema, decimalStringSchema } from "@/lib/api/money"
 import { paginate, paginatedSchema, type PageParams, type Paginated } from "@/lib/api/pagination"
 import { getRenderAuth } from "@/lib/auth/token-store"
+import { nowIso } from "@/lib/clock"
+import { companyDateOf } from "@/lib/datetime"
 import { addDecimals } from "@/lib/decimal"
 import { demoDeals, demoSalesConfig } from "@/mocks/crm"
 import { simulateLatency } from "@/mocks/latency"
@@ -156,6 +158,8 @@ const backendDealSchema = z.object({
   stageId: z.string(),
   ownerUserId: z.string(),
   nextStep: z.string().nullable(),
+  /** Следующий шаг — ближайшая открытая задача со сроком (правило 03.11.2026) */
+  nextTask: z.object({ title: z.string(), dueDate: z.iso.date() }).nullable().optional(),
   /** Последнее изменение записи; старый backend поля не отдаёт */
   updatedAt: z.iso.datetime({ offset: true }).nullable().optional(),
 })
@@ -188,7 +192,11 @@ function toDeal(deal: BackendDeal, memberNames: ReadonlyMap<string, string>): De
     amount: deal.amount,
     currency: deal.currency,
     manager: { id: deal.ownerUserId, name: memberNames.get(deal.ownerUserId) ?? "Сотрудник" },
-    nextAction: deal.nextStep ? { title: deal.nextStep, dueAt: null, isOverdue: false } : null,
+    nextAction: deal.nextTask
+      ? { title: deal.nextTask.title, dueAt: null, dueDate: deal.nextTask.dueDate, isOverdue: deal.nextTask.dueDate < companyDateOf(nowIso()) }
+      : deal.nextStep
+        ? { title: deal.nextStep, dueAt: null, dueDate: null, isOverdue: false }
+        : null,
     stageEnteredAt: null,
     updatedAt: deal.updatedAt ?? null,
     tags: [],
@@ -218,7 +226,9 @@ type DealsRequest = {
   stageId: string | null
   managerId: string | null
   search: string | null
-  status?: "open"
+  status?: "open" | "won"
+  /** Закрыта не раньше этой даты (ГГГГ-ММ-ДД) — продажи месяца */
+  closedFrom?: string
   attention?: DealAttention | null
   ordering: string
   limit: number
@@ -247,6 +257,7 @@ const httpSalesRepository: SalesRepository = {
   /**
    * Отдельного endpoint доски нет: по запросу на каждый рабочий этап, count — сколько сделок
    * на этапе всего. Суммы этапов backend не считает, поэтому totalAmount пустой.
+   * Последняя колонка — системный этап «Продажа» с продажами текущего месяца.
    */
   async getBoard({ pipelineId, managerId, search }) {
     const auth = await getRenderAuth()
@@ -275,6 +286,21 @@ const httpSalesRepository: SalesRepository = {
           }
         })
     )
+    const saleStage = pipeline.stages.find((stage) => stage.systemCode === "sale") ?? pipeline.stages.find((stage) => stage.kind === "won")
+    if (saleStage) {
+      const sold = await requestDeals(auth, {
+        pipelineId,
+        stageId: saleStage.id,
+        managerId,
+        search,
+        status: "won",
+        closedFrom: `${companyDateOf(nowIso()).slice(0, 7)}-01`,
+        ordering: "-closed_at",
+        limit: BOARD_STAGE_LIMIT,
+        offset: 0,
+      })
+      columns.push({ stageId: saleStage.id, count: sold.count, totalAmount: null, currency: null, deals: sold.results.map((deal) => toDeal(deal, memberNames)) })
+    }
     return { pipelineId, columns }
   },
 

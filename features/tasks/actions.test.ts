@@ -36,10 +36,17 @@ describe("createTaskAction — новая задача со страницы «�
     createTask.mockReset()
   })
 
-  it("без сделки или клиента запрос не отправляется", async () => {
+  it("выбранная сделка без id не уходит на backend", async () => {
     const result = await createTaskAction({ type: "deal", id: "", name: "" }, input)
     expect(result).toMatchObject({ ok: false, message: expect.stringContaining("Выберите сделку или клиента") })
     expect(createTask).not.toHaveBeenCalled()
+  })
+
+  it("без сделки и клиента задача ставится исполнителю", async () => {
+    createTask.mockResolvedValue({ ...created, subjectType: "member", subjectId: "u-aibek" })
+    const result = await createTaskAction(null, input)
+    expect(createTask).toHaveBeenCalledWith({}, null, expect.objectContaining({ assigneeId: "u-aibek" }))
+    expect(result).toMatchObject({ ok: true, task: { id: "t-1", assignee: { id: "u-aibek" } } })
   })
 
   it("обязательные поля проверяются до запроса", async () => {

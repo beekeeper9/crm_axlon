@@ -157,14 +157,21 @@ export const prospectsRepository: ProspectsRepository = isMockDataSource ? mockP
 
 /* Операции — только через server actions (`features/prospects/actions.ts`) */
 
-export type NewProspect = { name: string; phone: string | null; email: string | null; source: ProspectSource }
+export type NewProspect = { name: string; phone: string | null; email: string | null; source: ProspectSource; ownerId?: string | null }
 
-/** `POST /leads/` — ответственным становится создавший */
+/** `POST /leads/` — ответственный: выбранный создавшим, иначе по распределению или сам создавший */
 export async function createLead(auth: ApiAuth, input: NewProspect): Promise<string> {
   const created = await apiRequest("/api/v1/leads/", {
     method: "POST",
     auth,
-    body: { name: input.name, source: input.source, ...(input.phone ? { phone: input.phone } : {}), ...(input.email ? { email: input.email } : {}) },
+    body: {
+      name: input.name,
+      source: input.source,
+      ...(input.phone ? { phone: input.phone } : {}),
+      ...(input.email ? { email: input.email } : {}),
+      // Ответственный, выбранный РОПом или директором: автораспределение не срабатывает
+      ...(input.ownerId ? { ownerUserId: input.ownerId } : {}),
+    },
     schema: z.object({ id: z.string() }),
   })
   return created.id
@@ -204,8 +211,14 @@ export async function disqualifyLead(auth: ApiAuth, prospectId: string, reason: 
 export type ProspectConversion = {
   /** Привязать к существующему клиенту (подтверждённый дубль) вместо создания нового */
   customerId: string | null
-  /** Сразу открыть сделку */
-  deal: { title: string; amount: string } | null
+  /** Сделка клиента: этап воронки и следующий шаг (задача со сроком) */
+  deal: {
+    title: string
+    amount: string
+    pipelineId: string | null
+    stageId: string | null
+    nextStep: { title: string; dueDate: string }
+  } | null
 }
 
 const conversionResultSchema = z.object({
@@ -220,7 +233,17 @@ export type ConversionResult = z.infer<typeof conversionResultSchema>
 export function conversionBody({ customerId, deal }: ProspectConversion): Record<string, unknown> {
   return {
     ...(customerId ? { customerId } : {}),
-    ...(deal ? { createDeal: { title: deal.title, amount: deal.amount } } : {}),
+    ...(deal
+      ? {
+          createDeal: {
+            title: deal.title,
+            amount: deal.amount,
+            ...(deal.pipelineId ? { pipelineId: deal.pipelineId } : {}),
+            ...(deal.stageId ? { stageId: deal.stageId } : {}),
+            nextStep: deal.nextStep,
+          },
+        }
+      : {}),
   }
 }
 
@@ -231,5 +254,33 @@ export async function convertLead(auth: ApiAuth, prospectId: string, conversion:
     auth,
     body: conversionBody(conversion),
     schema: conversionResultSchema,
+  })
+}
+
+const noteSchema = z.object({
+  id: z.string(),
+  body: z.string().nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+  ownerUserId: z.string(),
+})
+
+export type ProspectNote = { id: string; body: string; createdAt: string; author: string }
+
+/** Примечания к лиду — заметки (`kind=note`) с привязкой к лиду; видимость решает backend */
+export async function listProspectNotes(auth: ApiAuth, prospectId: string, nameOf: (id: string) => string): Promise<ProspectNote[]> {
+  const page = await apiRequest("/api/v1/activities/", {
+    auth,
+    query: { kind: "note", subjectType: "lead", subjectId: prospectId, limit: 50 },
+    schema: paginatedSchema(noteSchema),
+  })
+  return page.results.map((note) => ({ id: note.id, body: note.body ?? "", createdAt: note.createdAt, author: nameOf(note.ownerUserId) }))
+}
+
+export async function addProspectNote(auth: ApiAuth, prospectId: string, body: string): Promise<void> {
+  await apiRequest("/api/v1/activities/", {
+    method: "POST",
+    auth,
+    body: { kind: "note", subjectType: "lead", subjectId: prospectId, body },
+    schema: z.unknown(),
   })
 }

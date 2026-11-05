@@ -15,9 +15,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { prospectRoute, routes } from "@/config/routes"
 import { prospectsRepository } from "@/features/prospects/api/prospects-repository"
+import { loadConvertPipelines } from "@/features/prospects/api/convert-pipelines"
 import { NewProspectButton } from "@/features/prospects/components/new-prospect-button"
+import { ProspectsBoard, type ProspectColumn } from "@/features/prospects/components/prospects-board"
 import { PROSPECT_SOURCE_LABELS, PROSPECT_STATUS_META } from "@/features/prospects/lib/prospect-meta"
-import { prospectSourceSchema, prospectStatusSchema, type ProspectSource } from "@/features/prospects/schemas"
+import { prospectSourceSchema, prospectStatusSchema, type ProspectSource, type ProspectStatus } from "@/features/prospects/schemas"
 import { fetchReferenceList } from "@/features/reference-lists"
 import { teamRepository } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
@@ -26,6 +28,7 @@ import { pageInfo, pageParams } from "@/lib/api/pagination"
 import { formatDayMonth } from "@/lib/format"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getPageParam, getParam, hrefWithParams, type ParamPatch, type SearchParamsRecord } from "@/lib/search-params"
+import { Columns3, List } from "lucide-react"
 import type { CurrentUser } from "@/lib/session/current-user"
 
 const PAGE_SIZE = 25
@@ -44,6 +47,8 @@ async function leadSources(): Promise<{ value: ProspectSource; label: string }[]
 }
 
 const STATUS_FILTERS = [null, ...prospectStatusSchema.options] as const
+/** Сколько карточек в колонке доски; остальные — в списке */
+const BOARD_COLUMN_LIMIT = 50
 
 type ProspectsViewProps = {
   user: CurrentUser
@@ -52,6 +57,69 @@ type ProspectsViewProps = {
 
 /** Входящие лиды: заявки до клиента и сделки. Видимость (свои, отдел, компания) решает backend */
 export async function ProspectsView({ user, params }: ProspectsViewProps) {
+  const isBoard = getParam(params, "view") !== "list" && !isMockDataSource
+  if (isBoard) return <ProspectsBoardView user={user} params={params} />
+  return <ProspectsListView user={user} params={params} />
+}
+
+/** Переключатель «доска / список» — в адресе (`?view=list`), доска по умолчанию */
+function ViewSwitch({ params, isBoard }: { params: SearchParamsRecord; isBoard: boolean }) {
+  return (
+    <SegmentedLinks
+      label="Вид"
+      variant="pill"
+      iconOnly
+      items={[
+        { key: "board", label: "Доска", icon: Columns3, href: hrefWithParams(routes.prospects, params, { view: null, status: null, page: null }), isActive: isBoard },
+        { key: "list", label: "Список", icon: List, href: hrefWithParams(routes.prospects, params, { view: "list" }), isActive: !isBoard },
+      ]}
+    />
+  )
+}
+
+/** Доска по статусам: те же фильтры, что у списка, кроме статуса (он — колонка) */
+async function ProspectsBoardView({ user, params }: ProspectsViewProps) {
+  const isTeamView = hasPermission(user.role, "team.view")
+  const canEdit = hasPermission(user.role, "records.edit")
+  const source = prospectSourceSchema.safeParse(getParam(params, "source")).data ?? null
+  const filters = { search: getParam(params, "q"), source, ownerId: isTeamView ? getParam(params, "owner") : null }
+  const loaded = await tryLoad(() =>
+    Promise.all([
+      Promise.all(
+        prospectStatusSchema.options.map(async (status: ProspectStatus): Promise<ProspectColumn> => {
+          const page = await prospectsRepository.listProspects({ ...filters, status, limit: BOARD_COLUMN_LIMIT, offset: 0 })
+          return { status, count: page.count, prospects: page.results }
+        })
+      ),
+      isTeamView ? teamRepository.listMembers() : Promise.resolve([]),
+      canEdit ? loadConvertPipelines() : Promise.resolve([]),
+    ])
+  )
+  if (!loaded.ok) return <ApiErrorState error={loaded.error} />
+  const [columns, members, pipelines] = loaded.data
+  return (
+    <div className="space-y-3">
+      <Toolbar>
+        <ViewSwitch params={params} isBoard />
+        <SearchInput label="Поиск лидов" placeholder="Имя, телефон или e-mail" className="w-full sm:w-72" />
+        <FilterSelect
+          label="Источник"
+          param="source"
+          allLabel="Все источники"
+          options={prospectSourceSchema.options.map((value) => ({ value, label: PROSPECT_SOURCE_LABELS[value] }))}
+        />
+        {isTeamView && (
+          <FilterSelect label="Ответственный" param="owner" allLabel="Все сотрудники" options={members.map((member) => ({ value: member.id, label: member.name }))} />
+        )}
+        {canEdit && <NewProspectButton sources={await leadSources()} members={isTeamView ? members.map(({ id, name }) => ({ id, name })) : []} />}
+      </Toolbar>
+      <p className="text-meta text-muted-foreground">Перетащите карточку: в «Квалифицирован», «Не подходит» (с причиной) или «Стал клиентом» — со сделкой и следующим шагом.</p>
+      <ProspectsBoard columns={columns} pipelines={pipelines} showOwner={isTeamView} canEdit={canEdit} />
+    </div>
+  )
+}
+
+async function ProspectsListView({ user, params }: ProspectsViewProps) {
   const isTeamView = hasPermission(user.role, "team.view")
   const status = prospectStatusSchema.safeParse(getParam(params, "status")).data ?? null
   const source = prospectSourceSchema.safeParse(getParam(params, "source")).data ?? null
@@ -77,6 +145,7 @@ export async function ProspectsView({ user, params }: ProspectsViewProps) {
   return (
     <div className="space-y-3">
       <Toolbar>
+        {!isMockDataSource && <ViewSwitch params={params} isBoard={false} />}
         <SearchInput label="Поиск лидов" placeholder="Имя, телефон или e-mail" className="w-full sm:w-72" />
         <SegmentedLinks
           label="Статус лида"
@@ -102,7 +171,7 @@ export async function ProspectsView({ user, params }: ProspectsViewProps) {
             options={members.map((member) => ({ value: member.id, label: member.name }))}
           />
         )}
-        {!isMockDataSource && hasPermission(user.role, "records.edit") && <NewProspectButton sources={await leadSources()} />}
+        {!isMockDataSource && hasPermission(user.role, "records.edit") && <NewProspectButton sources={await leadSources()} members={isTeamView ? members.map(({ id, name }) => ({ id, name })) : []} />}
       </Toolbar>
 
       {result.results.length === 0 ? (

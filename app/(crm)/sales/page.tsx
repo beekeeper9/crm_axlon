@@ -23,14 +23,13 @@ async function SalesContent({ searchParams }: Pick<SalesPageProps, "searchParams
   return <SalesView user={user} params={params} />
 }
 
-/** Заголовок; РОПу и директору — переход к настройке этапов воронки */
+/** Заголовок — название компании; РОПу и директору — переход к настройке этапов воронки */
 async function SalesHeader() {
   const user = await getCurrentUser()
   const canConfigure = !isMockDataSource && hasPermission(user.role, "pipelines.configure")
   return (
     <PageHeader
-      title="Продажи"
-      description="План, факт, предоплаты и лиды компании и отделов; для менеджеров — сделки по воронкам"
+      title={user.companyName || "Продажи"}
       actions={
         canConfigure ? (
           <Link href={FUNNEL_SETTINGS_PATH} className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -46,7 +45,7 @@ async function SalesHeader() {
 export default function SalesPage({ searchParams }: SalesPageProps) {
   return (
     <div className="space-y-5">
-      <Suspense fallback={<PageHeader title="Продажи" description="План, факт, предоплаты и лиды компании и отделов; для менеджеров — сделки по воронкам" />}>
+      <Suspense fallback={<PageHeader title="Продажи" />}>
         <SalesHeader />
       </Suspense>
       <Suspense fallback={<SalesViewSkeleton />}>

@@ -75,23 +75,23 @@ const subjectSchema = z.object({
 })
 
 /**
- * Новая задача по сделке или клиенту. Права, лимит открытых задач на сделку и исполнителя
- * окончательно проверяет backend. Сделка становится ссылкой задачи в списке.
+ * Новая задача по сделке, клиенту или (subject = null) просто исполнителю. Права, лимит открытых
+ * задач на сделку и исполнителя окончательно проверяет backend. Сделка становится ссылкой задачи.
  */
-export async function createTaskAction(subject: TaskSubjectOption, input: NewDealTaskInput): Promise<TaskActionResult> {
+export async function createTaskAction(subject: TaskSubjectOption | null, input: NewDealTaskInput): Promise<TaskActionResult> {
   if (isMockDataSource) return DEMO_ONLY
-  const target = subjectSchema.safeParse(subject)
-  if (!target.success) return { ok: false, message: "Выберите сделку или клиента, к которым относится задача.", requestId: null }
+  const target = subject === null ? null : subjectSchema.safeParse(subject)
+  if (target && !target.success) return { ok: false, message: "Выберите сделку или клиента, к которым относится задача.", requestId: null }
   const parsed = newDealTaskSchema.safeParse(input)
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? API_ERROR_MESSAGES.validation, requestId: null }
   try {
-    const created = await createTask(await getActionAuth(), target.data, {
+    const created = await createTask(await getActionAuth(), target?.data ?? null, {
       ...parsed.data,
       description: parsed.data.description || null,
     })
     const task = toTask(created, await loadPeopleNames())
     // В карточке сделки имя не передаётся: связь задачи подставит сам список
-    if (!target.data.name) return { ok: true, task }
+    if (!target?.data.name) return { ok: true, task }
     const href = target.data.type === "customer" ? customerHref(target.data.id) : null
     return { ok: true, task: { ...task, lead: { id: target.data.id, name: target.data.name, href } } }
   } catch (error) {

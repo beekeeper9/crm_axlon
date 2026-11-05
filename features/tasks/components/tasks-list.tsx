@@ -118,7 +118,7 @@ export function TasksList({
       description: values.description,
     }
     if (!editing && !dealId) {
-      if (!subject) return "Выберите сделку или клиента, к которым относится задача."
+      // Сделка или клиент — по желанию: без них задача просто ставится исполнителю
       const error = applyServerTask(await createTaskAction(subject, fields))
       if (!error) setForm({ open: false, task: null })
       return error

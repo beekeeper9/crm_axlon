@@ -60,9 +60,10 @@ describe("conversionBody", () => {
     expect(conversionBody({ customerId: "c-1", deal: null })).toEqual({ customerId: "c-1" })
   })
 
-  it("новый клиент со сделкой — create_deal без customer_id", () => {
-    expect(conversionBody({ customerId: null, deal: { title: "Окна", amount: "15000" } })).toEqual({
-      createDeal: { title: "Окна", amount: "15000" },
+  it("новый клиент со сделкой — create_deal с этапом и следующим шагом, без customer_id", () => {
+    const nextStep = { title: "Перезвонить", dueDate: "2026-11-10" }
+    expect(conversionBody({ customerId: null, deal: { title: "Окна", amount: "15000", pipelineId: null, stageId: "s-2", nextStep } })).toEqual({
+      createDeal: { title: "Окна", amount: "15000", stageId: "s-2", nextStep },
     })
   })
 })

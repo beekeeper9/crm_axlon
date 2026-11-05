@@ -93,6 +93,11 @@ export function deleteStage(auth: ApiAuth, pipelineId: string, stageId: string, 
   })
 }
 
+/** Переименовать воронку (например, «Воронка отдела» → «Холодные звонки») */
+export function renameFunnel(auth: ApiAuth, pipelineId: string, name: string): Promise<Funnel> {
+  return apiRequest(pipelinePath(pipelineId), { method: "PATCH", auth, body: { name }, schema: funnelSchema })
+}
+
 /** Сделать воронку основной в её отделе (или в компании): туда попадают новые сделки */
 export function makeDefault(auth: ApiAuth, pipelineId: string): Promise<Funnel> {
   return apiRequest(pipelinePath(pipelineId), { method: "PATCH", auth, body: { isDefault: true }, schema: funnelSchema })

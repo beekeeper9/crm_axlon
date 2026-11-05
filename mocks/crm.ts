@@ -146,6 +146,7 @@ function toDeal([id, title, phone, pipelineId, stageId, manager, amount, next, d
     nextAction: next && {
       title: next[0],
       dueAt: nextDueAt,
+      dueDate: null,
       isOverdue: nextDueAt !== null && new Date(nextDueAt) < new Date(DEMO_NOW),
     },
     stageEnteredAt: demoAt(-daysOnStage, "10:00"),

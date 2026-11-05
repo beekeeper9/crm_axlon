@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowUpRight, History, Mail, Phone, Users } from "lucide-react"
+import { ArrowUpRight, History, Mail, NotebookPen, Phone, Users } from "lucide-react"
 
 import { ApiErrorState } from "@/components/shared/api-error-state"
 import { PersonAvatar } from "@/components/shared/person-avatar"
@@ -7,8 +7,10 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { prospectRoute, routes } from "@/config/routes"
-import { prospectsRepository } from "@/features/prospects/api/prospects-repository"
+import { loadConvertPipelines } from "@/features/prospects/api/convert-pipelines"
+import { listProspectNotes, prospectsRepository } from "@/features/prospects/api/prospects-repository"
 import { ProspectActions } from "@/features/prospects/components/prospect-actions"
+import { ProspectNoteForm } from "@/features/prospects/components/prospect-notes"
 import {
   PROSPECT_FIELD_LABELS,
   PROSPECT_HISTORY_LABELS,
@@ -16,8 +18,9 @@ import {
   PROSPECT_STATUS_META,
 } from "@/features/prospects/lib/prospect-meta"
 import type { Prospect, ProspectDuplicate } from "@/features/prospects/schemas"
-import { teamRepository } from "@/features/team"
+import { loadPeopleNames, teamRepository } from "@/features/team"
 import { tryLoad } from "@/lib/api/load"
+import { getRenderAuth } from "@/lib/auth/token-store"
 import { formatDateTime } from "@/lib/format"
 import { hasPermission } from "@/lib/permissions/roles"
 import type { CurrentUser } from "@/lib/session/current-user"
@@ -33,10 +36,12 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
   const canAssign = hasPermission(user.role, "records.assign")
   const canEdit = !isMockDataSource && hasPermission(user.role, "records.edit")
   // Разделы грузятся независимо: ошибка истории не прячет карточку
-  const [duplicates, history, members] = await Promise.all([
+  const [duplicates, history, members, notes, pipelines] = await Promise.all([
     tryLoad(() => prospectsRepository.getDuplicates(prospect.id)),
     tryLoad(() => prospectsRepository.getHistory(prospect.id)),
     canAssign && canEdit ? tryLoad(() => teamRepository.listMembers()) : Promise.resolve(null),
+    isMockDataSource ? Promise.resolve(null) : tryLoad(async () => listProspectNotes(await getRenderAuth(), prospect.id, await loadPeopleNames())),
+    canEdit ? tryLoad(loadConvertPipelines) : Promise.resolve(null),
   ])
   const status = PROSPECT_STATUS_META[prospect.status]
   const customerCandidates = duplicates.ok ? duplicates.data.filter((candidate) => candidate.kind === "customer") : []
@@ -89,6 +94,7 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
             prospect={prospect}
             members={members?.ok ? members.data.map(({ id, name }) => ({ id, name })) : []}
             customerCandidates={customerCandidates.map(({ id, name, phone, email }) => ({ id, name, contact: phone ?? email }))}
+            pipelines={pipelines?.ok ? pipelines.data : []}
           />
         ) : (
           isMockDataSource && <p className="text-meta text-muted-foreground">Демо-режим: действия с лидом доступны только с подключённым backend.</p>
@@ -96,6 +102,32 @@ export async function ProspectView({ prospect, user }: { prospect: Prospect; use
       </div>
 
       <div className="space-y-4">
+        {notes && (
+          <section className="space-y-2" aria-labelledby="prospect-notes">
+            <h2 id="prospect-notes" className="flex items-center gap-1.5 text-sm font-semibold">
+              <NotebookPen className="size-4 text-muted-foreground" aria-hidden />
+              Примечания
+            </h2>
+            {canEdit && <ProspectNoteForm prospectId={prospect.id} />}
+            {!notes.ok ? (
+              <ApiErrorState error={notes.error} bare />
+            ) : notes.data.length === 0 ? (
+              <p className="text-meta text-muted-foreground">Примечаний пока нет.</p>
+            ) : (
+              <ol className="space-y-2">
+                {notes.data.map((note) => (
+                  <li key={note.id} className="rounded-lg bg-muted/30 px-3 py-2 text-sm">
+                    <p className="whitespace-pre-line">{note.body}</p>
+                    <p className="text-meta text-muted-foreground">
+                      {formatDateTime(note.createdAt)} · {note.author}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
+
         <section className="space-y-2" aria-labelledby="prospect-duplicates">
           <h2 id="prospect-duplicates" className="flex items-center gap-1.5 text-sm font-semibold">
             <Users className="size-4 text-muted-foreground" aria-hidden />

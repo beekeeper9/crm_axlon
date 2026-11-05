@@ -19,14 +19,22 @@ const EMPTY = { name: "", phone: "", email: "" }
 
 type SourceOption = { value: ProspectSource; label: string }
 
-/** Новый входящий лид; после создания открывается его карточка. Источники — справочник компании (включённые, с её подписями) */
-export function NewProspectButton({ sources = DEFAULT_SOURCES }: { sources?: readonly SourceOption[] }) {
+const AUTO = "auto"
+
+/**
+ * Новый входящий лид; после создания открывается его карточка. Источники — справочник компании
+ * (включённые, с её подписями). РОП и директор сразу выбирают ответственного (`members`);
+ * «По распределению» — лид уйдёт менеджеру на смене по очереди.
+ */
+export function NewProspectButton({ sources = DEFAULT_SOURCES, members = [] }: { sources?: readonly SourceOption[]; members?: readonly { id: string; name: string }[] }) {
   const options = sources.length > 0 ? sources : DEFAULT_SOURCES
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [values, setValues] = useState(EMPTY)
   const [source, setSource] = useState<ProspectSource>(options.find((option) => option.value === "phone")?.value ?? options[0].value)
+  const [owner, setOwner] = useState<string>(AUTO)
+  const ownerOptions = [{ value: AUTO, label: "По распределению" }, ...members.map((member) => ({ value: member.id, label: member.name }))]
   const [failure, setFailure] = useState<string | null>(null)
   const field = (key: keyof typeof EMPTY) => ({
     value: values[key],
@@ -51,7 +59,7 @@ export function NewProspectButton({ sources = DEFAULT_SOURCES }: { sources?: rea
             onSubmit={(event) => {
               event.preventDefault()
               startTransition(async () => {
-                const result = await createProspectAction({ ...values, source })
+                const result = await createProspectAction({ ...values, source, ownerId: owner === AUTO ? null : owner })
                 if (result.ok) {
                   setOpen(false)
                   setValues(EMPTY)
@@ -88,6 +96,23 @@ export function NewProspectButton({ sources = DEFAULT_SOURCES }: { sources?: rea
                 </SelectContent>
               </Select>
             </div>
+            {members.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="prospect-owner-new">Ответственный менеджер</Label>
+                <Select items={ownerOptions} value={owner} onValueChange={(value) => setOwner(value ?? AUTO)}>
+                  <SelectTrigger id="prospect-owner-new" className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ownerOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {failure && (
               <p role="alert" className="text-sm text-destructive">
                 {failure}

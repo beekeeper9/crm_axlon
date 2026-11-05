@@ -6,6 +6,7 @@ import { z } from "zod"
 import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
 import {
+  addProspectNote,
   assignLead,
   convertLead,
   createLead,
@@ -81,12 +82,23 @@ function parseContacts(input: ContactsInput): { error: string } | { data: Contac
 
 const invalid = (message: string): ProspectActionResult<never> => ({ ok: false, message, requestId: null })
 
-export async function createProspectAction(input: ContactsInput & { source: string }): Promise<ProspectActionResult<string>> {
+export async function createProspectAction(input: ContactsInput & { source: string; ownerId?: string | null }): Promise<ProspectActionResult<string>> {
   const contacts = parseContacts(input)
   if ("error" in contacts) return invalid(contacts.error)
   const source = prospectSourceSchema.safeParse(input.source)
   if (!source.success) return invalid("Выберите источник")
-  return run(async () => createLead(await getActionAuth(), { ...contacts.data, source: source.data }))
+  return run(async () => createLead(await getActionAuth(), { ...contacts.data, source: source.data, ownerId: input.ownerId ?? null }))
+}
+
+/** Примечание к лиду: видно в карточке лида всем, кто его видит */
+export async function addProspectNoteAction(prospectId: string, body: string): Promise<ProspectActionResult> {
+  const trimmed = body.trim()
+  if (trimmed.length < 2) return invalid("Напишите примечание")
+  if (trimmed.length > 4000) return invalid("Не длиннее 4000 символов")
+  return run(async () => {
+    await addProspectNote(await getActionAuth(), prospectId, trimmed)
+    return null
+  })
 }
 
 export async function updateProspectAction(prospectId: string, input: ContactsInput, version: number): Promise<ProspectActionResult> {
@@ -121,23 +133,38 @@ export async function disqualifyProspectAction(prospectId: string, reason: strin
   })
 }
 
+/**
+ * Сделка при конвертации — всегда со следующим шагом (решение владельца 05.11.2026): без шага
+ * сделка попала бы на «Продажи» с пометкой «Нет следующего шага».
+ */
 const dealSchema = z.object({
   title: z.string().trim().min(2, "Название сделки — хотя бы 2 символа").max(200, "Не длиннее 200 символов"),
   amount: z.string().trim().regex(/^\d{1,13}([.,]\d{1,2})?$/, "Сумма — число, например 15000"),
+  pipelineId: z.string().nullable(),
+  stageId: z.string().nullable(),
+  nextStepTitle: z.string().trim().min(3, "Следующий шаг — что сделать, хотя бы 3 символа").max(200, "Шаг — не длиннее 200 символов"),
+  nextStepDue: z.iso.date("Укажите срок следующего шага"),
 })
 
 export async function convertProspectAction(
   prospectId: string,
-  input: { customerId: string | null; deal: z.input<typeof dealSchema> | null }
+  input: { customerId: string | null; deal: z.input<typeof dealSchema>; qualifyFirst?: boolean }
 ): Promise<ProspectActionResult<ConversionResult>> {
-  let deal: { title: string; amount: string } | null = null
-  if (input.deal) {
-    const parsed = dealSchema.safeParse(input.deal)
-    if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? "Проверьте сделку")
-    deal = { title: parsed.data.title, amount: parsed.data.amount.replace(",", ".") }
+  const parsed = dealSchema.safeParse(input.deal)
+  if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? "Проверьте сделку")
+  const deal = {
+    title: parsed.data.title,
+    amount: parsed.data.amount.replace(",", "."),
+    pipelineId: parsed.data.pipelineId,
+    stageId: parsed.data.stageId,
+    nextStep: { title: parsed.data.nextStepTitle, dueDate: parsed.data.nextStepDue },
   }
   return run(async () => {
-    const result = await convertLead(await getActionAuth(), prospectId, { customerId: input.customerId, deal })
+    const auth = await getActionAuth()
+    // С доски лид можно перетащить в «Стал клиентом» прямо из «Нового»: backend конвертирует
+    // только квалифицированный, поэтому сначала квалификация
+    if (input.qualifyFirst) await qualifyLead(auth, prospectId)
+    const result = await convertLead(auth, prospectId, { customerId: input.customerId, deal })
     revalidatePath(routes.clientBase)
     if (result.dealId) revalidatePath(routes.sales)
     return result

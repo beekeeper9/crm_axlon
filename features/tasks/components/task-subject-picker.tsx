@@ -80,7 +80,7 @@ export function TaskSubjectPicker({ value, onChange, error }: TaskSubjectPickerP
         ) : failure ? (
           <p className="px-3 py-2 text-meta text-destructive">{failure}</p>
         ) : options.length === 0 ? (
-          <p className="px-3 py-2 text-meta text-muted-foreground">Ничего не найдено. Уточните название или имя.</p>
+          <p className="px-3 py-2 text-meta text-muted-foreground">{search.trim() ? "Ничего не найдено. Уточните название или имя." : "Открытых сделок и клиентов пока нет."}</p>
         ) : (
           options.map((option) => {
             const Icon = option.type === "deal" ? Handshake : UserRound

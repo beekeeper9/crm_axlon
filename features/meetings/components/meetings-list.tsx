@@ -49,6 +49,9 @@ function groupByDay(meetings: readonly Meeting[]): { day: string; meetings: Meet
   return [...groups].map(([day, items]) => ({ day, meetings: items }))
 }
 
+
+/** Встреча назначается по открытой сделке: пока сделок нет, назначать не по чему */
+const NO_DEALS_HINT = "Нет открытых сделок: сначала создайте сделку на «Продажах» — встреча назначается по сделке"
 export function MeetingsList({
   initialMeetings,
   editMode,
@@ -159,7 +162,7 @@ export function MeetingsList({
           </p>
         )}
         {editMode !== "read-only" && (
-          <Button size="sm" onClick={() => setFormOpen(true)} disabled={!canCreate} title={canCreate ? undefined : EDIT_UNAVAILABLE_HINT}>
+          <Button size="sm" onClick={() => setFormOpen(true)} disabled={!canCreate} title={canCreate ? undefined : isServer ? NO_DEALS_HINT : EDIT_UNAVAILABLE_HINT}>
             <CalendarPlus data-icon="inline-start" aria-hidden />
             Назначить встречу
           </Button>

@@ -98,8 +98,8 @@ const item = {
  * директор — с «Компании» и «РОПов», администратор платформы — с её разделов.
  */
 const personalNavigation: readonly NavItem[] = [item.myDay, item.focus, item.prospects, item.sales, item.afterMeeting, item.meetings, item.tasks]
-const teamNavigation: readonly NavItem[] = [item.cabinet, item.sales, item.meetings, item.tasks, item.calls, item.staff]
-const directorNavigation: readonly NavItem[] = [item.company, item.heads, item.sales, item.staff]
+const teamNavigation: readonly NavItem[] = [item.cabinet, item.prospects, item.sales, item.meetings, item.tasks, item.calls, item.staff]
+const directorNavigation: readonly NavItem[] = [item.company, item.heads, item.prospects, item.sales, item.staff]
 const platformNavigation: readonly NavItem[] = [item.platform, item.platformCompanies, item.platformErrors, item.platformTickets]
 
 export function primaryNavigationFor(role: Role): NavItem[] {

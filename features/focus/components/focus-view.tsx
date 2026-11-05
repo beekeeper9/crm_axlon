@@ -9,7 +9,8 @@ import { isMockDataSource } from "@/config/env"
 import { focusRepository } from "@/features/focus/api/focus-repository"
 import { FocusItemRow } from "@/features/focus/components/focus-item-row"
 import { ManagerFilter } from "@/features/focus/components/manager-filter"
-import type { FocusGroup } from "@/features/focus/schemas"
+import type { FocusGroup, FocusList } from "@/features/focus/schemas"
+import { fetchTeamPlanFact, type TeamPlanFact } from "@/features/team-cabinet/api/team-board"
 import { tryLoad } from "@/lib/api/load"
 import { formatNumber } from "@/lib/format"
 
@@ -26,11 +27,16 @@ type FocusViewProps = {
 }
 
 export async function FocusView({ isTeamView, managerId }: FocusViewProps) {
-  const loaded = await tryLoad(() => focusRepository.getFocusList({ managerId }))
+  const byManager = isTeamView && managerId === null
+  const [loaded, planFact] = await Promise.all([
+    tryLoad(() => focusRepository.getFocusList({ managerId })),
+    // План — только руководителю и только в режиме api; без него блоки идут без процента
+    isTeamView && !isMockDataSource ? tryLoad(fetchTeamPlanFact) : Promise.resolve(null),
+  ])
   if (!loaded.ok) return <ApiErrorState error={loaded.error} />
   const focus = loaded.data
   const groups = focus.groups.filter((group) => group.items.length > 0)
-  const showManager = isTeamView && managerId === null
+  const plans = planFact?.ok ? planFact.data : null
 
   return (
     <div className="space-y-5">
@@ -61,33 +67,88 @@ export async function FocusView({ isTeamView, managerId }: FocusViewProps) {
             description="Просроченных задач, забытых лидов и сделок без шага сейчас нет."
           />
         </Card>
+      ) : byManager ? (
+        <ManagerBlocks focus={focus} groups={groups} plans={plans} />
       ) : (
-        groups.map((group) => (
-          <section key={group.id} aria-labelledby={`focus-${group.id}`} className="space-y-2">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <h2 id={`focus-${group.id}`} className={cn("text-sm font-semibold", GROUP_TITLE_CLASSES[group.tone])}>
-                {group.title}{" "}
-                <span className="font-normal text-muted-foreground">{formatNumber(group.items.length)}</span>
-              </h2>
-              {group.description && (
-                <p className="text-xs text-muted-foreground">{group.description}</p>
-              )}
-            </div>
-            <ul className="space-y-2">
-              {group.items.map((item) => (
-                <FocusItemRow
-                  key={item.id}
-                  item={item}
-                  showManager={showManager}
-                  isDemoData={isMockDataSource}
-                />
-              ))}
-            </ul>
-          </section>
-        ))
+        <>
+          {isTeamView && managerId && <PlanLine plans={plans} managerId={managerId} />}
+          <Groups groups={groups} showManager={false} />
+        </>
       )}
     </div>
   )
+}
+
+/** Руководителю — по менеджерам: у кого больше записей, тот выше; у каждого — выполнение плана */
+function ManagerBlocks({ focus, groups, plans }: { focus: FocusList; groups: readonly FocusGroup[]; plans: TeamPlanFact | null }) {
+  const managers = [...focus.managers].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"))
+  return (
+    <ol className="space-y-4">
+      {managers.map((manager) => {
+        const own = groups
+          .map((group) => ({ ...group, items: group.items.filter((item) => item.manager.id === manager.id) }))
+          .filter((group) => group.items.length > 0)
+        return (
+          <li key={manager.id}>
+            <section aria-labelledby={`focus-manager-${manager.id}`} className="space-y-3 rounded-xl px-4 py-3 ring-1 ring-border">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id={`focus-manager-${manager.id}`} className="text-base font-semibold">
+                  {manager.name} <span className="text-sm font-normal text-muted-foreground">· в фокусе {formatNumber(manager.count)}</span>
+                </h2>
+              </div>
+              <PlanLine plans={plans} managerId={manager.id} />
+              {own.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Срочного нет.</p>
+              ) : (
+                <Groups groups={own} showManager={false} />
+              )}
+            </section>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** Выполнение личного плана продаж за месяц (считает backend) */
+function PlanLine({ plans, managerId }: { plans: TeamPlanFact | null; managerId: string }) {
+  const row = plans?.rows.find((item) => item.userId === managerId)
+  if (!row) return null
+  const plan = Number(row.planSales)
+  if (!(plan > 0)) return <p className="text-meta text-muted-foreground">План продаж на месяц не задан · продаж: {formatNumber(row.salesActual)}</p>
+  const percent = Math.round((row.salesActual / plan) * 100)
+  const width = Math.min(Math.max(percent, 0), 100)
+  return (
+    <div className="space-y-1">
+      <p className="flex justify-between gap-2 text-meta text-muted-foreground">
+        <span>План продаж на месяц</span>
+        <span className="tabular-nums">
+          {formatNumber(row.salesActual)} из {formatNumber(plan)} · <span className="font-medium text-foreground">{formatNumber(percent)}%</span>
+        </span>
+      </p>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Выполнение плана продаж" aria-valuemin={0} aria-valuemax={100} aria-valuenow={width}>
+        <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function Groups({ groups, showManager }: { groups: readonly FocusGroup[]; showManager: boolean }) {
+  return groups.map((group) => (
+    <section key={group.id} aria-label={group.title} className="space-y-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h3 className={cn("text-sm font-semibold", GROUP_TITLE_CLASSES[group.tone])}>
+          {group.title} <span className="font-normal text-muted-foreground">{formatNumber(group.items.length)}</span>
+        </h3>
+        {group.description && <p className="text-xs text-muted-foreground">{group.description}</p>}
+      </div>
+      <ul className="space-y-2">
+        {group.items.map((item) => (
+          <FocusItemRow key={item.id} item={item} showManager={showManager} isDemoData={isMockDataSource} />
+        ))}
+      </ul>
+    </section>
+  ))
 }
 
 export function FocusViewSkeleton() {

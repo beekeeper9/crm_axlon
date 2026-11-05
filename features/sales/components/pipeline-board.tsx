@@ -69,7 +69,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
 
   return (
     <div className="space-y-3">
-      <BoardSummary columns={columns} editMode={editMode} hasChange={lastChange !== null} />
+      <BoardSummary columns={columns.filter((column) => stagesById.get(column.stageId)?.kind === "open")} editMode={editMode} hasChange={lastChange !== null} />
       <div aria-live="polite">
         {isPending && <p className="text-meta text-muted-foreground">Сохраняем…</p>}
         {failure && !closingDeal && (
@@ -129,6 +129,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
                 <header className="mb-2 flex items-baseline justify-between gap-2 px-1">
                   <h2 className="flex min-w-0 items-baseline gap-1.5 text-sm font-semibold">
                     <span className="truncate">{stage.name}</span>
+                    {stage.kind === "won" && <span className="font-normal text-muted-foreground">· за месяц</span>}
                     <span className="text-meta font-normal text-muted-foreground tabular-nums">{formatNumber(column.count)}</span>
                   </h2>
                   <span className="shrink-0 text-meta text-muted-foreground tabular-nums">
@@ -148,7 +149,8 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
                       deal={deal}
                       openStages={openStages}
                       showManager={showManager}
-                      canEdit={canEdit}
+                      // Проданная сделка закрыта: её не двигают по доске
+                      canEdit={canEdit && stage.kind === "open"}
                       isDragging={draggedId === deal.id}
                       onDragStart={setDraggedId}
                       onDragEnd={() => {
@@ -161,7 +163,7 @@ export function PipelineBoard({ board, pipeline, lossReasons, showManager, editM
                   ))}
                   {column.deals.length === 0 && (
                     <li className="flex flex-1 items-center justify-center px-3 py-6 text-center text-meta text-muted-foreground">
-                      Пусто
+                      {stage.kind === "won" ? "Перетащите сделку сюда, чтобы внести оплату и оформить продажу" : "Пусто"}
                     </li>
                   )}
                 </ul>

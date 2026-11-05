@@ -10,30 +10,42 @@ vi.mock("@/features/prospects/api/prospects-repository", () => ({
   assignLead: vi.fn(),
   qualifyLead: vi.fn(),
   disqualifyLead: vi.fn(),
+  addProspectNote: vi.fn(),
 }))
 
 const { convertProspectAction, createProspectAction, disqualifyProspectAction } = await import("@/features/prospects/actions")
 const { ApiError } = await import("@/lib/api/errors")
 
+const deal = { title: "Окна", amount: "1500,50", pipelineId: "p-1", stageId: "s-2", nextStepTitle: "Перезвонить по КП", nextStepDue: "2026-11-10" }
+
 describe("convertProspectAction", () => {
   beforeEach(() => convertLead.mockReset())
 
-  it("к существующему клиенту и со сделкой: сумма с запятой нормализуется", async () => {
+  it("к существующему клиенту: сделка с этапом и следующим шагом, сумма с запятой нормализуется", async () => {
     convertLead.mockResolvedValueOnce({ customerId: "c-1", alreadyConverted: false, dealId: "d-1" })
-    const result = await convertProspectAction("l-1", { customerId: "c-1", deal: { title: "Окна", amount: "1500,50" } })
-    expect(convertLead).toHaveBeenCalledWith({ tenant: "demo" }, "l-1", { customerId: "c-1", deal: { title: "Окна", amount: "1500.50" } })
+    const result = await convertProspectAction("l-1", { customerId: "c-1", deal })
+    expect(convertLead).toHaveBeenCalledWith({ tenant: "demo" }, "l-1", {
+      customerId: "c-1",
+      deal: { title: "Окна", amount: "1500.50", pipelineId: "p-1", stageId: "s-2", nextStep: { title: "Перезвонить по КП", dueDate: "2026-11-10" } },
+    })
     expect(result).toEqual({ ok: true, data: { customerId: "c-1", alreadyConverted: false, dealId: "d-1" } })
   })
 
   it("неверная сумма не уходит на сервер", async () => {
-    const result = await convertProspectAction("l-1", { customerId: null, deal: { title: "Окна", amount: "много" } })
+    const result = await convertProspectAction("l-1", { customerId: null, deal: { ...deal, amount: "много" } })
     expect(result.ok).toBe(false)
+    expect(convertLead).not.toHaveBeenCalled()
+  })
+
+  it("без следующего шага конвертировать нельзя", async () => {
+    const result = await convertProspectAction("l-1", { customerId: null, deal: { ...deal, nextStepTitle: "", nextStepDue: "" } })
+    expect(result).toMatchObject({ ok: false, message: expect.stringMatching(/Следующий шаг/) })
     expect(convertLead).not.toHaveBeenCalled()
   })
 
   it("неквалифицированный лид — понятное сообщение вместо текста backend", async () => {
     convertLead.mockRejectedValueOnce(new ApiError("conflict", "Only a qualified lead can be converted."))
-    const result = await convertProspectAction("l-1", { customerId: null, deal: null })
+    const result = await convertProspectAction("l-1", { customerId: null, deal })
     expect(result).toMatchObject({ ok: false, message: expect.stringMatching(/квалифицируйте/) })
   })
 })

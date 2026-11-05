@@ -81,7 +81,8 @@ const mockTasksRepository: TasksRepository = {
 /** Задача из `GET /activities/?kind=task` (P0); имена полей уже в camelCase */
 const backendTaskSchema = z.object({
   id: z.string(),
-  subjectType: z.enum(["customer", "deal", "lead"]),
+  /** member — задача сотруднику без сделки и клиента (subjectId — исполнитель) */
+  subjectType: z.enum(["customer", "deal", "lead", "member"]),
   subjectId: z.string(),
   title: z.string().nullable(),
   body: z.string().nullable(),
@@ -150,10 +151,10 @@ export type NewDealTask = {
 export type TaskSubject = { type: "deal" | "customer"; id: string }
 
 /**
- * `POST /activities/` — задача по сделке или клиенту. Права, исполнителя и лимит открытых задач
- * на сделку (не больше двух) проверяет backend.
+ * `POST /activities/` — задача по сделке, клиенту или (subject = null) просто сотруднику.
+ * Права, исполнителя и лимит открытых задач на сделку (не больше двух) проверяет backend.
  */
-export async function createTask(auth: ApiAuth, subject: TaskSubject, task: NewDealTask): Promise<BackendTask> {
+export async function createTask(auth: ApiAuth, subject: TaskSubject | null, task: NewDealTask): Promise<BackendTask> {
   return apiRequest("/api/v1/activities/", {
     method: "POST",
     auth,
@@ -163,11 +164,10 @@ export async function createTask(auth: ApiAuth, subject: TaskSubject, task: NewD
 }
 
 /** Тело `POST /activities/`: поля приходят в camelCase и уходят в snake_case */
-export function taskCreateBody(subject: TaskSubject, task: NewDealTask): Record<string, string> {
+export function taskCreateBody(subject: TaskSubject | null, task: NewDealTask): Record<string, string> {
   return {
     kind: "task",
-    subjectType: subject.type,
-    subjectId: subject.id,
+    ...(subject ? { subjectType: subject.type, subjectId: subject.id } : {}),
     title: task.title,
     dueDate: task.dueDate,
     taskType: BACKEND_TASK_TYPE[task.type],

@@ -14,6 +14,7 @@ import {
   addStageAction,
   deleteStageAction,
   makeDefaultFunnelAction,
+  renameFunnelAction,
   renameStageAction,
   reorderStagesAction,
   setStageActiveAction,
@@ -59,6 +60,12 @@ export function FunnelEditor({ funnel }: { funnel: Funnel }) {
 
   return (
     <div className="space-y-4">
+      <FunnelNameForm
+        key={funnel.name}
+        name={funnel.name}
+        isPending={isPending}
+        onRename={(name) => act(() => renameFunnelAction(funnel.id, name), () => setNotice(`Воронка переименована: «${name}».`))}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-meta text-muted-foreground">
           {funnel.isDefault ? "Основная воронка: сюда попадают новые сделки менеджеров." : "Дополнительная воронка."}
@@ -382,5 +389,29 @@ function DeleteStageForm({
         </Button>
       </DialogFooter>
     </div>
+  )
+}
+
+/** Название воронки: его видят менеджеры во вкладках «Продаж» */
+function FunnelNameForm({ name, isPending, onRename }: { name: string; isPending: boolean; onRename: (name: string) => void }) {
+  const [value, setValue] = useState(name)
+  const changed = value.trim() !== name && value.trim().length > 0
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (changed) onRename(value.trim())
+      }}
+    >
+      <div className="grid min-w-0 flex-1 gap-1.5">
+        <Label htmlFor="funnel-name">Название воронки</Label>
+        <Input id="funnel-name" value={value} onChange={(event) => setValue(event.target.value)} maxLength={100} className="h-8" />
+      </div>
+      <Button type="submit" size="sm" variant="outline" disabled={!changed || isPending}>
+        <Check data-icon="inline-start" aria-hidden />
+        Переименовать
+      </Button>
+    </form>
   )
 }

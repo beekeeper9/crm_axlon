@@ -13,12 +13,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { leadRoute, routes } from "@/config/routes"
 import {
   assignProspectAction,
-  convertProspectAction,
   disqualifyProspectAction,
   qualifyProspectAction,
   updateProspectAction,
   type ProspectActionResult,
 } from "@/features/prospects/actions"
+import { ConvertDialog, type ConvertPipeline } from "@/features/prospects/components/convert-dialog"
 import type { Prospect } from "@/features/prospects/schemas"
 
 type Person = { id: string; name: string }
@@ -30,12 +30,12 @@ type ProspectActionsProps = {
   members: readonly Person[]
   /** Существующие клиенты с тем же телефоном или e-mail */
   customerCandidates: readonly { id: string; name: string; contact: string | null }[]
+  /** Воронки продаж с рабочими этапами — куда встанет сделка нового клиента */
+  pipelines: readonly ConvertPipeline[]
 }
 
-const NEW_CUSTOMER = "new"
-
 /** Работа с входящим лидом. Переходы статусов и права окончательно проверяет backend */
-export function ProspectActions({ prospect, members, customerCandidates }: ProspectActionsProps) {
+export function ProspectActions({ prospect, members, customerCandidates, pipelines }: ProspectActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mode, setMode] = useState<Mode>("idle")
@@ -45,9 +45,6 @@ export function ProspectActions({ prospect, members, customerCandidates }: Prosp
   const [contacts, setContacts] = useState({ name: prospect.name, phone: prospect.phone ?? "", email: prospect.email ?? "" })
   const [reason, setReason] = useState("")
   const [owner, setOwner] = useState<string | null>(prospect.owner.id)
-  const [customer, setCustomer] = useState<string>(customerCandidates[0]?.id ?? NEW_CUSTOMER)
-  const [withDeal, setWithDeal] = useState(true)
-  const [deal, setDeal] = useState({ title: prospect.name, amount: "" })
 
   function act<T>(operation: () => Promise<ProspectActionResult<T>>, after?: (data: T) => void) {
     startTransition(async () => {
@@ -68,6 +65,7 @@ export function ProspectActions({ prospect, members, customerCandidates }: Prosp
     setMode(mode === next ? "idle" : next)
   }
   const isQualified = prospect.status === "qualified"
+  const canConvert = isQualified || prospect.status === "new"
   const contactField = (key: keyof typeof contacts) => ({
     value: contacts[key],
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => setContacts((current) => ({ ...current, [key]: event.target.value })),
@@ -96,19 +94,20 @@ export function ProspectActions({ prospect, members, customerCandidates }: Prosp
   return (
     <section className="space-y-3" aria-label="Действия с лидом">
       <div className="flex flex-wrap gap-2">
-        {isQualified ? (
-          <Button size="sm" onClick={() => toggle("convert")} disabled={isPending}>
-            <Repeat2 data-icon="inline-start" aria-hidden />
-            Конвертировать в клиента
-          </Button>
-        ) : (
-          <Button size="sm" onClick={() => act(() => qualifyProspectAction(prospect.id))} disabled={isPending}>
+        {prospect.status === "new" && (
+          <Button size="sm" variant="outline" onClick={() => act(() => qualifyProspectAction(prospect.id))} disabled={isPending}>
             {isPending && mode === "idle" ? (
               <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden />
             ) : (
               <BadgeCheck data-icon="inline-start" aria-hidden />
             )}
             Квалифицировать
+          </Button>
+        )}
+        {canConvert && (
+          <Button size="sm" onClick={() => toggle("convert")} disabled={isPending}>
+            <Repeat2 data-icon="inline-start" aria-hidden />
+            Стал клиентом
           </Button>
         )}
         <Button size="sm" variant="outline" onClick={() => toggle("edit")} disabled={isPending}>
@@ -128,7 +127,6 @@ export function ProspectActions({ prospect, members, customerCandidates }: Prosp
           </Button>
         )}
       </div>
-      {!isQualified && <p className="text-meta text-muted-foreground">Конвертировать в клиента можно после квалификации.</p>}
 
       {mode === "edit" && (
         <form
@@ -206,81 +204,20 @@ export function ProspectActions({ prospect, members, customerCandidates }: Prosp
         </form>
       )}
 
-      {mode === "convert" && (
-        <form
-          className="grid gap-3 rounded-lg p-3 ring-1 ring-border"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault()
-            act(
-              () =>
-                convertProspectAction(prospect.id, {
-                  customerId: customer === NEW_CUSTOMER ? null : customer,
-                  deal: withDeal ? deal : null,
-                }),
-              setConverted
-            )
-          }}
-        >
-          <fieldset className="grid gap-1.5">
-            <legend className="mb-1 text-sm font-medium">Клиент</legend>
-            {customerCandidates.map((candidate) => (
-              <label key={candidate.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="convert-customer"
-                  checked={customer === candidate.id}
-                  onChange={() => setCustomer(candidate.id)}
-                  className="size-4 accent-(--primary)"
-                />
-                Привязать к существующему: {candidate.name}
-                {candidate.contact && <span className="text-muted-foreground tabular-nums">{candidate.contact}</span>}
-              </label>
-            ))}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="convert-customer"
-                checked={customer === NEW_CUSTOMER}
-                onChange={() => setCustomer(NEW_CUSTOMER)}
-                className="size-4 accent-(--primary)"
-              />
-              Создать нового клиента
-            </label>
-            {customerCandidates.length > 0 && (
-              <p className="text-meta text-muted-foreground">Если это тот же человек, привяжите к существующему — так не появится вторая карточка.</p>
-            )}
-          </fieldset>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={withDeal} onChange={(event) => setWithDeal(event.target.checked)} className="size-4 accent-(--primary)" />
-            Сразу открыть сделку
-          </label>
-          {withDeal && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="convert-deal-title">Название сделки</Label>
-                <Input id="convert-deal-title" value={deal.title} onChange={(e) => setDeal((d) => ({ ...d, title: e.target.value }))} maxLength={200} className="h-9" />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="convert-deal-amount">Сумма</Label>
-                <Input
-                  id="convert-deal-amount"
-                  value={deal.amount}
-                  onChange={(e) => setDeal((d) => ({ ...d, amount: e.target.value }))}
-                  inputMode="decimal"
-                  placeholder="15000"
-                  className="h-9"
-                />
-              </div>
-            </div>
-          )}
-          <Button type="submit" size="sm" disabled={isPending} className="w-fit">
-            {isPending && <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden />}
-            Конвертировать
-          </Button>
-        </form>
-      )}
+      <ConvertDialog
+        target={
+          mode === "convert"
+            ? { id: prospect.id, name: prospect.name, needsQualification: prospect.status === "new", customerCandidates }
+            : null
+        }
+        pipelines={pipelines}
+        onClose={() => setMode("idle")}
+        onConverted={(result) => {
+          setMode("idle")
+          setConverted(result)
+          router.refresh()
+        }}
+      />
 
       {failure && (
         <p role="alert" className="text-sm text-destructive">

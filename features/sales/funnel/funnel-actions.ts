@@ -91,6 +91,17 @@ export async function renameStageAction(pipelineId: string, stageId: string, nam
   })
 }
 
+const funnelNameSchema = z.string().trim().min(1, "Введите название воронки").max(100, "Не длиннее 100 символов")
+
+export async function renameFunnelAction(pipelineId: string, name: string): Promise<FunnelActionResult> {
+  const parsed = funnelNameSchema.safeParse(name)
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Проверьте название" }
+  return run(async () => {
+    await api.renameFunnel(await getActionAuth(), pipelineId, parsed.data)
+    return null
+  })
+}
+
 export async function setStageActiveAction(pipelineId: string, stageId: string, isActive: boolean): Promise<FunnelActionResult> {
   return run(async () => {
     await api.setStageActive(await getActionAuth(), pipelineId, stageId, isActive)

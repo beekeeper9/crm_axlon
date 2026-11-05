@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
+import { connection } from "next/server"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { leadsRepository } from "@/features/leads"
@@ -12,6 +13,8 @@ export const metadata: Metadata = { title: "Встречи" }
 type MeetingsPageProps = PageProps<"/meetings">
 
 async function MeetingsContent({ searchParams }: Pick<MeetingsPageProps, "searchParams">) {
+  // Период «сегодня / завтра» — момент запроса, а не сборки: страница всегда рендерится на запрос
+  await connection()
   const [user, params] = await Promise.all([getCurrentUser(), searchParams])
   // Список лидов нужен только форме новой встречи. Если он недоступен (в режиме api endpoint ещё
   // не подключён), форма остаётся без вариантов, а список встреч сам покажет свою ошибку.

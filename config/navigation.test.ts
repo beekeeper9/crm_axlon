@@ -19,7 +19,10 @@ describe("навигация по ролям", () => {
     const rop = primaryNavigationFor("head_of_sales")
     expect(rop.find((item) => item.href === routes.team)?.title).toBe("Мой кабинет")
     const director = hrefs(primaryNavigationFor("director"))
-    expect(director).toEqual([routes.company, routes.heads, routes.sales, routes.staff])
+    // «Входящие лиды» — перед «Продажами» (замечание владельца 05.11.2026)
+    expect(director).toEqual([routes.company, routes.heads, routes.prospects, routes.sales, routes.staff])
+    const ropHrefs = hrefs(rop)
+    expect(ropHrefs.indexOf(routes.prospects)).toBe(ropHrefs.indexOf(routes.sales) - 1)
   })
 
   it("администратор платформы: разделы платформы в верхней панели", () => {

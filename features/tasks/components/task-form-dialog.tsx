@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Sparkles } from "lucide-react"
 
 import { DemoNotice } from "@/components/shared/demo-notice"
 import { Button } from "@/components/ui/button"
@@ -94,8 +95,6 @@ function TaskForm({
   function submit(event: React.FormEvent) {
     event.preventDefault()
     const parsed = taskFormSchema.safeParse(values)
-    const missingSubject = needsSubject && !subject
-    setSubjectError(missingSubject ? "Выберите сделку или клиента, к которым относится задача" : null)
     if (!parsed.success) {
       const next: FieldErrors = {}
       for (const issue of parsed.error.issues) {
@@ -105,7 +104,6 @@ function TaskForm({
       setErrors(next)
       return
     }
-    if (missingSubject) return
     const saving = onSave(parsed.data, subject)
     if (!saving) return
     setIsSaving(true)
@@ -135,9 +133,40 @@ function TaskForm({
         {leadName && <DialogDescription>По лиду «{leadName}»</DialogDescription>}
       </DialogHeader>
 
+      {canAssign && (
+        <div className="grid gap-2">
+          <Label htmlFor="task-assignee">Исполнитель</Label>
+          <Select
+            items={assigneeOptions}
+            value={values.assigneeId ?? "none"}
+            onValueChange={(id) => set("assigneeId", !id || id === "none" ? null : id)}
+          >
+            <SelectTrigger id="task-assignee" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {assigneeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {needsSubject && (
         <div className="grid gap-2">
-          <Label htmlFor="task-subject">Сделка или клиент</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor="task-subject">
+              Сделка или клиент <span className="font-normal text-muted-foreground">— необязательно</span>
+            </Label>
+            {/* Задачи из проколов появятся вместе с ИИ-оценкой звонков; до этого кнопка честно выключена */}
+            <Button type="button" size="xs" variant="outline" disabled title="Заработает после подключения телефонии и ИИ-оценки звонков">
+              <Sparkles data-icon="inline-start" aria-hidden />
+              Из проколов менеджера
+            </Button>
+          </div>
           <TaskSubjectPicker
             value={subject}
             onChange={(next) => {
@@ -146,16 +175,19 @@ function TaskForm({
             }}
             error={subjectError ?? undefined}
           />
+          {!subject && <p className="text-xs text-muted-foreground">Без сделки задача просто ставится исполнителю.</p>}
         </div>
       )}
 
       <div className="grid gap-2">
         <Label htmlFor="task-title">Что сделать</Label>
-        <Input
+        <Textarea
           id="task-title"
           value={values.title}
           onChange={(event) => set("title", event.target.value)}
           placeholder="Например: перезвонить и согласовать дату оплаты"
+          rows={2}
+          maxLength={200}
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? "task-title-error" : undefined}
           autoFocus
@@ -193,28 +225,6 @@ function TaskForm({
           {errors.dueAt && <p id="task-due-error" className="text-xs text-destructive">{errors.dueAt}</p>}
         </div>
       </div>
-
-      {canAssign && (
-        <div className="grid gap-2">
-          <Label htmlFor="task-assignee">Исполнитель</Label>
-          <Select
-            items={assigneeOptions}
-            value={values.assigneeId ?? "none"}
-            onValueChange={(id) => set("assigneeId", !id || id === "none" ? null : id)}
-          >
-            <SelectTrigger id="task-assignee" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {assigneeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       <label className="flex items-center gap-2 text-sm">
         <input
