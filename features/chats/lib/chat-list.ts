@@ -1,4 +1,4 @@
-import { routes } from "@/config/routes"
+import { prospectRoute, routes } from "@/config/routes"
 import type { Conversation, Message, WhatsappConnection } from "@/features/communications/api/communications-repository"
 import { API_ERROR_MESSAGES, apiErrorMessage, type ApiError } from "@/lib/api/errors"
 import { formatDayMonth, formatFullDate, formatTime } from "@/lib/format"
@@ -57,9 +57,9 @@ export function filterChats<T extends Conversation>(chats: readonly T[], query: 
   return chats.filter((chat) => chatTitle(chat).toLowerCase().includes(needle))
 }
 
-/** Новый чат приходит с лидом; без лида и клиента открыть негде */
+/** Новый чат приходит с входящим лидом (`/prospects`; `/leads` — это карточка сделки) */
 export function chatHref(chat: Conversation): string | null {
-  if (chat.leadId) return `${routes.leads}/${encodeURIComponent(chat.leadId)}`
+  if (chat.leadId) return prospectRoute(chat.leadId)
   return chat.customerId ? `${routes.clientBase}?client=${encodeURIComponent(chat.customerId)}` : null
 }
 

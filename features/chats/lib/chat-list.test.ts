@@ -57,7 +57,7 @@ describe("chatHref", () => {
   it("ведёт к лиду, затем к клиенту; непривязанный чат не открывается", () => {
     expect(chatHref(chat())).toBeNull()
     expect(chatHref(chat({ customerId: "x1" }))).toBe("/client-base?client=x1")
-    expect(chatHref(chat({ customerId: "x1", leadId: "l1" }))).toBe("/leads/l1")
+    expect(chatHref(chat({ customerId: "x1", leadId: "l1" }))).toBe("/prospects/l1")
   })
 })
 
