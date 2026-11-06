@@ -25,7 +25,7 @@ import { formatDateTime, formatDayMonth, formatDecimalMoney } from "@/lib/format
  * «Сейчас по сделке»: следующий шаг и контекст ИИ в одной панели — первое, что видит менеджер.
  * Следующий шаг — главный ориентир; сводка ИИ помогает понять, почему он такой.
  */
-export function LeadNowPanel({ lead, isDemoData }: { lead: LeadDetail; isDemoData: boolean }) {
+export function LeadNowPanel({ lead, isDemoData, aiSlot }: { lead: LeadDetail; isDemoData: boolean; aiSlot?: React.ReactNode }) {
   const next = lead.nextAction
   const ai = lead.aiContext
   return (
@@ -59,6 +59,7 @@ export function LeadNowPanel({ lead, isDemoData }: { lead: LeadDetail; isDemoDat
         </div>
       </div>
 
+      {aiSlot}
       {/* Сводку ИИ делает отдельный модуль; без него блок не показывается, чтобы не обещать пустое */}
       {(isDemoData || ai) && (
         <div className="border-t px-4 py-3">

@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { leadRoute } from "@/config/routes"
+import { DealAiSection } from "@/features/ai-insights"
 import { DealActions } from "@/features/leads/components/deal-actions"
 import { DealPayments } from "@/features/leads/components/deal-payments"
 import { LeadStageControl } from "@/features/leads/components/lead-stage-control"
@@ -91,7 +92,17 @@ export function LeadView({ lead, user }: LeadViewProps) {
       {/* Порядок в разметке — порядок на телефоне: сейчас → клиент → вкладки.
           На широком экране «Клиент и сделка» уходит в правую колонку на всю высоту. */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_19rem] lg:grid-rows-[auto_1fr] lg:gap-x-6">
-        <LeadNowPanel lead={lead} isDemoData={isMockDataSource} />
+        <LeadNowPanel
+          lead={lead}
+          isDemoData={isMockDataSource}
+          aiSlot={
+            !isMockDataSource && (
+              <Suspense>
+                <DealAiSection dealId={lead.id} />
+              </Suspense>
+            )
+          }
+        />
         <LeadAside lead={lead} />
         <div className="min-w-0">
           <LeadTabs

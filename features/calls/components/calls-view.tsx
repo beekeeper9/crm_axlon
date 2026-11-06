@@ -14,6 +14,7 @@ import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { routes } from "@/config/routes"
+import { CallAiSection } from "@/features/ai-insights"
 import { callsRepository, type CallsQuery } from "@/features/calls/api/calls-repository"
 import {
   CallAnalysis,
@@ -198,8 +199,8 @@ function CallDetail({ call, canLink }: { call: Call; canLink: boolean }) {
       <div className="space-y-4 px-4 pb-6">
         <CallFacts call={call} />
         {canLink && <CallLinkForm callId={call.id} isLinked={Boolean(call.lead ?? call.client)} />}
-        {/* Разбор и транскрипт телефония не отдаёт (ИИ-модуль — отдельная задача): в режиме api блоков нет */}
-        {isMockDataSource && <CallAnalysis call={call} isDemoData />}
+        {/* Разбор в режиме api — по запросу через backend, когда ИИ подключён; разбирается заметка к звонку */}
+        {isMockDataSource ? <CallAnalysis call={call} isDemoData /> : call.status === "answered" && call.notes && <CallAiSection callId={call.id} />}
         <CallRating call={call} />
         {(isMockDataSource || call.transcript) && (
           <section className="space-y-2" aria-labelledby={`transcript-${call.id}`}>
@@ -251,6 +252,7 @@ export async function LeadCallsList({ leadId, actions }: { leadId: string; actio
               {call.rating && <RatingStars score={call.rating.score} />}
             </div>
             {call.status === "answered" && isMockDataSource && <CallAnalysis call={call} isDemoData />}
+            {call.status === "answered" && !isMockDataSource && call.notes && <CallAiSection callId={call.id} />}
             {call.notes && <p className="text-meta">{call.notes}</p>}
             {call.rating?.comment && <p className="text-meta text-muted-foreground">Комментарий руководителя: {call.rating.comment}</p>}
             {call.transcript && (
