@@ -11,6 +11,7 @@ import { isMockDataSource } from "@/config/env"
 import { homeRouteFor } from "@/config/navigation"
 import { routes } from "@/config/routes"
 import { siteConfig } from "@/config/site"
+import { fetchAiAvailable } from "@/features/ai-insights/api/ai-insights"
 import { NotificationsBell } from "@/features/notifications"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
@@ -36,6 +37,7 @@ function BrandLink({ href }: { href: string }) {
 export async function AppHeader() {
   const user = await getCurrentUser()
   const isPlatformAdmin = hasPermission(user.role, "platform.manage")
+  const assistantOn = isMockDataSource || (!isPlatformAdmin && (await fetchAiAvailable()))
 
   return (
     <header className={HEADER_CLASSES}>
@@ -46,7 +48,7 @@ export async function AppHeader() {
       {/* Администратор платформы управляет доступом, а не продажами: каталог CRM ему не нужен */}
       {!isPlatformAdmin && <AllSectionsMenu role={user.role} />}
       {/* ИИ-помощник работает через модуль ИИ backend; без подключённой модели страница честно об этом говорит */}
-      {!isPlatformAdmin && <AssistantLink />}
+      {!isPlatformAdmin && <AssistantLink disabled={!assistantOn} />}
 
       <div className="ml-auto flex items-center gap-2">
         {isMockDataSource && (

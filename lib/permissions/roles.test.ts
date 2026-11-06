@@ -17,3 +17,18 @@ describe("права найма сотрудников", () => {
     expect(hasPermission("manager", "staff.manage")).toBe(false)
   })
 })
+
+describe("права на чаты", () => {
+  it("чаты видят директор, РОП и менеджер", () => {
+    expect(hasPermission("director", "chats.view")).toBe(true)
+    expect(hasPermission("head_of_sales", "chats.view")).toBe(true)
+    expect(hasPermission("manager", "chats.view")).toBe(true)
+    expect(hasPermission("platform_admin", "chats.view")).toBe(false)
+  })
+
+  it("подключают WhatsApp директор и РОП, но не менеджер", () => {
+    expect(hasPermission("director", "chats.connect")).toBe(true)
+    expect(hasPermission("head_of_sales", "chats.connect")).toBe(true)
+    expect(hasPermission("manager", "chats.connect")).toBe(false)
+  })
+})

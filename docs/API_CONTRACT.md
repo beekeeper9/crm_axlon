@@ -352,3 +352,9 @@ Endpoint (все с `X-Tenant`):
 - `GET /team/my-month/?month=ГГГГ-ММ` — свой месяц сотрудника: `sales`, `previous_sales`, `new_clients`, `turnover`, `debt`, `average_check`, `money {prepayments, additional, full, refunds, received}` (подтверждённые оплаты месяца), `targets {sales, turnover}`, `meetings {assigned, passed, ahead, held, attendance_percent, sales_per_meeting_percent}`, `earnings {base_salary, commission_percent, commission, total}` (null, пока директор не задал условия; процент — от `received`) и `products[]` (продукты с `show_on_my_day`: продажи, прошлый месяц, оборот, деньги, средний чек).
 - `GET /team/my-focus/?actions_limit=N` — «Фокус» менеджера: группы в формате `actions` доски дня, порядок `miss_tasks` (открытые задачи типа `review` — «по проколу»), `overdue_tasks` (без них), `deals_to_push`, `debts_to_collect` (открытые и выигранные сделки с подтверждёнными оплатами меньше суммы), `leads_without_contact`, `meetings_without_outcome`, `deals_without_next_step`. Свои записи, не зависит от тарифа операций.
 - Задача «по проколу» — `POST /activities/` с `task_type=review` (ставит руководитель).
+
+## Чаты (боковая панель)
+
+Список — существующий `GET /communications/conversations/?channel=whatsapp`, состояние канала — `GET /communications/channels/`.
+
+Открыто: контракт подключения WhatsApp. Кнопка «Подключить WhatsApp» (директор и РОП) пока только сообщает, что подключение появится после обновления сервера; запросов не отправляет.

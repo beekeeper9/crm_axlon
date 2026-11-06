@@ -62,6 +62,7 @@ export async function fetchChannels(auth: ApiAuth): Promise<ChannelState[]> {
 const conversationSchema = z.object({
   id: z.string(),
   channel: channelSchema,
+  externalContactId: z.string(),
   contactName: z.string().nullable(),
   status: z.enum(["open", "closed"]),
   customerId: z.string().nullable(),
@@ -95,6 +96,19 @@ export async function fetchCustomerConversations(auth: ApiAuth, customerId: stri
     schema: paginatedSchema(conversationSchema),
   })
   return { total: page.count, items: page.results }
+}
+
+/** Сколько чатов показываем в боковой панели */
+const CHATS_LIMIT = 50
+
+/** Чаты WhatsApp в области пользователя, свежие сверху; неразобранные видны всем — их можно забрать */
+export async function fetchWhatsappChats(auth: ApiAuth): Promise<Conversation[]> {
+  const page = await apiRequest("/api/v1/communications/conversations/", {
+    auth,
+    query: { channel: "whatsapp", limit: String(CHATS_LIMIT) },
+    schema: paginatedSchema(conversationSchema),
+  })
+  return page.results
 }
 
 /** Сообщения переписки, от старых к новым */

@@ -46,9 +46,24 @@ export function PrimaryNav({ role }: { role: Role }) {
   )
 }
 
-export function AssistantLink() {
+/** `disabled` — модель на сервере выключена: кнопка видна, но приглушена и никуда не ведёт */
+export function AssistantLink({ disabled = false }: { disabled?: boolean }) {
   const pathname = usePathname()
   const isActive = isNavItemActive(assistantNavItem, pathname)
+
+  if (disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        title="ИИ-помощник временно отключён"
+        className={cn(LINK_CLASSES, "cursor-not-allowed border border-border opacity-50 hover:bg-transparent hover:text-muted-foreground")}
+      >
+        <assistantNavItem.icon className="size-4" aria-hidden />
+        <span className="hidden xl:inline">{assistantNavItem.title}</span>
+        <span className="xl:hidden">ИИ</span>
+      </span>
+    )
+  }
 
   return (
     <Link

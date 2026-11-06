@@ -61,6 +61,10 @@ export type Permission =
   | "audit.view"
   /** Настройки компании: название, страна, валюта, часовой пояс — директор */
   | "company.settings"
+  /** Боковая панель чатов: какие диалоги видны, решает backend (менеджер — свои, РОП — отдел) */
+  | "chats.view"
+  /** Подключение мессенджера компании — директор и РОП */
+  | "chats.connect"
 
 const MANAGEMENT: readonly Permission[] = [
   "team.view",
@@ -77,9 +81,9 @@ const MANAGEMENT: readonly Permission[] = [
  */
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_admin: ["platform.manage"],
-  director: [...MANAGEMENT, "staff.manage", "staff.hire", "staff.approve", "company.view", "support.contact", "pipelines.configure", "audit.view", "company.settings"],
-  head_of_sales: [...MANAGEMENT, "staff.manage", "staff.hire", "support.contact", "pipelines.configure", "audit.view"],
-  manager: ["records.edit", "my_day.view", "support.contact"],
+  director: [...MANAGEMENT, "staff.manage", "staff.hire", "staff.approve", "company.view", "support.contact", "pipelines.configure", "audit.view", "company.settings", "chats.view", "chats.connect"],
+  head_of_sales: [...MANAGEMENT, "staff.manage", "staff.hire", "support.contact", "pipelines.configure", "audit.view", "chats.view", "chats.connect"],
+  manager: ["records.edit", "my_day.view", "support.contact", "chats.view"],
   /**
    * Роли P0 backend. Их рабочие пространства в продукте ещё не описаны — пока минимальный набор:
    * работа со своими записями, без «Моего дня» и командных разделов. Данные ограничивает backend.
