@@ -37,8 +37,7 @@ export async function refreshConnectionAction(): Promise<WhatsappConnection | nu
 export async function loadWhatsappQrAction(): Promise<{ qr: WhatsappQr; error: null } | { qr: null; error: string }> {
   const result = await tryLoad(async () => fetchWhatsappQr(await getActionAuth()))
   if (result.ok) return { qr: result.data, error: null }
-  const denied = result.error.kind === "forbidden" && result.error.code !== "feature_not_in_plan"
-  return { qr: null, error: denied ? "QR-код может открыть только директор: кто его отсканирует, тот подключит номер компании." : chatErrorMessage(result.error) }
+  return { qr: null, error: chatErrorMessage(result.error) }
 }
 
 /** Открытый чат считается прочитанным; если сбросить счётчик нельзя, читать это не мешает */
