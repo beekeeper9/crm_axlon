@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { chatCommandAction, loadChatThreadAction, sendChatMessageAction, type ChatActionResult } from "@/features/chats/actions"
-import { chatHref, chatTitle, messageAuthor, messageProblem, type ChatRow, type ChatThread } from "@/features/chats/lib/chat-list"
+import { chatContact, chatHref, chatTitle, messageAuthor, messageProblem, type ChatRow, type ChatThread } from "@/features/chats/lib/chat-list"
 import { MESSAGE_TEXT_MAX, type Message } from "@/features/communications/api/communications-repository"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -83,7 +83,7 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
         <SheetHeader className="border-b p-4 pr-12">
           <SheetTitle className="truncate">{chatTitle(chat)}</SheetTitle>
           <SheetDescription>
-            WhatsApp · {chat.externalContactId}
+            WhatsApp · {chatContact(chat)}
             {isClosed && " · закрыт"}
           </SheetDescription>
           <div className="flex flex-wrap gap-2 pt-1">

@@ -163,3 +163,21 @@ export type ConversationCommand = "assign" | "read" | "close" | "reopen"
 export function runConversationCommand(auth: ApiAuth, id: string, command: ConversationCommand): Promise<Conversation> {
   return apiRequest(`/api/v1/communications/conversations/${encodeURIComponent(id)}/${command}/`, { method: "POST", auth, schema: conversationSchema })
 }
+
+const whatsappConnectionSchema = z.object({ configured: z.boolean(), connected: z.boolean(), state: z.string() })
+
+export type WhatsappConnection = z.infer<typeof whatsappConnectionSchema>
+
+/** `GET /communications/whatsapp/status/` — спрашивает провайдера, поэтому не для частого опроса */
+export function fetchWhatsappConnection(auth: ApiAuth): Promise<WhatsappConnection> {
+  return apiRequest("/api/v1/communications/whatsapp/status/", { auth, schema: whatsappConnectionSchema })
+}
+
+const whatsappQrSchema = z.object({ status: z.enum(["qr", "connected", "unavailable"]), image: z.string().nullable() })
+
+export type WhatsappQr = z.infer<typeof whatsappQrSchema>
+
+/** `GET /communications/whatsapp/qr/` — кто отсканирует код, тот подключит номер; доступ решает backend */
+export function fetchWhatsappQr(auth: ApiAuth): Promise<WhatsappQr> {
+  return apiRequest("/api/v1/communications/whatsapp/qr/", { auth, schema: whatsappQrSchema })
+}

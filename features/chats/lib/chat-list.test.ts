@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Conversation, Message } from "@/features/communications/api/communications-repository"
-import { chatErrorMessage, chatHref, chatTimeLabel, chatTitle, filterChats, messageAuthor, messageProblem } from "@/features/chats/lib/chat-list"
+import { chatContact, chatErrorMessage, chatHref, chatTimeLabel, chatTitle, connectionView, filterChats, messageAuthor, messageProblem } from "@/features/chats/lib/chat-list"
 import { ApiError } from "@/lib/api/errors"
 import { formatDayMonth, formatTime } from "@/lib/format"
 
@@ -25,6 +25,11 @@ describe("chatTitle", () => {
   it("показывает номер, если имени нет", () => {
     expect(chatTitle(chat())).toBe("Айгуль")
     expect(chatTitle(chat({ contactName: null }))).toBe("+996555000111")
+  })
+
+  it("не показывает служебный идентификатор скрытого номера", () => {
+    expect(chatContact(chat({ externalContactId: "123@lid" }))).toBe("Номер скрыт")
+    expect(chatTitle(chat({ contactName: null, externalContactId: "123@lid" }))).toBe("Номер скрыт")
   })
 })
 
@@ -82,6 +87,7 @@ describe("messageProblem", () => {
     expect(messageProblem(message())).toBeNull()
     expect(messageProblem(message({ status: "failed" }))).toBe("Не доставлено")
     expect(messageProblem(message({ status: "failed", failureCode: "131047" }))).toContain("24 часов")
+    expect(messageProblem(message({ status: "failed", failureCode: "noAccount" }))).toBe("У этого номера нет WhatsApp.")
   })
 })
 
@@ -91,5 +97,27 @@ describe("chatErrorMessage", () => {
     expect(chatErrorMessage(new ApiError("conflict", "x", { code: "conversation_invalid_state" }))).toContain("Чат закрыт")
     expect(chatErrorMessage(new ApiError("forbidden", "x"))).toBe("Нет прав на этот чат.")
     expect(chatErrorMessage(new ApiError("forbidden", "x", { code: "feature_not_in_plan" }))).toContain("тариф")
+  })
+})
+
+describe("connectionView", () => {
+  const waiting = { configured: true, connected: false, state: "notAuthorized" }
+
+  it("предлагает QR-код только тому, кто подключает, и только когда номер ждёт привязки", () => {
+    expect(connectionView(waiting, true).offerConnect).toBe(true)
+    expect(connectionView(waiting, false).offerConnect).toBe(false)
+    expect(connectionView({ configured: true, connected: true, state: "authorized" }, true).offerConnect).toBe(false)
+    expect(connectionView({ configured: false, connected: false, state: "not_configured" }, true).offerConnect).toBe(false)
+    expect(connectionView(null, true).offerConnect).toBe(false)
+  })
+
+  it("предупреждает об ограниченном номере и не предлагает его привязать", () => {
+    const view = connectionView({ configured: true, connected: false, state: "blocked" }, true)
+    expect(view.warning).toContain("ограничил")
+    expect(view.offerConnect).toBe(false)
+  })
+
+  it("честно говорит, что сервер не настроен", () => {
+    expect(connectionView({ configured: false, connected: false, state: "not_configured" }, true).empty.title).toBe("WhatsApp ещё не настроен на сервере")
   })
 })

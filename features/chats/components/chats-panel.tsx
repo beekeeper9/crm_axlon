@@ -8,7 +8,7 @@ import { getRenderAuth } from "@/lib/auth/token-store"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
 
-const DEMO_STATE = { chats: [], connected: null, problem: "Чаты хранятся на сервере — в демо-режиме их нет." }
+const DEMO_STATE = { chats: [], connection: null, problem: "Чаты хранятся на сервере — в демо-режиме их нет." }
 
 /**
  * Панель чатов сбоку от всех разделов. Менеджер видит только чаты; подключать WhatsApp могут
@@ -17,7 +17,7 @@ const DEMO_STATE = { chats: [], connected: null, problem: "Чаты хранят
 export async function ChatsPanel() {
   const user = await getCurrentUser()
   if (!hasPermission(user.role, "chats.view")) return null
-  if (isMockDataSource) return <ChatsSidebar initial={DEMO_STATE} live={false} canConnect={false} canOpenIntegrations={false} />
+  if (isMockDataSource) return <ChatsSidebar initial={DEMO_STATE} live={false} canConnect={false} />
 
   await connection()
   return (
@@ -25,7 +25,6 @@ export async function ChatsPanel() {
       initial={await loadChatPanel(await getRenderAuth(), new Date())}
       live
       canConnect={hasPermission(user.role, "chats.connect")}
-      canOpenIntegrations={hasPermission(user.role, "company.settings")}
     />
   )
 }

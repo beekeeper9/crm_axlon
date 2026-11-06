@@ -2,15 +2,18 @@
 
 import { z } from "zod"
 
-import { loadChatPanel } from "@/features/chats/api/chat-panel"
-import { chatErrorMessage, type ChatPanelState, type ChatThread } from "@/features/chats/lib/chat-list"
+import { loadChatList, loadConnection } from "@/features/chats/api/chat-panel"
+import { chatErrorMessage, type ChatList, type ChatThread } from "@/features/chats/lib/chat-list"
 import {
   fetchConversation,
   fetchThreadMessages,
+  fetchWhatsappQr,
   MESSAGE_TEXT_MAX,
   runConversationCommand,
   sendMessage,
   type ConversationCommand,
+  type WhatsappConnection,
+  type WhatsappQr,
 } from "@/features/communications/api/communications-repository"
 import type { ApiAuth } from "@/lib/api/auth-session"
 import { ApiError } from "@/lib/api/errors"
@@ -22,8 +25,20 @@ export type ChatActionResult = { error: string | null; denied: boolean }
 
 const replySchema = z.string().trim().min(1, "Введите сообщение").max(MESSAGE_TEXT_MAX, `Сообщение — до ${MESSAGE_TEXT_MAX} символов`)
 
-export async function refreshChatsAction(): Promise<ChatPanelState> {
-  return loadChatPanel(await getActionAuth(), new Date())
+export async function refreshChatsAction(): Promise<ChatList> {
+  return loadChatList(await getActionAuth(), new Date())
+}
+
+export async function refreshConnectionAction(): Promise<WhatsappConnection | null> {
+  return loadConnection(await getActionAuth())
+}
+
+/** `error` — QR-кода не будет, опрашивать дальше незачем */
+export async function loadWhatsappQrAction(): Promise<{ qr: WhatsappQr; error: null } | { qr: null; error: string }> {
+  const result = await tryLoad(async () => fetchWhatsappQr(await getActionAuth()))
+  if (result.ok) return { qr: result.data, error: null }
+  const denied = result.error.kind === "forbidden" && result.error.code !== "feature_not_in_plan"
+  return { qr: null, error: denied ? "QR-код может открыть только директор: кто его отсканирует, тот подключит номер компании." : chatErrorMessage(result.error) }
 }
 
 /** Открытый чат считается прочитанным; если сбросить счётчик нельзя, читать это не мешает */

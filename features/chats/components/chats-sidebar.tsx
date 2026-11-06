@@ -6,10 +6,10 @@ import { ChevronLeft, MessagesSquare, Search } from "lucide-react"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { refreshChatsAction } from "@/features/chats/actions"
+import { refreshChatsAction, refreshConnectionAction } from "@/features/chats/actions"
 import { ChatThreadSheet } from "@/features/chats/components/chat-thread-sheet"
 import { ConnectWhatsapp } from "@/features/chats/components/connect-whatsapp"
-import { chatTitle, filterChats, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
+import { chatTitle, connectionView, filterChats, type ChatList, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
 import { formatInitials, formatNumber } from "@/lib/format"
 
 const COLLAPSED_KEY = "chats-panel-collapsed"
@@ -47,27 +47,33 @@ type ChatsSidebarProps = {
   /** Опрашивать сервер; в демо-режиме его нет */
   live: boolean
   canConnect: boolean
-  canOpenIntegrations: boolean
 }
 
-export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }: ChatsSidebarProps) {
+export function ChatsSidebar({ initial, live, canConnect }: ChatsSidebarProps) {
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false)
-  const [{ chats, connected, problem }, setPanel] = useState(initial)
+  const [{ chats, connection, problem }, setPanel] = useState(initial)
   const [query, setQuery] = useState("")
   const [openChat, setOpenChat] = useState<ChatRow | null>(null)
   const unread = chats.reduce((sum, chat) => sum + chat.unreadCount, 0)
-  const offerConnect = canConnect && connected === false
+  const view = connectionView(connection, canConnect)
 
   // Сбой опроса не повод ломать панель: остаётся прежний список, следующий опрос повторит
-  const refresh = () => void refreshChatsAction().then(setPanel, () => undefined)
+  const applyChats = (list: ChatList) => setPanel((panel) => ({ ...panel, ...list }))
+  const refresh = () => void refreshChatsAction().then(applyChats, () => undefined)
 
   useEffect(() => {
     if (!live) return
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void refreshChatsAction().then(setPanel, () => undefined)
+      if (document.visibilityState !== "visible") return
+      void refreshChatsAction().then((list) => setPanel((panel) => ({ ...panel, ...list })), () => undefined)
     }, REFRESH_MS)
     return () => clearInterval(timer)
   }, [live])
+
+  function handleConnected() {
+    void refreshConnectionAction().then((next) => setPanel((panel) => ({ ...panel, connection: next })), () => undefined)
+    refresh()
+  }
 
   if (collapsed) {
     return (
@@ -96,15 +102,20 @@ export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }:
           <ChevronLeft className="size-4" aria-hidden />
         </Button>
       </div>
+      {view.warning && (
+        <p role="alert" className="mx-3 mb-2 rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+          {view.warning}
+        </p>
+      )}
       {problem ? (
         <p className="m-auto max-w-60 px-3 text-center text-sm text-muted-foreground">{problem}</p>
       ) : chats.length === 0 ? (
         <EmptyState
           className="m-auto"
           icon={MessagesSquare}
-          title={connected === false ? "WhatsApp не подключён" : "Чатов пока нет"}
-          description={emptyDescription(connected, canConnect)}
-          action={offerConnect && <ConnectWhatsapp canOpenIntegrations={canOpenIntegrations} />}
+          title={view.empty.title}
+          description={view.empty.description}
+          action={view.offerConnect && <ConnectWhatsapp onConnected={handleConnected} />}
         />
       ) : (
         <>
@@ -118,21 +129,16 @@ export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }:
             ))}
             {visible.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted-foreground">Ничего не найдено</li>}
           </ul>
-          {offerConnect && (
+          {view.offerConnect && (
             <div className="border-t p-3 text-center">
-              <ConnectWhatsapp canOpenIntegrations={canOpenIntegrations} />
+              <ConnectWhatsapp onConnected={handleConnected} />
             </div>
           )}
         </>
       )}
-      {openChat && <ChatThreadSheet key={openChat.id} chat={openChat} connected={connected} onChanged={refresh} onClose={() => setOpenChat(null)} />}
+      {openChat && <ChatThreadSheet key={openChat.id} chat={openChat} connected={connection?.connected ?? null} onChanged={refresh} onClose={() => setOpenChat(null)} />}
     </aside>
   )
-}
-
-function emptyDescription(connected: boolean | null, canConnect: boolean): string {
-  if (connected !== false) return "Новые обращения из WhatsApp появятся здесь."
-  return canConnect ? "Подключите номер компании — новые обращения будут появляться здесь." : "Подключить его может директор или РОП. Новые обращения появятся здесь."
 }
 
 function ChatItem({ chat, onOpen }: { chat: ChatRow; onOpen: () => void }) {
