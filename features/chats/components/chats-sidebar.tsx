@@ -1,16 +1,20 @@
 "use client"
 
-import { useState, useSyncExternalStore } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { ChevronLeft, MessagesSquare, Search } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { chatHref, chatTitle, filterChats, type ChatRow } from "@/features/chats/lib/chat-list"
+import { refreshChatsAction } from "@/features/chats/actions"
+import { ConnectWhatsapp } from "@/features/chats/components/connect-whatsapp"
+import { chatHref, chatTitle, filterChats, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
 import { formatInitials, formatNumber } from "@/lib/format"
 
 const COLLAPSED_KEY = "chats-panel-collapsed"
+/** Push-событий у backend нет: новые сообщения узнаём опросом, пока вкладка на экране */
+const REFRESH_MS = 15_000
 const PANEL_CLASSES = "sticky top-14 hidden h-[calc(100svh-3.5rem)] shrink-0 self-start border-r lg:flex print:hidden"
 
 const listeners = new Set<() => void>()
@@ -39,18 +43,29 @@ function saveCollapsed(collapsed: boolean) {
 }
 
 type ChatsSidebarProps = {
-  chats: readonly ChatRow[]
-  /** `null` — неизвестно: канал не загрузился, кнопку подключения не показываем */
-  connected: boolean | null
+  initial: ChatPanelState
+  /** Опрашивать сервер; в демо-режиме его нет */
+  live: boolean
   canConnect: boolean
-  problem: string | null
+  canOpenIntegrations: boolean
 }
 
-export function ChatsSidebar({ chats, connected, canConnect, problem }: ChatsSidebarProps) {
+export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }: ChatsSidebarProps) {
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false)
+  const [{ chats, connected, problem }, setPanel] = useState(initial)
   const [query, setQuery] = useState("")
   const unread = chats.reduce((sum, chat) => sum + chat.unreadCount, 0)
   const offerConnect = canConnect && connected === false
+
+  useEffect(() => {
+    if (!live) return
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      // Сбой опроса не повод ломать панель: остаётся прежний список, следующий опрос повторит
+      refreshChatsAction().then(setPanel, () => undefined)
+    }, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [live])
 
   if (collapsed) {
     return (
@@ -87,7 +102,7 @@ export function ChatsSidebar({ chats, connected, canConnect, problem }: ChatsSid
           icon={MessagesSquare}
           title={connected === false ? "WhatsApp не подключён" : "Чатов пока нет"}
           description={emptyDescription(connected, canConnect)}
-          action={offerConnect && <ConnectWhatsapp />}
+          action={offerConnect && <ConnectWhatsapp canOpenIntegrations={canOpenIntegrations} />}
         />
       ) : (
         <>
@@ -103,7 +118,7 @@ export function ChatsSidebar({ chats, connected, canConnect, problem }: ChatsSid
           </ul>
           {offerConnect && (
             <div className="border-t p-3 text-center">
-              <ConnectWhatsapp />
+              <ConnectWhatsapp canOpenIntegrations={canOpenIntegrations} />
             </div>
           )}
         </>
@@ -131,7 +146,7 @@ function ChatItem({ chat }: { chat: ChatRow }) {
           {chat.timeLabel && <span className="shrink-0 text-xs text-muted-foreground">{chat.timeLabel}</span>}
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">{href ? "WhatsApp" : "WhatsApp · без клиента"}</span>
+          <span className="truncate text-xs text-muted-foreground">{href ? "WhatsApp" : "WhatsApp · не привязан"}</span>
           {chat.unreadCount > 0 && (
             <span className="shrink-0 rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
               {formatNumber(chat.unreadCount)}
@@ -152,18 +167,5 @@ function ChatItem({ chat }: { chat: ChatRow }) {
         <div className="flex items-center gap-2.5 px-3 py-2.5">{body}</div>
       )}
     </li>
-  )
-}
-
-/** Контракт подключения ещё не согласован с backend: кнопка честно говорит об этом, а не имитирует успех */
-function ConnectWhatsapp() {
-  const [pressed, setPressed] = useState(false)
-  return (
-    <div className="space-y-2">
-      <Button onClick={() => setPressed(true)}>Подключить WhatsApp</Button>
-      <p role="status" className="text-xs text-muted-foreground">
-        {pressed && "Подключение заработает после обновления сервера. Пока WhatsApp не подключён."}
-      </p>
-    </div>
   )
 }

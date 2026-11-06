@@ -66,6 +66,7 @@ const conversationSchema = z.object({
   contactName: z.string().nullable(),
   status: z.enum(["open", "closed"]),
   customerId: z.string().nullable(),
+  leadId: z.string().nullable(),
   ownerUserId: z.string().nullable(),
   unreadCount: z.int(),
   lastMessageAt: z.iso.datetime({ offset: true }).nullable(),

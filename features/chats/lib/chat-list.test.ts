@@ -12,6 +12,7 @@ function chat(overrides: Partial<Conversation> = {}): Conversation {
     contactName: "Айгуль",
     status: "open",
     customerId: null,
+    leadId: null,
     ownerUserId: null,
     unreadCount: 0,
     lastMessageAt: null,
@@ -47,8 +48,9 @@ describe("filterChats", () => {
 })
 
 describe("chatHref", () => {
-  it("ведёт в карточку только привязанный чат", () => {
+  it("ведёт к лиду, затем к клиенту; непривязанный чат не открывается", () => {
     expect(chatHref(chat())).toBeNull()
     expect(chatHref(chat({ customerId: "x1" }))).toBe("/client-base?client=x1")
+    expect(chatHref(chat({ customerId: "x1", leadId: "l1" }))).toBe("/leads/l1")
   })
 })

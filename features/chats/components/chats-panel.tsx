@@ -2,14 +2,13 @@ import { connection } from "next/server"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
+import { loadChatPanel } from "@/features/chats/api/chat-panel"
 import { ChatsSidebar } from "@/features/chats/components/chats-sidebar"
-import { chatTimeLabel } from "@/features/chats/lib/chat-list"
-import { fetchChannels, fetchWhatsappChats } from "@/features/communications/api/communications-repository"
-import { tryLoad } from "@/lib/api/load"
-import { apiErrorMessage } from "@/lib/api/errors"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
+
+const DEMO_STATE = { chats: [], connected: null, problem: "Чаты хранятся на сервере — в демо-режиме их нет." }
 
 /**
  * Панель чатов сбоку от всех разделов. Менеджер видит только чаты; подключать WhatsApp могут
@@ -18,24 +17,15 @@ import { getCurrentUser } from "@/lib/session/current-user"
 export async function ChatsPanel() {
   const user = await getCurrentUser()
   if (!hasPermission(user.role, "chats.view")) return null
-  const canConnect = hasPermission(user.role, "chats.connect")
-  if (isMockDataSource) {
-    return <ChatsSidebar chats={[]} connected={null} canConnect={false} problem="Чаты хранятся на сервере — в демо-режиме их нет." />
-  }
+  if (isMockDataSource) return <ChatsSidebar initial={DEMO_STATE} live={false} canConnect={false} canOpenIntegrations={false} />
 
   await connection()
-  const now = new Date()
-  const auth = await getRenderAuth()
-  const [chats, channels] = await Promise.all([tryLoad(() => fetchWhatsappChats(auth)), tryLoad(() => fetchChannels(auth))])
-  if (!chats.ok) return <ChatsSidebar chats={[]} connected={null} canConnect={false} problem={apiErrorMessage(chats.error)} />
-
-  const whatsapp = channels.ok ? channels.data.find((state) => state.channel === "whatsapp") : undefined
   return (
     <ChatsSidebar
-      chats={chats.data.map((chat) => ({ ...chat, timeLabel: chatTimeLabel(chat.lastMessageAt, now) }))}
-      connected={whatsapp ? whatsapp.canSend : null}
-      canConnect={canConnect}
-      problem={null}
+      initial={await loadChatPanel(await getRenderAuth(), new Date())}
+      live
+      canConnect={hasPermission(user.role, "chats.connect")}
+      canOpenIntegrations={hasPermission(user.role, "company.settings")}
     />
   )
 }
