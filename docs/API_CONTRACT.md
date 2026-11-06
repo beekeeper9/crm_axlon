@@ -362,3 +362,5 @@ Endpoint (все с `X-Tenant`):
 Кнопка «Подключить WhatsApp» (директор и РОП) показывает `GET /communications/whatsapp/qr/` и опрашивает его раз в 3 секунды. Права проверяет backend: `communications.connect`.
 
 Окно чата: `GET conversations/{id}/`, `GET .../messages/`, `POST .../messages/`, `POST .../assign/`, `read/`, `close/`, `reopen/`. Открытый чат опрашивается раз в 5 секунд и при открытии считается прочитанным. Сообщения читаются страницами от старых к новым, до 1000 штук: у ответа нет `count`, поэтому для длинных чатов нужна выдача с конца.
+
+Файлы чата: у сообщения поле `attachment`, сам файл идёт через BFF `/chat-attachments/{chatId}/{messageId}` к `GET conversations/{id}/messages/{messageId}/attachment/`. Фото, голосовые и видео показываются в окне чата, документы скачиваются.

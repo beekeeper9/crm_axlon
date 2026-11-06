@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { Send } from "lucide-react"
+import { FileText, Send } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { chatCommandAction, loadChatThreadAction, sendChatMessageAction, type ChatActionResult } from "@/features/chats/actions"
-import { chatContact, chatHref, chatTitle, messageAuthor, messageProblem, type ChatRow, type ChatThread } from "@/features/chats/lib/chat-list"
+import { attachmentHref, chatContact, chatHref, chatTitle, messageAuthor, messageCaption, messageProblem, type ChatRow, type ChatThread } from "@/features/chats/lib/chat-list"
 import { MESSAGE_TEXT_MAX, type Message } from "@/features/communications/api/communications-repository"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -43,11 +43,15 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
   useEffect(() => {
     let active = true
     const load = () =>
-      loadChatThreadAction(chat.id).then((result) => {
-        if (!active) return
-        if (result.thread) setThread(result.thread)
-        setLoadError(result.error)
-      })
+      loadChatThreadAction(chat.id).then(
+        (result) => {
+          if (!active) return
+          if (result.thread) setThread(result.thread)
+          setLoadError(result.error)
+        },
+        // Обрыв связи: на экране остаётся прежняя переписка, следующий опрос повторит
+        () => undefined
+      )
     void load().then(onChanged)
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void load()
@@ -106,7 +110,7 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
         </SheetHeader>
 
         {thread ? (
-          <MessageFeed messages={thread.messages} truncated={thread.truncated} />
+          <MessageFeed conversationId={chat.id} messages={thread.messages} truncated={thread.truncated} />
         ) : loadError ? (
           <p className="m-auto max-w-72 px-4 text-center text-sm text-muted-foreground">{loadError}</p>
         ) : (
@@ -144,7 +148,7 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
   )
 }
 
-function MessageFeed({ messages, truncated }: { messages: readonly Message[]; truncated: boolean }) {
+function MessageFeed({ conversationId, messages, truncated }: { conversationId: string; messages: readonly Message[]; truncated: boolean }) {
   const bottom = useRef<HTMLLIElement>(null)
   const lastId = messages.at(-1)?.id
 
@@ -158,10 +162,12 @@ function MessageFeed({ messages, truncated }: { messages: readonly Message[]; tr
       {messages.map((message) => {
         const isOutbound = message.direction === "outbound"
         const problem = messageProblem(message)
+        const caption = messageCaption(message)
         return (
           <li key={message.id} className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
             <div className={cn("max-w-[85%] rounded-lg px-3 py-2 text-sm", isOutbound ? "bg-primary/10" : "bg-muted")}>
-              <p className="break-words whitespace-pre-wrap">{message.text}</p>
+              {message.attachment && <MessageFile href={attachmentHref(conversationId, message.id)} file={message.attachment} />}
+              {caption && <p className="break-words whitespace-pre-wrap">{caption}</p>}
               <p className="text-meta mt-1 text-muted-foreground">
                 {messageAuthor(message)} · {formatDateTime(message.createdAt)}
               </p>
@@ -173,6 +179,25 @@ function MessageFeed({ messages, truncated }: { messages: readonly Message[]; tr
       {truncated && <li className="text-center text-xs text-muted-foreground">Чат слишком длинный: самые новые сообщения здесь не показаны.</li>}
       <li ref={bottom} aria-hidden />
     </ol>
+  )
+}
+
+function MessageFile({ href, file }: { href: string; file: NonNullable<Message["attachment"]> }) {
+  if (file.kind === "image") {
+    return (
+      <a href={href} target="_blank" rel="noreferrer">
+        {/* eslint-disable-next-line @next/next/no-img-element -- файл идёт через BFF с авторизацией, оптимизировать нечего */}
+        <img src={href} alt={file.fileName} loading="lazy" className="max-h-72 rounded-md" />
+      </a>
+    )
+  }
+  if (file.kind === "audio") return <audio controls preload="metadata" src={href} className="w-64 max-w-full" aria-label="Голосовое сообщение" />
+  if (file.kind === "video") return <video controls preload="metadata" src={href} className="max-h-72 rounded-md" aria-label={file.fileName} />
+  return (
+    <a href={`${href}?download=1`} className="inline-flex items-center gap-1.5 text-primary hover:underline">
+      <FileText className="size-4 shrink-0" aria-hidden />
+      <span className="break-all">{file.fileName}</span>
+    </a>
   )
 }
 

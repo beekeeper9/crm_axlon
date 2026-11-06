@@ -81,6 +81,9 @@ const messageSchema = z.object({
   status: z.enum(["received", "pending", "sent", "failed"]),
   senderUserId: z.string().nullable(),
   failureCode: z.string().nullable(),
+  attachment: z
+    .object({ kind: z.enum(["image", "video", "audio", "document"]), contentType: z.string(), fileName: z.string(), size: z.int() })
+    .nullable(),
   createdAt: z.iso.datetime({ offset: true }),
 })
 

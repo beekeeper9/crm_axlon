@@ -84,6 +84,16 @@ export function chatErrorMessage(error: ApiError): string {
   return error.kind === "validation" ? API_ERROR_MESSAGES.validation : apiErrorMessage(error)
 }
 
+/** Адрес файла через BFF: браузер не видит токен, права на файл те же, что на чат */
+export function attachmentHref(conversationId: string, messageId: string): string {
+  return `/chat-attachments/${encodeURIComponent(conversationId)}/${encodeURIComponent(messageId)}`
+}
+
+/** Рядом с файлом метка `[Фото]` не нужна: остаётся только подпись */
+export function messageCaption(message: Message): string {
+  return message.attachment ? message.text.replace(/^\[[^\]]+\]\s*/, "") : message.text
+}
+
 /** Исходящее без автора написано в приложении на телефоне, а не из CRM */
 export function messageAuthor(message: Message): string {
   if (message.direction === "inbound") return "Клиент"

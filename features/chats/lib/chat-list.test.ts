@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Conversation, Message } from "@/features/communications/api/communications-repository"
-import { chatContact, chatErrorMessage, chatHref, chatTimeLabel, chatTitle, connectionView, filterChats, messageAuthor, messageProblem } from "@/features/chats/lib/chat-list"
+import { chatContact, chatErrorMessage, chatHref, chatTimeLabel, chatTitle, connectionView, filterChats, messageAuthor, messageCaption, messageProblem } from "@/features/chats/lib/chat-list"
 import { ApiError } from "@/lib/api/errors"
 import { formatDayMonth, formatTime } from "@/lib/format"
 
@@ -69,10 +69,21 @@ function message(overrides: Partial<Message> = {}): Message {
     status: "sent",
     senderUserId: "u1",
     failureCode: null,
+    attachment: null,
     createdAt: "2026-11-06T08:30:00Z",
     ...overrides,
   }
 }
+
+describe("messageCaption", () => {
+  const attachment = { kind: "image", contentType: "image/jpeg", fileName: "a.jpg", size: 1 } as const
+
+  it("убирает метку только рядом с файлом", () => {
+    expect(messageCaption(message({ text: "[Фото] Счёт", attachment }))).toBe("Счёт")
+    expect(messageCaption(message({ text: "[Фото]", attachment }))).toBe("")
+    expect(messageCaption(message({ text: "[Фото]" }))).toBe("[Фото]")
+  })
+})
 
 describe("messageAuthor", () => {
   it("отличает клиента, ответ из CRM и ответ с телефона", () => {
