@@ -1,15 +1,15 @@
 "use client"
 
 import { useEffect, useState, useSyncExternalStore } from "react"
-import Link from "next/link"
 import { ChevronLeft, MessagesSquare, Search } from "lucide-react"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { refreshChatsAction } from "@/features/chats/actions"
+import { ChatThreadSheet } from "@/features/chats/components/chat-thread-sheet"
 import { ConnectWhatsapp } from "@/features/chats/components/connect-whatsapp"
-import { chatHref, chatTitle, filterChats, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
+import { chatTitle, filterChats, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
 import { formatInitials, formatNumber } from "@/lib/format"
 
 const COLLAPSED_KEY = "chats-panel-collapsed"
@@ -54,15 +54,17 @@ export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }:
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false)
   const [{ chats, connected, problem }, setPanel] = useState(initial)
   const [query, setQuery] = useState("")
+  const [openChat, setOpenChat] = useState<ChatRow | null>(null)
   const unread = chats.reduce((sum, chat) => sum + chat.unreadCount, 0)
   const offerConnect = canConnect && connected === false
+
+  // Сбой опроса не повод ломать панель: остаётся прежний список, следующий опрос повторит
+  const refresh = () => void refreshChatsAction().then(setPanel, () => undefined)
 
   useEffect(() => {
     if (!live) return
     const timer = setInterval(() => {
-      if (document.visibilityState !== "visible") return
-      // Сбой опроса не повод ломать панель: остаётся прежний список, следующий опрос повторит
-      refreshChatsAction().then(setPanel, () => undefined)
+      if (document.visibilityState === "visible") void refreshChatsAction().then(setPanel, () => undefined)
     }, REFRESH_MS)
     return () => clearInterval(timer)
   }, [live])
@@ -112,7 +114,7 @@ export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }:
           </div>
           <ul className="min-h-0 flex-1 divide-y overflow-y-auto border-t">
             {visible.map((chat) => (
-              <ChatItem key={chat.id} chat={chat} />
+              <ChatItem key={chat.id} chat={chat} onOpen={() => setOpenChat(chat)} />
             ))}
             {visible.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted-foreground">Ничего не найдено</li>}
           </ul>
@@ -123,6 +125,7 @@ export function ChatsSidebar({ initial, live, canConnect, canOpenIntegrations }:
           )}
         </>
       )}
+      {openChat && <ChatThreadSheet key={openChat.id} chat={openChat} connected={connected} onChanged={refresh} onClose={() => setOpenChat(null)} />}
     </aside>
   )
 }
@@ -132,40 +135,29 @@ function emptyDescription(connected: boolean | null, canConnect: boolean): strin
   return canConnect ? "Подключите номер компании — новые обращения будут появляться здесь." : "Подключить его может директор или РОП. Новые обращения появятся здесь."
 }
 
-function ChatItem({ chat }: { chat: ChatRow }) {
-  const title = chatTitle(chat)
-  const href = chatHref(chat)
-  const body = (
-    <>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground" aria-hidden>
-        {chat.contactName ? formatInitials(chat.contactName) : "#"}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-medium">{title}</span>
-          {chat.timeLabel && <span className="shrink-0 text-xs text-muted-foreground">{chat.timeLabel}</span>}
-        </span>
-        <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">{href ? "WhatsApp" : "WhatsApp · не привязан"}</span>
-          {chat.unreadCount > 0 && (
-            <span className="shrink-0 rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
-              {formatNumber(chat.unreadCount)}
-              <span className="sr-only"> непрочитанных</span>
-            </span>
-          )}
-        </span>
-      </span>
-    </>
-  )
+function ChatItem({ chat, onOpen }: { chat: ChatRow; onOpen: () => void }) {
   return (
     <li>
-      {href ? (
-        <Link href={href} className="flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-accent">
-          {body}
-        </Link>
-      ) : (
-        <div className="flex items-center gap-2.5 px-3 py-2.5">{body}</div>
-      )}
+      <button type="button" onClick={onOpen} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-accent">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground" aria-hidden>
+          {chat.contactName ? formatInitials(chat.contactName) : "#"}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm font-medium">{chatTitle(chat)}</span>
+            {chat.timeLabel && <span className="shrink-0 text-xs text-muted-foreground">{chat.timeLabel}</span>}
+          </span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-muted-foreground">{chat.status === "closed" ? "WhatsApp · закрыт" : "WhatsApp"}</span>
+            {chat.unreadCount > 0 && (
+              <span className="shrink-0 rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                {formatNumber(chat.unreadCount)}
+                <span className="sr-only"> непрочитанных</span>
+              </span>
+            )}
+          </span>
+        </span>
+      </button>
     </li>
   )
 }
