@@ -2,31 +2,37 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { FileText, Send } from "lucide-react"
+import { FileText } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Textarea } from "@/components/ui/textarea"
-import { chatCommandAction, loadChatThreadAction, sendChatMessageAction, type ChatActionResult } from "@/features/chats/actions"
+import { chatCommandAction, loadChatThreadAction, sendChatMessageAction, transferChatAction, type ChatActionResult } from "@/features/chats/actions"
+import { ChatReplyForm } from "@/features/chats/components/chat-reply-form"
+import { sendChatFile } from "@/features/chats/lib/send-file"
 import { attachmentHref, chatContact, chatHref, chatTitle, messageAuthor, messageCaption, messageProblem, type ChatRow, type ChatThread } from "@/features/chats/lib/chat-list"
-import { MESSAGE_TEXT_MAX, type Message } from "@/features/communications/api/communications-repository"
+import type { Message } from "@/features/communications/api/communications-repository"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 /** Открытый чат опрашиваем чаще списка: здесь ждут ответа клиента */
 const REFRESH_MS = 5_000
 
+export type ChatAssignee = { id: string; name: string }
+
 type ChatThreadSheetProps = {
   chat: ChatRow
   connected: boolean | null
+  assignees: readonly ChatAssignee[]
   /** Счётчики и порядок чатов изменились — панель перечитает список */
   onChanged: () => void
   onClose: () => void
 }
 
 /** Окно чата: переписка, ответ клиенту, «взять себе», закрытие. Права и статусы решает backend */
-export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThreadSheetProps) {
+export function ChatThreadSheet({ chat, connected, assignees, onChanged, onClose }: ChatThreadSheetProps) {
   const [thread, setThread] = useState<ChatThread | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -107,6 +113,30 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
               </Button>
             )}
           </div>
+          {conversation && assignees.length > 0 && (
+            <div className="flex items-center gap-2 pt-2">
+              <Label htmlFor="chat-owner" className="shrink-0 text-xs text-muted-foreground">
+                Ответственный
+              </Label>
+              <Select
+                items={assignees.map((member) => ({ value: member.id, label: member.name }))}
+                value={conversation.ownerUserId}
+                disabled={isPending}
+                onValueChange={(owner) => owner && owner !== conversation.ownerUserId && perform(() => transferChatAction(chat.id, owner))}
+              >
+                <SelectTrigger id="chat-owner" size="sm" className="min-w-0 flex-1">
+                  <SelectValue placeholder="Не назначен" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignees.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </SheetHeader>
 
         {thread ? (
@@ -139,7 +169,12 @@ export function ChatThreadSheet({ chat, connected, onChanged, onClose }: ChatThr
             ) : connected === false ? (
               <p className="text-sm text-muted-foreground">WhatsApp не подключён: ответить из CRM пока нельзя.</p>
             ) : (
-              <ReplyForm pending={isPending} onSend={(text, onSent) => perform(() => sendChatMessageAction(chat.id, text), onSent)} />
+              <ChatReplyForm
+                pending={isPending}
+                onError={setActionError}
+                onSendText={(text, onSent) => perform(() => sendChatMessageAction(chat.id, text), onSent)}
+                onSendFile={(file, caption, voice, onSent) => perform(() => sendChatFile(chat.id, file, caption, voice), onSent)}
+              />
             )}
           </div>
         )}
@@ -198,41 +233,5 @@ function MessageFile({ href, file }: { href: string; file: NonNullable<Message["
       <FileText className="size-4 shrink-0" aria-hidden />
       <span className="break-all">{file.fileName}</span>
     </a>
-  )
-}
-
-function ReplyForm({ pending, onSend }: { pending: boolean; onSend: (text: string, onSent: () => void) => void }) {
-  const [text, setText] = useState("")
-  const canSend = !pending && text.trim().length > 0
-
-  function submit() {
-    if (canSend) onSend(text, () => setText(""))
-  }
-
-  return (
-    <form
-      className="flex items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        submit()
-      }}
-    >
-      <Textarea
-        aria-label="Ответ клиенту"
-        rows={2}
-        maxLength={MESSAGE_TEXT_MAX}
-        placeholder="Сообщение… Shift+Enter — новая строка"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return
-          event.preventDefault()
-          submit()
-        }}
-      />
-      <Button type="submit" size="icon" aria-label="Отправить" disabled={!canSend}>
-        <Send className="size-4" aria-hidden />
-      </Button>
-    </form>
   )
 }

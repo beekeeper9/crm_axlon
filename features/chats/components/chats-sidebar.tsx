@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { refreshChatsAction, refreshConnectionAction } from "@/features/chats/actions"
-import { ChatThreadSheet } from "@/features/chats/components/chat-thread-sheet"
+import { ChatThreadSheet, type ChatAssignee } from "@/features/chats/components/chat-thread-sheet"
 import { ConnectWhatsapp } from "@/features/chats/components/connect-whatsapp"
 import { chatTitle, connectionView, filterChats, type ChatList, type ChatPanelState, type ChatRow } from "@/features/chats/lib/chat-list"
 import { formatInitials, formatNumber } from "@/lib/format"
@@ -47,9 +47,11 @@ type ChatsSidebarProps = {
   /** Опрашивать сервер; в демо-режиме его нет */
   live: boolean
   canConnect: boolean
+  /** Кому директор или РОП может передать чат; у менеджера список пуст */
+  assignees: readonly ChatAssignee[]
 }
 
-export function ChatsSidebar({ initial, live, canConnect }: ChatsSidebarProps) {
+export function ChatsSidebar({ initial, live, canConnect, assignees }: ChatsSidebarProps) {
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false)
   const [{ chats, connection, problem }, setPanel] = useState(initial)
   const [query, setQuery] = useState("")
@@ -136,7 +138,7 @@ export function ChatsSidebar({ initial, live, canConnect }: ChatsSidebarProps) {
           )}
         </>
       )}
-      {openChat && <ChatThreadSheet key={openChat.id} chat={openChat} connected={connection?.connected ?? null} onChanged={refresh} onClose={() => setOpenChat(null)} />}
+      {openChat && <ChatThreadSheet key={openChat.id} chat={openChat} connected={connection?.connected ?? null} assignees={assignees} onChanged={refresh} onClose={() => setOpenChat(null)} />}
     </aside>
   )
 }

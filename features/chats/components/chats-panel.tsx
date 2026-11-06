@@ -4,6 +4,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { isMockDataSource } from "@/config/env"
 import { loadChatPanel } from "@/features/chats/api/chat-panel"
 import { ChatsSidebar } from "@/features/chats/components/chats-sidebar"
+import { listMembersIfAllowed } from "@/features/team/api/team-repository"
+import { tryLoad } from "@/lib/api/load"
 import { getRenderAuth } from "@/lib/auth/token-store"
 import { hasPermission } from "@/lib/permissions/roles"
 import { getCurrentUser } from "@/lib/session/current-user"
@@ -17,14 +19,19 @@ const DEMO_STATE = { chats: [], connection: null, problem: "Чаты храня�
 export async function ChatsPanel() {
   const user = await getCurrentUser()
   if (!hasPermission(user.role, "chats.view")) return null
-  if (isMockDataSource) return <ChatsSidebar initial={DEMO_STATE} live={false} canConnect={false} />
+  if (isMockDataSource) return <ChatsSidebar initial={DEMO_STATE} live={false} canConnect={false} assignees={[]} />
 
   await connection()
+  const [initial, members] = await Promise.all([
+    loadChatPanel(await getRenderAuth(), new Date()),
+    tryLoad(() => (hasPermission(user.role, "records.assign") ? listMembersIfAllowed() : Promise.resolve([]))),
+  ])
   return (
     <ChatsSidebar
-      initial={await loadChatPanel(await getRenderAuth(), new Date())}
+      initial={initial}
       live
       canConnect={hasPermission(user.role, "chats.connect")}
+      assignees={members.ok ? members.data.map(({ id, name }) => ({ id, name })) : []}
     />
   )
 }

@@ -184,3 +184,23 @@ export type WhatsappQr = z.infer<typeof whatsappQrSchema>
 export function fetchWhatsappQr(auth: ApiAuth): Promise<WhatsappQr> {
   return apiRequest("/api/v1/communications/whatsapp/qr/", { auth, schema: whatsappQrSchema })
 }
+
+/** Файл или голосовое в чат (multipart); проверки размера и прав — на backend */
+export function sendFile(auth: ApiAuth, conversationId: string, form: FormData): Promise<Message> {
+  return apiRequest(`/api/v1/communications/conversations/${encodeURIComponent(conversationId)}/messages/`, {
+    method: "POST",
+    auth,
+    body: form,
+    schema: messageSchema,
+  })
+}
+
+/** Передать чат и его лид сотруднику: РОП внутри отдела, директор любому */
+export function transferConversation(auth: ApiAuth, id: string, ownerUserId: string): Promise<Conversation> {
+  return apiRequest(`/api/v1/communications/conversations/${encodeURIComponent(id)}/transfer/`, {
+    method: "POST",
+    auth,
+    body: { ownerUserId },
+    schema: conversationSchema,
+  })
+}

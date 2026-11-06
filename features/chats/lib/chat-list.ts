@@ -65,6 +65,9 @@ export function chatHref(chat: Conversation): string | null {
 
 export type ChatThread = { conversation: Conversation; messages: readonly Message[]; truncated: boolean }
 
+/** Больше сервер не примет: файлы лежат в базе компании */
+export const MAX_FILE_BYTES = 20 * 1024 * 1024
+
 /** Коды провайдера; 131047 — у Meta закрылось окно 24 часов после сообщения клиента */
 const FAILURE_MESSAGES: Record<string, string> = {
   "131047": "Прошло больше 24 часов с сообщения клиента. Обычным сообщением ответить нельзя.",

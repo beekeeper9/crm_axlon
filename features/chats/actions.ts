@@ -11,6 +11,7 @@ import {
   MESSAGE_TEXT_MAX,
   runConversationCommand,
   sendMessage,
+  transferConversation,
   type ConversationCommand,
   type WhatsappConnection,
   type WhatsappQr,
@@ -67,6 +68,10 @@ export async function sendChatMessageAction(id: string, text: unknown): Promise<
   const parsed = replySchema.safeParse(text)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Проверьте сообщение", denied: false }
   return run(async () => sendMessage(await getActionAuth(), id, parsed.data))
+}
+
+export async function transferChatAction(id: string, ownerUserId: string): Promise<ChatActionResult> {
+  return run(async () => transferConversation(await getActionAuth(), id, ownerUserId))
 }
 
 export async function chatCommandAction(id: string, command: Exclude<ConversationCommand, "read">): Promise<ChatActionResult> {
